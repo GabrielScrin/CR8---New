@@ -62,6 +62,7 @@ const mockComparisonData = [
 
 const META_GRAPH_VERSION: string = import.meta.env.VITE_META_GRAPH_VERSION ?? 'v19.0';
 const META_AD_ACCOUNT_ID_ENV: string = import.meta.env.VITE_META_AD_ACCOUNT_ID ?? '';
+const META_SCOPES: string = import.meta.env.VITE_FACEBOOK_SCOPES ?? 'public_profile ads_read';
 
 const normalizeAdAccountId = (id: string) => {
   const trimmed = id.trim();
@@ -87,17 +88,36 @@ const extractRoas = (purchaseRoas: any[] | undefined) => {
   return purchaseRoas.reduce((sum, r) => sum + parseNumber(r.value), 0);
 };
 
+type MetaAdAccount = {
+  id: string; // ex: "act_123..."
+  name?: string;
+  account_id?: string;
+  currency?: string;
+  account_status?: number;
+};
+
+const normalizeScopes = (scopes: string) => {
+  const parts = scopes
+    .split(/[,\s]+/g)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return Array.from(new Set(parts)).join(' ');
+};
+
+const facebookScopes = normalizeScopes(META_SCOPES);
+
 export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId }) => {
   const [ads, setAds] = useState<AdMetric[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [needsReauth, setNeedsReauth] = useState(false);
+  const [adAccounts, setAdAccounts] = useState<MetaAdAccount[]>([]);
+  const [selectedAdAccountId, setSelectedAdAccountId] = useState<string>('');
+  const [loadingAdAccounts, setLoadingAdAccounts] = useState(false);
 
   const demoMode = !isSupabaseConfigured();
 
-  const resolveAdAccountId = async () => {
-    const envId = normalizeAdAccountId(META_AD_ACCOUNT_ID_ENV);
-    if (envId) return envId;
-
+  const resolveCompanyAdAccountIdFromDb = async () => {
     let query = supabase.from('companies').select('meta_ad_account_id');
     if (companyId) query = query.eq('id', companyId);
 
@@ -106,8 +126,70 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     return normalizeAdAccountId(data?.meta_ad_account_id ?? '');
   };
 
-  const fetchAds = async () => {
+  const persistSelectedAdAccount = async (adAccountId: string) => {
+    if (!companyId) return;
+    const { error } = await supabase.from('companies').update({ meta_ad_account_id: adAccountId }).eq('id', companyId);
+    if (error) throw error;
+  };
+
+  const getProviderToken = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    return session?.provider_token ?? null;
+  };
+
+  const fetchAllAdAccounts = async (providerToken: string) => {
+    const results: MetaAdAccount[] = [];
+    let nextUrl: string | null = null;
+
+    const buildFirstUrl = () => {
+      const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/me/adaccounts`);
+      url.searchParams.set('fields', 'id,name,account_id,currency,account_status');
+      url.searchParams.set('limit', '50');
+      url.searchParams.set('access_token', providerToken);
+      return url.toString();
+    };
+
+    for (let page = 0; page < 5; page += 1) {
+      const url = nextUrl ?? buildFirstUrl();
+      const res = await fetch(url);
+      const json = await res.json();
+      if (!res.ok || json?.error) {
+        const msg = json?.error?.message || `Erro ao listar contas de anuncio (${res.status})`;
+        throw Object.assign(new Error(msg), { metaError: json?.error });
+      }
+
+      const pageRows: MetaAdAccount[] = Array.isArray(json?.data) ? json.data : [];
+      for (const row of pageRows) {
+        if (row?.id) results.push(row);
+      }
+
+      nextUrl = typeof json?.paging?.next === 'string' ? json.paging.next : null;
+      if (!nextUrl) break;
+    }
+
+    return results;
+  };
+
+  const reauthorizeFacebook = async () => {
     setErrorMsg(null);
+    setNeedsReauth(false);
+
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'facebook',
+      options: {
+        scopes: facebookScopes,
+        redirectTo: window.location.origin,
+        queryParams: { auth_type: 'rerequest' },
+      },
+    });
+    if (error) throw error;
+  };
+
+  const fetchAds = async (overrideAdAccountId?: string) => {
+    setErrorMsg(null);
+    setNeedsReauth(false);
 
     if (demoMode) {
       setAds(mockAds);
@@ -116,22 +198,49 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
     setLoading(true);
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-
-      const providerToken = session?.provider_token;
+      const providerToken = await getProviderToken();
       if (!providerToken) {
         setAds([]);
+        setNeedsReauth(true);
         setErrorMsg('Para carregar dados reais, faca login com Facebook (escopo ads_read).');
         return;
       }
 
-      const adAccountId = await resolveAdAccountId();
+      let accounts = adAccounts;
+      if (accounts.length === 0) {
+        setLoadingAdAccounts(true);
+        accounts = await fetchAllAdAccounts(providerToken);
+        setAdAccounts(accounts);
+        setLoadingAdAccounts(false);
+      }
+
+      const dbId = await resolveCompanyAdAccountIdFromDb();
+      const envId = normalizeAdAccountId(META_AD_ACCOUNT_ID_ENV);
+
+      const desired = overrideAdAccountId ?? (selectedAdAccountId || dbId || envId || '');
+      const normalizedDesired = normalizeAdAccountId(desired) ?? '';
+      const hasDesired = Boolean(normalizedDesired && accounts.some((a) => a.id === normalizedDesired));
+
+      const fallback = accounts[0]?.id ?? '';
+      const adAccountId = (hasDesired ? normalizedDesired : fallback) || normalizedDesired;
+
       if (!adAccountId) {
         setAds([]);
-        setErrorMsg('Faltou configurar o Meta Ad Account ID (act_...) na empresa.');
+        setErrorMsg(
+          accounts.length === 0
+            ? 'Nenhuma conta de anuncio encontrada para esse usuario do Facebook.'
+            : 'Selecione uma conta de anuncio para ver os dados.',
+        );
         return;
+      }
+
+      if (adAccountId !== selectedAdAccountId) setSelectedAdAccountId(adAccountId);
+      if (companyId && dbId !== adAccountId) {
+        try {
+          await persistSelectedAdAccount(adAccountId);
+        } catch (e) {
+          console.warn('Nao foi possivel salvar meta_ad_account_id na empresa.', e);
+        }
       }
 
       const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
@@ -145,7 +254,10 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       const json = await res.json();
       if (!res.ok || json?.error) {
         const msg = json?.error?.message || `Erro ao buscar insights (${res.status})`;
-        throw new Error(msg);
+        const metaError = json?.error;
+        const err: any = new Error(msg);
+        err.metaError = metaError;
+        throw err;
       }
 
       const mapped: AdMetric[] = (json.data ?? []).map((row: any) => ({
@@ -167,9 +279,22 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     } catch (e: any) {
       console.error(e);
       setAds([]);
-      setErrorMsg(e?.message || 'Erro ao carregar dados da Meta.');
+
+      const metaCode = e?.metaError?.code;
+      const metaSubcode = e?.metaError?.error_subcode;
+      if (metaCode === 200) {
+        setNeedsReauth(true);
+        setErrorMsg(
+          'Sem permissao ads_read para acessar essa conta de anuncio. Clique em "Reautorizar Facebook" e aceite as permissoes, ou selecione outra conta.',
+        );
+      } else if (metaCode || metaSubcode) {
+        setErrorMsg(`${e?.message || 'Erro ao carregar dados da Meta.'} (code: ${metaCode ?? '-'}, subcode: ${metaSubcode ?? '-'})`);
+      } else {
+        setErrorMsg(e?.message || 'Erro ao carregar dados da Meta.');
+      }
     } finally {
       setLoading(false);
+      setLoadingAdAccounts(false);
     }
   };
 
@@ -178,17 +303,62 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId]);
 
+  const onChangeAdAccount = async (id: string) => {
+    const normalized = normalizeAdAccountId(id);
+    if (!normalized) return;
+    setSelectedAdAccountId(normalized);
+    try {
+      await persistSelectedAdAccount(normalized);
+    } catch (e: any) {
+      console.error(e);
+      setErrorMsg(e?.message || 'Nao foi possivel salvar a conta de anuncio na empresa.');
+    }
+    await fetchAds(normalized);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-gray-800">Analise de Trafego</h2>
           {errorMsg && <p className="text-sm text-red-600 mt-1">{errorMsg}</p>}
+          {!demoMode && adAccounts.length > 0 && (
+            <p className="text-xs text-gray-500 mt-1">
+              Conta selecionada: <span className="font-medium">{selectedAdAccountId || '(nenhuma)'}</span>
+            </p>
+          )}
         </div>
 
-        <div className="flex space-x-2">
+        <div className="flex space-x-2 items-center">
+          {!demoMode && (
+            <select
+              value={selectedAdAccountId}
+              onChange={(e) => void onChangeAdAccount(e.target.value)}
+              disabled={loadingAdAccounts || adAccounts.length === 0}
+              className="max-w-[340px] px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              title={adAccounts.length === 0 ? 'Nenhuma conta encontrada' : 'Selecione a conta de anuncio'}
+            >
+              <option value="" disabled>
+                {loadingAdAccounts ? 'Carregando contas...' : adAccounts.length === 0 ? 'Nenhuma conta encontrada' : 'Selecione a conta'}
+              </option>
+              {adAccounts.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {(a.name ? `${a.name} - ` : '') + a.id}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {needsReauth && !demoMode && (
+            <button
+              onClick={() => void reauthorizeFacebook().catch((e) => setErrorMsg(e?.message || 'Erro ao reautorizar Facebook.'))}
+              className="px-3 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 shadow-sm"
+            >
+              Reautorizar Facebook
+            </button>
+          )}
           <button
-            onClick={fetchAds}
+            onClick={() => void fetchAds()}
             className="flex items-center px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 shadow-sm"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
