@@ -8,6 +8,9 @@ interface TrafficAnalyticsProps {
   companyId?: string;
 }
 
+type MetaLevel = 'campaign' | 'adset' | 'ad';
+type TrafficTab = 'meta' | 'platform';
+
 const mockAds: AdMetric[] = [
   {
     id: '1',
@@ -21,6 +24,15 @@ const mockAds: AdMetric[] = [
     ctr: 1.8,
     roas: 2.4,
     leads: 142,
+    cpa: 8.8,
+    hookRate: 0.4,
+    holdRate: 0.2,
+    scores: [
+      { label: 'L', value: 90 },
+      { label: 'C', value: 85 },
+    ],
+    classification: 'winner',
+    tags: ['Quente', 'Prova Social'],
   },
   {
     id: '2',
@@ -34,6 +46,15 @@ const mockAds: AdMetric[] = [
     ctr: 2.2,
     roas: 1.6,
     leads: 89,
+    cpa: 10,
+    hookRate: 0.32,
+    holdRate: 0.18,
+    scores: [
+      { label: 'L', value: 78 },
+      { label: 'C', value: 74 },
+    ],
+    classification: 'neutral',
+    tags: ['Em teste'],
   },
   {
     id: '3',
@@ -47,17 +68,21 @@ const mockAds: AdMetric[] = [
     ctr: 0.7,
     roas: 0.4,
     leads: 12,
+    cpa: 33.3,
+    scores: [{ label: 'L', value: 40 }],
+    classification: 'loser',
+    tags: ['Revisar'],
   },
 ];
 
 const mockComparisonData = [
-  { name: 'Seg', impacted: 4000, lastClick: 2400 },
-  { name: 'Ter', impacted: 3000, lastClick: 1398 },
-  { name: 'Qua', impacted: 2000, lastClick: 9800 },
-  { name: 'Qui', impacted: 2780, lastClick: 3908 },
-  { name: 'Sex', impacted: 1890, lastClick: 4800 },
-  { name: 'Sab', impacted: 2390, lastClick: 3800 },
-  { name: 'Dom', impacted: 3490, lastClick: 4300 },
+  { name: 'Seg', metaSpend: 400, metaLeads: 24 },
+  { name: 'Ter', metaSpend: 300, metaLeads: 14 },
+  { name: 'Qua', metaSpend: 200, metaLeads: 98 },
+  { name: 'Qui', metaSpend: 278, metaLeads: 39 },
+  { name: 'Sex', metaSpend: 189, metaLeads: 48 },
+  { name: 'Sab', metaSpend: 239, metaLeads: 38 },
+  { name: 'Dom', metaSpend: 349, metaLeads: 43 },
 ];
 
 const META_GRAPH_VERSION: string = import.meta.env.VITE_META_GRAPH_VERSION ?? 'v19.0';
@@ -76,12 +101,21 @@ const parseNumber = (value: unknown) => {
   return 0;
 };
 
-const extractLeadsFromActions = (actions: any[] | undefined) => {
+const extractActionSum = (actions: any[] | undefined, matcher: (actionType: string) => boolean) => {
   if (!Array.isArray(actions)) return undefined;
-  const leadActions = actions.filter((a) => typeof a?.action_type === 'string' && a.action_type.includes('lead'));
-  if (leadActions.length === 0) return undefined;
-  return leadActions.reduce((sum, a) => sum + parseNumber(a.value), 0);
+  const matches = actions.filter((a) => typeof a?.action_type === 'string' && matcher(a.action_type));
+  if (matches.length === 0) return undefined;
+  return matches.reduce((sum, a) => sum + parseNumber(a.value), 0);
 };
+
+const extractLeadsFromActions = (actions: any[] | undefined) =>
+  extractActionSum(actions, (t) => t.includes('lead') || t === 'onsite_conversion.lead_grouped');
+
+const extractVideo3s = (actions: any[] | undefined) =>
+  extractActionSum(actions, (t) => t === 'video_view' || t.includes('video_view') || t === 'video_view_3s');
+
+const extractVideo15s = (actions: any[] | undefined) =>
+  extractActionSum(actions, (t) => t === 'video_view_15s' || t.includes('video_view_15s'));
 
 const extractRoas = (purchaseRoas: any[] | undefined) => {
   if (!Array.isArray(purchaseRoas) || purchaseRoas.length === 0) return undefined;
@@ -114,6 +148,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   const [adAccounts, setAdAccounts] = useState<MetaAdAccount[]>([]);
   const [selectedAdAccountId, setSelectedAdAccountId] = useState<string>('');
   const [loadingAdAccounts, setLoadingAdAccounts] = useState(false);
+  const [selectedLevel, setSelectedLevel] = useState<MetaLevel>('ad');
+  const [activeTab, setActiveTab] = useState<TrafficTab>('meta');
+  const [comparisonData, setComparisonData] = useState<any[]>([]);
 
   const demoMode = !isSupabaseConfigured();
 
@@ -193,6 +230,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
     if (demoMode) {
       setAds(mockAds);
+      setComparisonData(mockComparisonData);
       return;
     }
 
@@ -243,9 +281,40 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         }
       }
 
+      // Timeseries (chart)
+      const timeseriesUrl = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
+      timeseriesUrl.searchParams.set('level', 'account');
+      timeseriesUrl.searchParams.set('fields', 'date_start,spend,impressions,actions');
+      timeseriesUrl.searchParams.set('date_preset', 'last_7d');
+      timeseriesUrl.searchParams.set('time_increment', '1');
+      timeseriesUrl.searchParams.set('limit', '50');
+      timeseriesUrl.searchParams.set('access_token', providerToken);
+
+      const tsRes = await fetch(timeseriesUrl.toString());
+      const tsJson = await tsRes.json();
+      if (tsRes.ok && !tsJson?.error) {
+        const ts = Array.isArray(tsJson?.data) ? tsJson.data : [];
+        setComparisonData(
+          ts.map((row: any) => ({
+            name: String(row.date_start ?? '').slice(5).replace('-', '/'),
+            metaSpend: parseNumber(row.spend),
+            metaLeads: extractLeadsFromActions(row.actions) ?? 0,
+          })),
+        );
+      }
+
       const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
-      url.searchParams.set('level', 'ad');
-      url.searchParams.set('fields', 'ad_id,ad_name,impressions,spend,cpc,ctr,actions,purchase_roas');
+      url.searchParams.set('level', selectedLevel);
+
+      const commonFields = 'impressions,spend,cpc,ctr,actions,purchase_roas';
+      const entityFields =
+        selectedLevel === 'campaign'
+          ? 'campaign_id,campaign_name'
+          : selectedLevel === 'adset'
+            ? 'adset_id,adset_name'
+            : 'ad_id,ad_name,quality_ranking,engagement_rate_ranking,conversion_rate_ranking';
+      const videoFields = selectedLevel === 'ad' ? ',video_3_sec_watched_actions,video_15_sec_watched_actions' : '';
+      url.searchParams.set('fields', `${entityFields},${commonFields}${videoFields}`);
       url.searchParams.set('date_preset', 'last_7d');
       url.searchParams.set('limit', '50');
       url.searchParams.set('access_token', providerToken);
@@ -260,19 +329,68 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         throw err;
       }
 
-      const mapped: AdMetric[] = (json.data ?? []).map((row: any) => ({
-        id: row.ad_id,
-        adName: row.ad_name ?? `Ad ${row.ad_id}`,
-        adId: row.ad_id,
-        thumbnail: 'https://picsum.photos/50/50',
-        status: 'active',
-        spend: parseNumber(row.spend),
-        impressions: Math.floor(parseNumber(row.impressions)),
-        cpc: parseNumber(row.cpc) || undefined,
-        ctr: parseNumber(row.ctr) || undefined,
-        roas: extractRoas(row.purchase_roas),
-        leads: extractLeadsFromActions(row.actions),
-      }));
+      const mapped: AdMetric[] = (json.data ?? []).map((row: any) => {
+        const entityId =
+          selectedLevel === 'campaign' ? row.campaign_id : selectedLevel === 'adset' ? row.adset_id : row.ad_id;
+        const entityName =
+          selectedLevel === 'campaign'
+            ? row.campaign_name
+            : selectedLevel === 'adset'
+              ? row.adset_name
+              : row.ad_name;
+
+        const impressions = Math.floor(parseNumber(row.impressions));
+        const spend = parseNumber(row.spend);
+        const leads = extractLeadsFromActions(row.actions);
+        const cpa = leads && leads > 0 ? spend / leads : undefined;
+        const ctr = parseNumber(row.ctr) || undefined;
+        const roas = extractRoas(row.purchase_roas);
+
+        const video3s = extractVideo3s(row.video_3_sec_watched_actions);
+        const video15s = extractVideo15s(row.video_15_sec_watched_actions);
+        const hookRate = impressions > 0 && video3s != null ? video3s / impressions : undefined;
+        const holdRate = impressions > 0 && video15s != null ? video15s / impressions : undefined;
+
+        const scoreLanding = cpa != null ? Math.max(0, Math.min(100, Math.round(100 - cpa * 2))) : undefined;
+        const scoreCreative = ctr != null ? Math.max(0, Math.min(100, Math.round(ctr * 30))) : undefined;
+        const scores = [
+          ...(scoreLanding != null ? [{ label: 'L', value: scoreLanding }] : []),
+          ...(scoreCreative != null ? [{ label: 'C', value: scoreCreative }] : []),
+        ];
+
+        const classification: AdMetric['classification'] =
+          leads != null && leads >= 10 && (roas == null ? (cpa != null && cpa <= 20) : roas >= 1.5)
+            ? 'winner'
+            : spend >= 50 && (leads ?? 0) === 0
+              ? 'loser'
+              : 'neutral';
+
+        const tags: string[] = [];
+        const nameLower = String(entityName ?? '').toLowerCase();
+        if (classification === 'winner') tags.push('Quente');
+        if (nameLower.includes('depoimento') || nameLower.includes('prova')) tags.push('Prova Social');
+        if (tags.length === 0) tags.push('Em teste');
+
+        return {
+          id: String(entityId),
+          adName: entityName ?? `${selectedLevel} ${entityId}`,
+          adId: String(entityId),
+          thumbnail: 'https://picsum.photos/50/50',
+          status: 'active',
+          spend,
+          impressions,
+          cpc: parseNumber(row.cpc) || undefined,
+          ctr,
+          roas,
+          leads,
+          cpa,
+          hookRate,
+          holdRate,
+          scores: scores.length ? scores : undefined,
+          classification,
+          tags,
+        };
+      });
 
       setAds(mapped);
       if (mapped.length === 0) setErrorMsg('Sem dados de anuncios nesse periodo.');
@@ -299,9 +417,14 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   };
 
   useEffect(() => {
-    fetchAds();
+    if (demoMode) {
+      setAds(mockAds);
+      setComparisonData(mockComparisonData);
+      return;
+    }
+    void fetchAds();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId]);
+  }, [companyId, selectedLevel, activeTab]);
 
   const onChangeAdAccount = async (id: string) => {
     const normalized = normalizeAdAccountId(id);
@@ -320,7 +443,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">Analise de Trafego</h2>
+          <h2 className="text-2xl font-bold text-gray-800">Analise de Trafego Deep Dive</h2>
           {errorMsg && <p className="text-sm text-red-600 mt-1">{errorMsg}</p>}
           {!demoMode && adAccounts.length > 0 && (
             <p className="text-xs text-gray-500 mt-1">
@@ -375,117 +498,197 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         </div>
       </div>
 
-      {demoMode && (
-        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <h3 className="text-lg font-semibold mb-4 text-gray-700">Comparacao (demo)</h3>
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={mockComparisonData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
-                <Tooltip
-                  cursor={{ fill: '#F3F4F6' }}
-                  contentStyle={{
-                    borderRadius: '8px',
-                    border: 'none',
-                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
-                  }}
-                />
-                <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                <Bar dataKey="impacted" name="Impactadas" fill="#6366F1" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="lastClick" name="Last Click" fill="#10B981" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <h3 className="text-lg font-semibold mb-4 text-gray-700">
+          Vendas/Leads (Meta) vs Gasto (ultimos 7 dias){demoMode ? ' (demo)' : ''}
+        </h3>
+        {!demoMode && comparisonData.length === 0 && (
+          <p className="text-sm text-gray-400 mb-3">Sem dados suficientes para montar o grafico ainda.</p>
+        )}
+        <div className="h-64 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart
+              data={demoMode ? mockComparisonData : comparisonData}
+              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+            >
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
+              <Tooltip
+                cursor={{ fill: '#F3F4F6' }}
+                contentStyle={{
+                  borderRadius: '8px',
+                  border: 'none',
+                  boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                }}
+              />
+              <Legend wrapperStyle={{ paddingTop: '20px' }} />
+              <Bar dataKey="metaSpend" name="Gasto (R$)" fill="#6366F1" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="metaLeads" name="Leads" fill="#10B981" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
-      )}
+      </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th
-                  scope="col"
-                  className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10"
-                >
-                  Anuncio
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Gasto
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  CPC
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  CTR
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  ROAS
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Leads
-                </th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Impressoes
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {ads.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-6 py-10 text-center text-sm text-gray-400">
-                    {demoMode ? 'Sem dados.' : 'Sem dados reais para mostrar ainda.'}
-                  </td>
-                </tr>
-              ) : (
-                ads.map((ad) => (
-                  <tr key={ad.id} className="hover:bg-gray-50 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap sticky left-0 bg-white z-10">
-                      <div className="flex items-center">
-                        <div className="flex-shrink-0 h-10 w-10">
-                          <img className="h-10 w-10 rounded object-cover" src={ad.thumbnail} alt="" />
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">{ad.adName}</div>
-                          <div className="text-xs text-gray-500 flex items-center">
-                            ID: {ad.adId}
-                            <ExternalLink className="w-3 h-3 ml-1 cursor-pointer hover:text-indigo-500" />
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span
-                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                          ad.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                        }`}
-                      >
-                        {ad.status === 'active' ? 'Ativo' : 'Pausado'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">R$ {ad.spend.toFixed(2)}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {ad.cpc != null ? `R$ ${ad.cpc.toFixed(2)}` : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {ad.ctr != null ? `${ad.ctr.toFixed(2)}%` : '-'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.roas != null ? ad.roas.toFixed(2) : '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.leads ?? '-'}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.impressions.toLocaleString()}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div className="px-6 pt-4 border-b border-gray-100 flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex gap-6 text-sm font-medium">
+            <button
+              type="button"
+              onClick={() => setActiveTab('meta')}
+              className={activeTab === 'meta' ? 'text-indigo-600 border-b-2 border-indigo-600 pb-2' : 'text-gray-500 pb-2 hover:text-gray-700'}
+            >
+              Performance (Meta)
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('platform')}
+              className={activeTab === 'platform' ? 'text-indigo-600 border-b-2 border-indigo-600 pb-2' : 'text-gray-500 pb-2 hover:text-gray-700'}
+            >
+              Dados de Plataforma
+            </button>
+          </div>
+
+          {activeTab === 'meta' && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-gray-500">Nivel:</span>
+              <select
+                value={selectedLevel}
+                onChange={(e) => setSelectedLevel(e.target.value as MetaLevel)}
+                className="px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="campaign">Campanhas</option>
+                <option value="adset">Conjuntos</option>
+                <option value="ad">Anuncios</option>
+              </select>
+            </div>
+          )}
         </div>
-        <div className="p-4 border-t border-gray-100 bg-gray-50 text-xs text-gray-500">Periodo padrao: ultimos 7 dias.</div>
+
+        {activeTab === 'platform' ? (
+          <div className="p-6 text-sm text-gray-500">
+            Integração de plataforma (Hotmart/Monetizze/Google/UTMs) entra na Fase 1.5/2. Por enquanto o Deep Dive mostra os dados do Gerenciador (Meta).
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th
+                      scope="col"
+                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10"
+                    >
+                      {selectedLevel === 'campaign' ? 'Campanha' : selectedLevel === 'adset' ? 'Conjunto' : 'Anuncio'}
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Spend
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Leads
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      CPA
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Hook Rate
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Hold Rate
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Scores
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Classificacao
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Etiquetas
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {ads.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="px-6 py-10 text-center text-sm text-gray-400">
+                        {demoMode ? 'Sem dados.' : 'Sem dados reais para mostrar ainda.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    ads.map((ad) => (
+                      <tr key={ad.id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-4 whitespace-nowrap sticky left-0 bg-white z-10">
+                          <div className="flex items-center">
+                            <div className="flex-shrink-0 h-10 w-10">
+                              <img className="h-10 w-10 rounded object-cover" src={ad.thumbnail} alt="" />
+                            </div>
+                            <div className="ml-4">
+                              <div className="text-sm font-medium text-gray-900">{ad.adName}</div>
+                              <div className="text-xs text-gray-500 flex items-center">
+                                ID: {ad.adId}
+                                <ExternalLink className="w-3 h-3 ml-1 cursor-pointer hover:text-indigo-500" />
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span
+                            className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                              ad.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                            }`}
+                          >
+                            {ad.status === 'active' ? 'Ativo' : 'Pausado'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">R$ {ad.spend.toFixed(2)}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.leads ?? '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.cpa != null ? `R$ ${ad.cpa.toFixed(2)}` : '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.hookRate != null ? `${(ad.hookRate * 100).toFixed(0)}%` : '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.holdRate != null ? `${(ad.holdRate * 100).toFixed(0)}%` : '-'}</td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div className="flex gap-2">
+                            {(ad.scores ?? []).map((s) => (
+                              <span key={s.label} className="px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-medium">
+                                {s.label}:{s.value}
+                              </span>
+                            ))}
+                            {!ad.scores?.length && '-'}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {ad.classification === 'winner' ? (
+                            <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-semibold">Winner</span>
+                          ) : ad.classification === 'loser' ? (
+                            <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 text-xs font-semibold">Loser</span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-800 text-xs font-semibold">Neutro</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          <div className="flex gap-2 flex-wrap">
+                            {(ad.tags ?? []).map((t) => (
+                              <span key={t} className="px-2 py-0.5 rounded-full bg-gray-100 text-gray-700 text-xs">
+                                {t}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="p-4 border-t border-gray-100 bg-gray-50 text-xs text-gray-500">
+              *Hook Rate: estimativa baseada em video views (3s) / impressoes. Hold Rate: estimativa baseada em video views (15s) / impressoes.
+            </div>
+          </>
+        )}
       </div>
+
     </div>
   );
 };

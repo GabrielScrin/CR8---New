@@ -21,6 +21,12 @@ export interface AdMetric {
   cpc?: number;
   ctr?: number;
   roas?: number;
+  cpa?: number;
+  hookRate?: number;
+  holdRate?: number;
+  scores?: { label: string; value: number }[];
+  classification?: 'winner' | 'loser' | 'neutral';
+  tags?: string[];
 }
 
 export interface Lead {
