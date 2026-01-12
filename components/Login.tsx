@@ -17,8 +17,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
   const isBackendReady = isSupabaseConfigured();
   const supabaseHints = getSupabaseConfigHints();
-  const facebookScopes: string =
-    ((import.meta as any)?.env?.VITE_FACEBOOK_SCOPES as string | undefined) ?? 'public_profile email ads_read';
+  const facebookScopes: string = import.meta.env.VITE_FACEBOOK_SCOPES ?? 'public_profile email ads_read';
 
   const demoLogin = () => {
     console.warn('Supabase not configured or Demo requested. Using Mock Login.');

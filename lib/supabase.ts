@@ -14,8 +14,8 @@ const sanitizeEnv = (value: unknown) => {
   return trimmed.replace(/^['"]|['"]$/g, '');
 };
 
-const SUPABASE_URL: string = sanitizeEnv((import.meta as any)?.env?.VITE_SUPABASE_URL);
-const SUPABASE_ANON_KEY: string = sanitizeEnv((import.meta as any)?.env?.VITE_SUPABASE_ANON_KEY);
+const SUPABASE_URL: string = sanitizeEnv(import.meta.env.VITE_SUPABASE_URL);
+const SUPABASE_ANON_KEY: string = sanitizeEnv(import.meta.env.VITE_SUPABASE_ANON_KEY);
 
 const isValidUrl = (url: string) => {
   try {
@@ -43,4 +43,3 @@ export const getSupabaseConfigHints = () => {
     missing: [...(urlOk ? [] : ['VITE_SUPABASE_URL']), ...(keyOk ? [] : ['VITE_SUPABASE_ANON_KEY'])],
   };
 };
-

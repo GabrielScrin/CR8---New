@@ -60,8 +60,8 @@ const mockComparisonData = [
   { name: 'Dom', impacted: 3490, lastClick: 4300 },
 ];
 
-const META_GRAPH_VERSION: string = (import.meta as any)?.env?.VITE_META_GRAPH_VERSION ?? 'v19.0';
-const META_AD_ACCOUNT_ID_ENV: string = (import.meta as any)?.env?.VITE_META_AD_ACCOUNT_ID ?? '';
+const META_GRAPH_VERSION: string = import.meta.env.VITE_META_GRAPH_VERSION ?? 'v19.0';
+const META_AD_ACCOUNT_ID_ENV: string = import.meta.env.VITE_META_AD_ACCOUNT_ID ?? '';
 
 const normalizeAdAccountId = (id: string) => {
   const trimmed = id.trim();
@@ -319,4 +319,3 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     </div>
   );
 };
-
