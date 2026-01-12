@@ -8,8 +8,14 @@ import { createClient } from '@supabase/supabase-js';
 // - VITE_SUPABASE_ANON_KEY
 // -----------------------------------------------------------------------------
 
-const SUPABASE_URL: string = (import.meta as any)?.env?.VITE_SUPABASE_URL ?? '';
-const SUPABASE_ANON_KEY: string = (import.meta as any)?.env?.VITE_SUPABASE_ANON_KEY ?? '';
+const sanitizeEnv = (value: unknown) => {
+  if (typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  return trimmed.replace(/^['"]|['"]$/g, '');
+};
+
+const SUPABASE_URL: string = sanitizeEnv((import.meta as any)?.env?.VITE_SUPABASE_URL);
+const SUPABASE_ANON_KEY: string = sanitizeEnv((import.meta as any)?.env?.VITE_SUPABASE_ANON_KEY);
 
 const isValidUrl = (url: string) => {
   try {
@@ -27,3 +33,14 @@ export const supabase = createClient(finalUrl, finalKey);
 export const isSupabaseConfigured = () => {
   return finalUrl !== 'https://placeholder.supabase.co' && finalKey !== 'placeholder';
 };
+
+export const getSupabaseConfigHints = () => {
+  const urlOk = finalUrl !== 'https://placeholder.supabase.co';
+  const keyOk = finalKey !== 'placeholder';
+  return {
+    urlOk,
+    keyOk,
+    missing: [...(urlOk ? [] : ['VITE_SUPABASE_URL']), ...(keyOk ? [] : ['VITE_SUPABASE_ANON_KEY'])],
+  };
+};
+

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { ShieldCheck, Facebook, AlertCircle, Mail, Lock, ArrowRight } from 'lucide-react';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { getSupabaseConfigHints, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { User } from '../types';
 
 interface LoginProps {
@@ -16,6 +16,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [isSignUp, setIsSignUp] = useState(false);
 
   const isBackendReady = isSupabaseConfigured();
+  const supabaseHints = getSupabaseConfigHints();
   const facebookScopes: string =
     ((import.meta as any)?.env?.VITE_FACEBOOK_SCOPES as string | undefined) ?? 'public_profile email ads_read';
 
@@ -216,7 +217,11 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         </div>
 
         <div className="text-center text-xs text-gray-400 mt-4">
-          {!isBackendReady && <span className="text-yellow-500 block mb-1">Modo Demo Ativo</span>}
+          {!isBackendReady && (
+            <span className="text-yellow-600 block mb-1">
+              Modo Demo Ativo (faltando: {supabaseHints.missing.join(', ')})
+            </span>
+          )}
           &copy; 2024 8 Engage.
         </div>
       </div>
