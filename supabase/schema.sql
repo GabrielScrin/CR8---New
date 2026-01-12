@@ -252,18 +252,15 @@ for update
 using (public.is_company_admin(id))
 with check (public.is_company_admin(id));
 
+-- NOTE: Avoid recursive RLS on company_members (policies referencing helpers that
+-- query company_members can cause the app to see no memberships).
 drop policy if exists "Members can read company members" on public.company_members;
-create policy "Members can read company members"
+drop policy if exists "Admins can manage company members" on public.company_members;
+
+create policy "Users can read own memberships"
 on public.company_members
 for select
-using (public.is_company_member(company_id));
-
-drop policy if exists "Admins can manage company members" on public.company_members;
-create policy "Admins can manage company members"
-on public.company_members
-for all
-using (public.is_company_admin(company_id))
-with check (public.is_company_admin(company_id));
+using (user_id = auth.uid());
 
 -- -----------------------------------------------------------------------------
 -- Campaigns
