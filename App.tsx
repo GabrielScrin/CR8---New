@@ -1,14 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Layout } from './components/Layout';
 import { Login } from './components/Login';
 import { Dashboard } from './components/Dashboard';
 import { TrafficAnalytics } from './components/TrafficAnalytics';
 import { CRM } from './components/CRM';
 import { LiveChat } from './components/LiveChat';
-import { User, Role } from './types';
-import { supabase, isSupabaseConfigured } from './lib/supabase';
+import { CompanySetup } from './components/CompanySetup';
+import { Role, User } from './types';
+import { isSupabaseConfigured, supabase } from './lib/supabase';
 
-// Simple placeholder components for views not fully implemented in this demo
 const PlaceholderView = ({ title }: { title: string }) => (
   <div className="flex flex-col items-center justify-center h-full text-gray-400">
     <div className="text-6xl mb-4 font-thin opacity-20">CR-8</div>
@@ -23,22 +23,41 @@ export default function App() {
   const [loadingSession, setLoadingSession] = useState(true);
 
   useEffect(() => {
-    // If supabase isn't configured, skip session check
     if (!isSupabaseConfigured()) {
-        setLoadingSession(false);
-        return;
+      setLoadingSession(false);
+      return;
     }
 
-    // Check active sessions and sets the user
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const hydrateUser = async (sessionUser: any): Promise<User> => {
+      const fallback: User = {
+        id: sessionUser.id,
+        name: sessionUser.user_metadata?.full_name || sessionUser.email || 'Usuário',
+        email: sessionUser.email || '',
+        role: 'gestor',
+        avatar: sessionUser.user_metadata?.avatar_url,
+      };
+
+      try {
+        const [{ data: profile }, { data: membership }] = await Promise.all([
+          supabase.from('users').select('full_name, avatar_url, role').eq('id', sessionUser.id).maybeSingle(),
+          supabase.from('company_members').select('company_id').limit(1).maybeSingle(),
+        ]);
+
+        return {
+          ...fallback,
+          name: profile?.full_name || fallback.name,
+          avatar: profile?.avatar_url || fallback.avatar,
+          role: (profile?.role as Role) || fallback.role,
+          companyId: membership?.company_id || fallback.companyId,
+        };
+      } catch {
+        return fallback;
+      }
+    };
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
-        setUser({
-            id: session.user.id,
-            name: session.user.user_metadata.full_name || session.user.email || 'Usuário',
-            email: session.user.email || '',
-            role: 'gestor', // Default role for now
-            avatar: session.user.user_metadata.avatar_url
-        });
+        setUser(await hydrateUser(session.user));
       }
       setLoadingSession(false);
     });
@@ -46,17 +65,11 @@ export default function App() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-        if (session?.user) {
-            setUser({
-                id: session.user.id,
-                name: session.user.user_metadata.full_name || session.user.email || 'Usuário',
-                email: session.user.email || '',
-                role: 'gestor',
-                avatar: session.user.user_metadata.avatar_url
-            });
-        } else {
-            setUser(null);
-        }
+      if (session?.user) {
+        void hydrateUser(session.user).then(setUser);
+      } else {
+        setUser(null);
+      }
     });
 
     return () => subscription.unsubscribe();
@@ -68,18 +81,22 @@ export default function App() {
 
   const handleLogout = async () => {
     if (isSupabaseConfigured()) {
-        await supabase.auth.signOut();
+      await supabase.auth.signOut();
     }
     setUser(null);
     setCurrentView('dashboard');
   };
 
   if (loadingSession) {
-      return <div className="min-h-screen flex items-center justify-center bg-gray-100 text-gray-500">Carregando sessão...</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-gray-100 text-gray-500">Carregando sessão...</div>;
   }
 
   if (!user) {
     return <Login onLogin={handleLogin} />;
+  }
+
+  if (isSupabaseConfigured() && !user.companyId) {
+    return <CompanySetup onDone={(companyId) => setUser({ ...user, companyId })} />;
   }
 
   const renderView = () => {
@@ -110,12 +127,7 @@ export default function App() {
   };
 
   return (
-    <Layout 
-      user={user} 
-      currentView={currentView} 
-      setCurrentView={setCurrentView}
-      onLogout={handleLogout}
-    >
+    <Layout user={user} currentView={currentView} setCurrentView={setCurrentView} onLogout={handleLogout}>
       {renderView()}
     </Layout>
   );

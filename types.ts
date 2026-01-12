@@ -15,18 +15,12 @@ export interface AdMetric {
   adId: string;
   thumbnail: string;
   status: 'active' | 'paused';
-  leads: number;
   spend: number;
-  cpa: number;
-  cpi: number; // Cost per install or interaction
   impressions: number;
-  hookRate: string; // %
-  holdRate: string; // %
-  tags: string[]; // Awareness levels
-  scoreLead: number;
-  scoreCPL: number;
-  scoreCTR: number;
-  classification: 'Winner' | 'Loser' | 'Test';
+  leads?: number;
+  cpc?: number;
+  ctr?: number;
+  roas?: number;
 }
 
 export interface Lead {
@@ -35,7 +29,7 @@ export interface Lead {
   phone: string;
   email: string;
   status: 'new' | 'contacted' | 'proposal' | 'won' | 'lost';
-  source: 'Instagram' | 'WhatsApp' | 'Manual';
+  source: string;
   utm_source?: string;
   utm_campaign?: string;
   lastInteraction: string;

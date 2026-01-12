@@ -1,20 +1,57 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
-</div>
+# CR-8 (Traffic OS) — Supabase + Vercel
 
-# Run and deploy your AI Studio app
+## Rodar local
 
-This contains everything you need to run your app locally.
+1. `npm install`
+2. Copie `.env.example` para `.env.local` e preencha `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY`
+3. `npm run dev`
 
-View your app in AI Studio: https://ai.studio/apps/drive/1RP4nXYLBlKXkGMPJ3jlMfqQAhyqjHOHg
+## Supabase (Fase 1)
 
-## Run Locally
+### 1) Banco + RLS
 
-**Prerequisites:**  Node.js
+- No Supabase → SQL Editor: rode `supabase/schema.sql`
 
+### 2) Auth (Facebook + ads_read)
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+- Supabase → Authentication → Providers → Facebook: configure App ID/Secret
+- Redirect URLs:
+  - Local: `http://localhost:5173`
+  - Vercel: `https://SEU-PROJETO.vercel.app`
+
+### 3) Empresa/cliente
+
+- Faça login e crie a primeira empresa no fluxo de “Primeiro Setup” (usa a RPC `create_company`)
+- Preencha `meta_ad_account_id` (ex: `act_123...`) para o módulo de Tráfego puxar insights reais
+
+## Webhook de Leads (Supabase Edge Function)
+
+Arquivo: `supabase/functions/lead-webhook/index.ts`
+
+1. Configure secrets no Supabase:
+   - `LEAD_WEBHOOK_SECRET` (recomendado)
+   - `FB_VERIFY_TOKEN` (para verificação do webhook do Facebook, se usar)
+2. Deploy da função (Supabase CLI):
+   - `supabase functions deploy lead-webhook`
+
+**Exemplo (Landing Page):**
+
+`POST https://<PROJECT>.functions.supabase.co/lead-webhook?company_id=<UUID>`
+
+Headers:
+- `x-webhook-secret: <LEAD_WEBHOOK_SECRET>`
+
+Body:
+```json
+{ "name": "João", "email": "joao@email.com", "phone": "11999999999", "utm_source": "ig", "utm_campaign": "campanha-x" }
+```
+
+## Deploy (Vercel)
+
+1. Importar o repositório na Vercel
+2. Setar env vars (Project Settings → Environment Variables):
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - (opcional) `VITE_META_AD_ACCOUNT_ID`
+3. Build: `npm run build` (output padrão: `dist`)
+

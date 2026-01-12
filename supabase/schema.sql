@@ -1,0 +1,386 @@
+-- CR-8 (Traffic OS) - Phase 1 schema (Supabase Postgres)
+-- Apply this in Supabase SQL Editor (or via migrations if you use Supabase CLI).
+
+create extension if not exists pgcrypto;
+
+-- -----------------------------------------------------------------------------
+-- Helpers
+-- -----------------------------------------------------------------------------
+
+create or replace function public.set_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+
+-- -----------------------------------------------------------------------------
+-- Users (profile table; auth users live in auth.users)
+-- -----------------------------------------------------------------------------
+
+create table if not exists public.users (
+  id uuid primary key references auth.users (id) on delete cascade,
+  email text,
+  full_name text,
+  avatar_url text,
+  role text not null default 'gestor' check (role in ('admin', 'gestor', 'empresa', 'vendedor')),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists set_users_updated_at on public.users;
+create trigger set_users_updated_at
+before update on public.users
+for each row execute function public.set_updated_at();
+
+create or replace function public.handle_new_user()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  insert into public.users (id, email, full_name, avatar_url)
+  values (
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name', new.email, 'Usuário'),
+    new.raw_user_meta_data->>'avatar_url'
+  )
+  on conflict (id) do update
+  set
+    email = excluded.email,
+    full_name = excluded.full_name,
+    avatar_url = excluded.avatar_url;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists on_auth_user_created on auth.users;
+create trigger on_auth_user_created
+after insert on auth.users
+for each row execute function public.handle_new_user();
+
+alter table public.users enable row level security;
+
+drop policy if exists "Users can read own profile" on public.users;
+create policy "Users can read own profile"
+on public.users
+for select
+using (id = auth.uid());
+
+drop policy if exists "Users can update own profile" on public.users;
+create policy "Users can update own profile"
+on public.users
+for update
+using (id = auth.uid())
+with check (id = auth.uid());
+
+-- -----------------------------------------------------------------------------
+-- Companies (multi-tenancy root)
+-- -----------------------------------------------------------------------------
+
+create table if not exists public.companies (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  created_by uuid references public.users (id) on delete set null,
+  -- Meta (Facebook/Instagram) identifiers (tokens should live in secrets, not in DB)
+  meta_ad_account_id text,
+  meta_business_id text,
+  meta_page_id text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists set_companies_updated_at on public.companies;
+create trigger set_companies_updated_at
+before update on public.companies
+for each row execute function public.set_updated_at();
+
+create table if not exists public.company_members (
+  company_id uuid not null references public.companies (id) on delete cascade,
+  user_id uuid not null references public.users (id) on delete cascade,
+  member_role text not null default 'gestor' check (member_role in ('admin', 'gestor', 'empresa', 'vendedor')),
+  created_at timestamptz not null default now(),
+  primary key (company_id, user_id)
+);
+
+create or replace function public.create_company(p_name text)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  new_company_id uuid;
+begin
+  insert into public.companies (name, created_by)
+  values (p_name, auth.uid())
+  returning id into new_company_id;
+
+  insert into public.company_members (company_id, user_id, member_role)
+  values (new_company_id, auth.uid(), 'admin');
+
+  return new_company_id;
+end;
+$$;
+
+grant execute on function public.create_company(text) to authenticated;
+
+create or replace function public.is_company_member(p_company_id uuid)
+returns boolean
+language sql
+stable
+as $$
+  select exists (
+    select 1
+    from public.company_members m
+    where m.company_id = p_company_id
+      and m.user_id = auth.uid()
+  );
+$$;
+
+create or replace function public.is_company_admin(p_company_id uuid)
+returns boolean
+language sql
+stable
+as $$
+  select exists (
+    select 1
+    from public.company_members m
+    where m.company_id = p_company_id
+      and m.user_id = auth.uid()
+      and m.member_role in ('admin', 'gestor')
+  );
+$$;
+
+alter table public.companies enable row level security;
+alter table public.company_members enable row level security;
+
+drop policy if exists "Members can read companies" on public.companies;
+create policy "Members can read companies"
+on public.companies
+for select
+using (public.is_company_member(id));
+
+drop policy if exists "Users can create companies" on public.companies;
+create policy "Users can create companies"
+on public.companies
+for insert
+with check (created_by = auth.uid());
+
+drop policy if exists "Admins can update companies" on public.companies;
+create policy "Admins can update companies"
+on public.companies
+for update
+using (public.is_company_admin(id))
+with check (public.is_company_admin(id));
+
+drop policy if exists "Members can read company members" on public.company_members;
+create policy "Members can read company members"
+on public.company_members
+for select
+using (public.is_company_member(company_id));
+
+drop policy if exists "Admins can manage company members" on public.company_members;
+create policy "Admins can manage company members"
+on public.company_members
+for all
+using (public.is_company_admin(company_id))
+with check (public.is_company_admin(company_id));
+
+-- -----------------------------------------------------------------------------
+-- Campaigns
+-- -----------------------------------------------------------------------------
+
+create table if not exists public.campaigns (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies (id) on delete cascade,
+  name text not null,
+  platform text not null default 'meta',
+  meta_campaign_id text,
+  status text not null default 'active',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists set_campaigns_updated_at on public.campaigns;
+create trigger set_campaigns_updated_at
+before update on public.campaigns
+for each row execute function public.set_updated_at();
+
+alter table public.campaigns enable row level security;
+
+drop policy if exists "Members can read campaigns" on public.campaigns;
+create policy "Members can read campaigns"
+on public.campaigns
+for select
+using (public.is_company_member(company_id));
+
+drop policy if exists "Members can create campaigns" on public.campaigns;
+create policy "Members can create campaigns"
+on public.campaigns
+for insert
+with check (public.is_company_admin(company_id));
+
+drop policy if exists "Members can update campaigns" on public.campaigns;
+create policy "Members can update campaigns"
+on public.campaigns
+for update
+using (public.is_company_admin(company_id))
+with check (public.is_company_admin(company_id));
+
+-- -----------------------------------------------------------------------------
+-- Leads
+-- -----------------------------------------------------------------------------
+
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'lead_status') then
+    create type public.lead_status as enum ('new', 'contacted', 'proposal', 'won', 'lost');
+  end if;
+end
+$$;
+
+create table if not exists public.leads (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies (id) on delete cascade,
+  campaign_id uuid references public.campaigns (id) on delete set null,
+  assigned_to uuid references public.users (id) on delete set null,
+  name text,
+  email text,
+  phone text,
+  status public.lead_status not null default 'new',
+  source text not null default 'Manual',
+  utm_source text,
+  utm_campaign text,
+  external_id text,
+  value numeric,
+  last_interaction_at timestamptz,
+  raw jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists leads_company_id_idx on public.leads (company_id);
+create index if not exists leads_created_at_idx on public.leads (created_at desc);
+create unique index if not exists leads_company_external_id_uq on public.leads (company_id, external_id) where external_id is not null;
+
+drop trigger if exists set_leads_updated_at on public.leads;
+create trigger set_leads_updated_at
+before update on public.leads
+for each row execute function public.set_updated_at();
+
+alter table public.leads enable row level security;
+
+drop policy if exists "Members can read leads" on public.leads;
+create policy "Members can read leads"
+on public.leads
+for select
+using (public.is_company_member(company_id));
+
+drop policy if exists "Members can create leads" on public.leads;
+create policy "Members can create leads"
+on public.leads
+for insert
+with check (public.is_company_member(company_id));
+
+drop policy if exists "Members can update leads" on public.leads;
+create policy "Members can update leads"
+on public.leads
+for update
+using (public.is_company_member(company_id))
+with check (public.is_company_member(company_id));
+
+-- -----------------------------------------------------------------------------
+-- Chats (sessions + messages)
+-- -----------------------------------------------------------------------------
+
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'chat_platform') then
+    create type public.chat_platform as enum ('whatsapp', 'instagram', 'web', 'meta');
+  end if;
+  if not exists (select 1 from pg_type where typname = 'chat_sender') then
+    create type public.chat_sender as enum ('user', 'agent', 'system');
+  end if;
+end
+$$;
+
+create table if not exists public.chats (
+  id uuid primary key default gen_random_uuid(),
+  company_id uuid not null references public.companies (id) on delete cascade,
+  lead_id uuid references public.leads (id) on delete set null,
+  platform public.chat_platform not null,
+  external_thread_id text,
+  last_message text,
+  last_message_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+drop trigger if exists set_chats_updated_at on public.chats;
+create trigger set_chats_updated_at
+before update on public.chats
+for each row execute function public.set_updated_at();
+
+create table if not exists public.chat_messages (
+  id uuid primary key default gen_random_uuid(),
+  chat_id uuid not null references public.chats (id) on delete cascade,
+  sender public.chat_sender not null,
+  content text not null,
+  raw jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.chats enable row level security;
+alter table public.chat_messages enable row level security;
+
+drop policy if exists "Members can read chats" on public.chats;
+create policy "Members can read chats"
+on public.chats
+for select
+using (public.is_company_member(company_id));
+
+drop policy if exists "Members can create chats" on public.chats;
+create policy "Members can create chats"
+on public.chats
+for insert
+with check (public.is_company_member(company_id));
+
+drop policy if exists "Members can update chats" on public.chats;
+create policy "Members can update chats"
+on public.chats
+for update
+using (public.is_company_member(company_id))
+with check (public.is_company_member(company_id));
+
+drop policy if exists "Members can read chat messages" on public.chat_messages;
+create policy "Members can read chat messages"
+on public.chat_messages
+for select
+using (
+  exists (
+    select 1
+    from public.chats c
+    where c.id = chat_id
+      and public.is_company_member(c.company_id)
+  )
+);
+
+drop policy if exists "Members can create chat messages" on public.chat_messages;
+create policy "Members can create chat messages"
+on public.chat_messages
+for insert
+with check (
+  exists (
+    select 1
+    from public.chats c
+    where c.id = chat_id
+      and public.is_company_member(c.company_id)
+  )
+);
