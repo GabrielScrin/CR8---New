@@ -18,6 +18,7 @@
 - Redirect URLs:
   - Local: `http://localhost:5173`
   - Vercel: `https://SEU-PROJETO.vercel.app`
+- Se o popup do Facebook mostrar `Invalid Scopes: email`, ajuste `VITE_FACEBOOK_SCOPES` (ex: `public_profile ads_read`)
 
 ### 3) Empresa/cliente
 
@@ -54,4 +55,3 @@ Body:
    - `VITE_SUPABASE_ANON_KEY`
    - (opcional) `VITE_META_AD_ACCOUNT_ID`
 3. Build: `npm run build` (output padrão: `dist`)
-

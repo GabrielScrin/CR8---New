@@ -16,6 +16,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [isSignUp, setIsSignUp] = useState(false);
 
   const isBackendReady = isSupabaseConfigured();
+  const facebookScopes: string =
+    ((import.meta as any)?.env?.VITE_FACEBOOK_SCOPES as string | undefined) ?? 'public_profile email ads_read';
 
   const demoLogin = () => {
     console.warn('Supabase not configured or Demo requested. Using Mock Login.');
@@ -52,7 +54,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'facebook',
         options: {
-          scopes: 'email,public_profile,ads_read',
+          // OAuth escopos padrão são separados por espaço.
+          // Se aparecer "Invalid Scopes: email" no popup do Facebook, ajuste via `VITE_FACEBOOK_SCOPES`.
+          scopes: facebookScopes,
           redirectTo: window.location.origin,
         },
       });
