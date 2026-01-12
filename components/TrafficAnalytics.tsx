@@ -89,6 +89,13 @@ const META_GRAPH_VERSION: string = import.meta.env.VITE_META_GRAPH_VERSION ?? 'v
 const META_AD_ACCOUNT_ID_ENV: string = import.meta.env.VITE_META_AD_ACCOUNT_ID ?? '';
 const META_SCOPES: string = import.meta.env.VITE_FACEBOOK_SCOPES ?? 'public_profile ads_read';
 
+// Ajuste fino (equivalente ao "Índice de criativos" da sua planilha)
+const IDC_THRESHOLDS = {
+  otimo: 0.8,
+  bom: 0.6,
+  regular: 0.4,
+};
+
 const normalizeAdAccountId = (id: string) => {
   const trimmed = id.trim();
   if (!trimmed) return null;
@@ -111,15 +118,26 @@ const extractActionSum = (actions: any[] | undefined, matcher: (actionType: stri
 const extractLeadsFromActions = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t.includes('lead') || t === 'onsite_conversion.lead_grouped');
 
-const extractVideo3s = (actions: any[] | undefined) =>
-  extractActionSum(actions, (t) => t === 'video_view' || t.includes('video_view') || t === 'video_view_3s');
-
-const extractVideo15s = (actions: any[] | undefined) =>
-  extractActionSum(actions, (t) => t === 'video_view_15s' || t.includes('video_view_15s'));
+const sumActionValues = (actions: any[] | undefined) => {
+  if (!Array.isArray(actions) || actions.length === 0) return undefined;
+  return actions.reduce((sum, a) => sum + parseNumber(a?.value), 0);
+};
 
 const extractRoas = (purchaseRoas: any[] | undefined) => {
   if (!Array.isArray(purchaseRoas) || purchaseRoas.length === 0) return undefined;
   return purchaseRoas.reduce((sum, r) => sum + parseNumber(r.value), 0);
+};
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+const normalizeHigherBetter = (value: number, min: number, max: number) => {
+  const denom = max - min;
+  if (!Number.isFinite(denom) || denom <= 0) return 0;
+  return clamp01((value - min) / denom);
+};
+
+const normalizeLowerBetter = (value: number, min: number, max: number) => {
+  return clamp01(1 - normalizeHigherBetter(value, min, max));
 };
 
 type MetaAdAccount = {
@@ -346,28 +364,14 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         const ctr = parseNumber(row.ctr) || undefined;
         const roas = extractRoas(row.purchase_roas);
 
-        const video3s = extractVideo3s(row.video_3_sec_watched_actions);
-        const video15s = extractVideo15s(row.video_15_sec_watched_actions);
+        // Hook/Hold (Meta): Hook = 3s/Imp, Hold = 15s/Imp
+        const video3s = sumActionValues(row.video_3_sec_watched_actions);
+        const video15s = sumActionValues(row.video_15_sec_watched_actions);
         const hookRate = impressions > 0 && video3s != null ? video3s / impressions : undefined;
         const holdRate = impressions > 0 && video15s != null ? video15s / impressions : undefined;
 
-        const scoreLanding = cpa != null ? Math.max(0, Math.min(100, Math.round(100 - cpa * 2))) : undefined;
-        const scoreCreative = ctr != null ? Math.max(0, Math.min(100, Math.round(ctr * 30))) : undefined;
-        const scores = [
-          ...(scoreLanding != null ? [{ label: 'L', value: scoreLanding }] : []),
-          ...(scoreCreative != null ? [{ label: 'C', value: scoreCreative }] : []),
-        ];
-
-        const classification: AdMetric['classification'] =
-          leads != null && leads >= 10 && (roas == null ? (cpa != null && cpa <= 20) : roas >= 1.5)
-            ? 'winner'
-            : spend >= 50 && (leads ?? 0) === 0
-              ? 'loser'
-              : 'neutral';
-
         const tags: string[] = [];
         const nameLower = String(entityName ?? '').toLowerCase();
-        if (classification === 'winner') tags.push('Quente');
         if (nameLower.includes('depoimento') || nameLower.includes('prova')) tags.push('Prova Social');
         if (tags.length === 0) tags.push('Em teste');
 
@@ -386,13 +390,68 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           cpa,
           hookRate,
           holdRate,
-          scores: scores.length ? scores : undefined,
+          tags,
+        };
+      });
+
+      // ---------------------------------------------------------------------
+      // Scores / IDC (igual à planilha)
+      // Score Leads (maior melhor): (x - min) / (max - min)
+      // Score CPL (menor melhor): 1 - (x - min) / (max - min)
+      // Score CTR (maior melhor): (x - min) / (max - min)
+      // ---------------------------------------------------------------------
+      const leadsValues = mapped.map((r) => r.leads ?? 0);
+      const ctrValues = mapped.map((r) => r.ctr ?? 0);
+      const cplValues = mapped.map((r) => r.cpa).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+
+      const minLeads = leadsValues.length ? Math.min(...leadsValues) : 0;
+      const maxLeads = leadsValues.length ? Math.max(...leadsValues) : 0;
+      const minCtr = ctrValues.length ? Math.min(...ctrValues) : 0;
+      const maxCtr = ctrValues.length ? Math.max(...ctrValues) : 0;
+      const minCpl = cplValues.length ? Math.min(...cplValues) : 0;
+      const maxCpl = cplValues.length ? Math.max(...cplValues) : 0;
+
+      const scored = mapped.map((row) => {
+        const leads = row.leads ?? 0;
+        const cpl = row.cpa;
+        const ctr = row.ctr ?? 0;
+
+        const scoreLeads01 = normalizeHigherBetter(leads, minLeads, maxLeads);
+        const scoreCpl01 = cpl != null ? normalizeLowerBetter(cpl, minCpl, maxCpl) : 0;
+        const scoreCtr01 = normalizeHigherBetter(ctr, minCtr, maxCtr);
+
+        const idc01 = (scoreLeads01 + scoreCpl01 + scoreCtr01) / 3;
+
+        const classification: AdMetric['classification'] =
+          leads === 0
+            ? undefined
+            : idc01 >= IDC_THRESHOLDS.otimo
+              ? 'otimo'
+              : idc01 >= IDC_THRESHOLDS.bom
+                ? 'bom'
+                : idc01 >= IDC_THRESHOLDS.regular
+                  ? 'regular'
+                  : 'ruim';
+
+        const scores = [
+          { label: 'Leads', value: Math.round(scoreLeads01 * 100) },
+          { label: 'CPL', value: Math.round(scoreCpl01 * 100) },
+          { label: 'CTR', value: Math.round(scoreCtr01 * 100) },
+        ];
+
+        const tags = [...(row.tags ?? [])];
+        if (classification === 'otimo') tags.unshift('Quente');
+
+        return {
+          ...row,
+          scores,
+          idc: Math.round(idc01 * 100),
           classification,
           tags,
         };
       });
 
-      setAds(mapped);
+      setAds(scored);
       if (mapped.length === 0) setErrorMsg('Sem dados de anuncios nesse periodo.');
     } catch (e: any) {
       console.error(e);
@@ -603,6 +662,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                       Scores
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      IDC
+                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Classificacao
                     </th>
                     <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -613,7 +675,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                 <tbody className="bg-white divide-y divide-gray-200">
                   {ads.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="px-6 py-10 text-center text-sm text-gray-400">
+                      <td colSpan={11} className="px-6 py-10 text-center text-sm text-gray-400">
                         {demoMode ? 'Sem dados.' : 'Sem dados reais para mostrar ainda.'}
                       </td>
                     </tr>
@@ -658,13 +720,18 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                             {!ad.scores?.length && '-'}
                           </div>
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.idc != null ? ad.idc : '-'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                          {ad.classification === 'winner' ? (
-                            <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-semibold">Winner</span>
-                          ) : ad.classification === 'loser' ? (
-                            <span className="px-2 py-0.5 rounded bg-red-100 text-red-800 text-xs font-semibold">Loser</span>
+                          {ad.classification === 'otimo' ? (
+                            <span className="px-2 py-0.5 rounded bg-green-100 text-green-800 text-xs font-semibold">Ótimo</span>
+                          ) : ad.classification === 'bom' ? (
+                            <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-800 text-xs font-semibold">Bom</span>
+                          ) : ad.classification === 'regular' ? (
+                            <span className="px-2 py-0.5 rounded bg-yellow-50 text-yellow-800 text-xs font-semibold">Regular</span>
+                          ) : ad.classification === 'ruim' ? (
+                            <span className="px-2 py-0.5 rounded bg-red-50 text-red-800 text-xs font-semibold">Ruim</span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-800 text-xs font-semibold">Neutro</span>
+                            <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-800 text-xs font-semibold">-</span>
                           )}
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">

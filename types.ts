@@ -25,7 +25,8 @@ export interface AdMetric {
   hookRate?: number;
   holdRate?: number;
   scores?: { label: string; value: number }[];
-  classification?: 'winner' | 'loser' | 'neutral';
+  idc?: number;
+  classification?: 'otimo' | 'bom' | 'regular' | 'ruim';
   tags?: string[];
 }
 
