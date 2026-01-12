@@ -118,10 +118,11 @@ const extractActionSum = (actions: any[] | undefined, matcher: (actionType: stri
 const extractLeadsFromActions = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t.includes('lead') || t === 'onsite_conversion.lead_grouped');
 
-const sumActionValues = (actions: any[] | undefined) => {
-  if (!Array.isArray(actions) || actions.length === 0) return undefined;
-  return actions.reduce((sum, a) => sum + parseNumber(a?.value), 0);
-};
+const extractVideo3sFromActions = (actions: any[] | undefined) =>
+  extractActionSum(actions, (t) => t === 'video_view' || t === 'video_view_3s' || t.includes('video_view'));
+
+const extractVideo15sFromActions = (actions: any[] | undefined) =>
+  extractActionSum(actions, (t) => t === 'video_view_15s' || t.includes('video_view_15s'));
 
 const extractRoas = (purchaseRoas: any[] | undefined) => {
   if (!Array.isArray(purchaseRoas) || purchaseRoas.length === 0) return undefined;
@@ -138,6 +139,12 @@ const normalizeHigherBetter = (value: number, min: number, max: number) => {
 
 const normalizeLowerBetter = (value: number, min: number, max: number) => {
   return clamp01(1 - normalizeHigherBetter(value, min, max));
+};
+
+const svgAvatarDataUrl = (text: string, fg = '#111827', bg = '#E5E7EB') => {
+  const label = (text || 'CR-8').trim().slice(0, 2).toUpperCase();
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="100%" height="100%" rx="12" ry="12" fill="${bg}"/><text x="50%" y="56%" text-anchor="middle" font-size="30" font-family="Inter,system-ui,Segoe UI,Roboto,Arial" fill="${fg}">${label}</text></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 };
 
 type MetaAdAccount = {
@@ -227,6 +234,28 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     return results;
   };
 
+  const fetchAdThumbnails = async (providerToken: string, adIds: string[]) => {
+    if (adIds.length === 0) return new Map<string, string>();
+    const ids = Array.from(new Set(adIds)).slice(0, 50);
+
+    const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/`);
+    url.searchParams.set('ids', ids.join(','));
+    url.searchParams.set('fields', 'creative{thumbnail_url,image_url}');
+    url.searchParams.set('access_token', providerToken);
+
+    const res = await fetch(url.toString());
+    const json = await res.json();
+    if (!res.ok || json?.error) return new Map<string, string>();
+
+    const out = new Map<string, string>();
+    for (const id of ids) {
+      const node = json?.[id];
+      const thumb: string | undefined = node?.creative?.thumbnail_url || node?.creative?.image_url;
+      if (thumb) out.set(id, thumb);
+    }
+    return out;
+  };
+
   const reauthorizeFacebook = async () => {
     setErrorMsg(null);
     setNeedsReauth(false);
@@ -279,6 +308,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
       const fallback = accounts[0]?.id ?? '';
       const adAccountId = (hasDesired ? normalizedDesired : fallback) || normalizedDesired;
+      const adAccountName = accounts.find((a) => a.id === adAccountId)?.name ?? null;
 
       if (!adAccountId) {
         setAds([]);
@@ -329,10 +359,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         selectedLevel === 'campaign'
           ? 'campaign_id,campaign_name'
           : selectedLevel === 'adset'
-            ? 'adset_id,adset_name'
-            : 'ad_id,ad_name,quality_ranking,engagement_rate_ranking,conversion_rate_ranking';
-      const videoFields = selectedLevel === 'ad' ? ',video_3_sec_watched_actions,video_15_sec_watched_actions' : '';
-      url.searchParams.set('fields', `${entityFields},${commonFields}${videoFields}`);
+            ? 'adset_id,adset_name,campaign_id,campaign_name'
+            : 'ad_id,ad_name,adset_name,campaign_name,quality_ranking,engagement_rate_ranking,conversion_rate_ranking';
+      url.searchParams.set('fields', `${entityFields},${commonFields}`);
       url.searchParams.set('date_preset', 'last_7d');
       url.searchParams.set('limit', '50');
       url.searchParams.set('access_token', providerToken);
@@ -365,21 +394,36 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         const roas = extractRoas(row.purchase_roas);
 
         // Hook/Hold (Meta): Hook = 3s/Imp, Hold = 15s/Imp
-        const video3s = sumActionValues(row.video_3_sec_watched_actions);
-        const video15s = sumActionValues(row.video_15_sec_watched_actions);
+        const video3s = extractVideo3sFromActions(row.actions);
+        const video15s = extractVideo15sFromActions(row.actions);
         const hookRate = impressions > 0 && video3s != null ? video3s / impressions : undefined;
         const holdRate = impressions > 0 && video15s != null ? video15s / impressions : undefined;
+
+        const subtitle =
+          selectedLevel === 'campaign'
+            ? `Conta: ${adAccountName ?? adAccountId}`
+            : selectedLevel === 'adset'
+              ? `Campanha: ${row.campaign_name ?? row.campaign_id ?? '-'}`
+              : `Conjunto: ${row.adset_name ?? '-'}`;
 
         const tags: string[] = [];
         const nameLower = String(entityName ?? '').toLowerCase();
         if (nameLower.includes('depoimento') || nameLower.includes('prova')) tags.push('Prova Social');
         if (tags.length === 0) tags.push('Em teste');
 
+        const baseThumb =
+          selectedLevel === 'campaign'
+            ? svgAvatarDataUrl(adAccountName ?? adAccountId, '#1F2937', '#EEF2FF')
+            : selectedLevel === 'adset'
+              ? svgAvatarDataUrl(String(row.campaign_name ?? 'CP'), '#1F2937', '#ECFDF5')
+              : svgAvatarDataUrl(String(entityName ?? 'AD'), '#1F2937', '#F3F4F6');
+
         return {
           id: String(entityId),
           adName: entityName ?? `${selectedLevel} ${entityId}`,
           adId: String(entityId),
-          thumbnail: 'https://picsum.photos/50/50',
+          thumbnail: baseThumb,
+          subtitle,
           status: 'active',
           spend,
           impressions,
@@ -393,6 +437,15 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           tags,
         };
       });
+
+      if (selectedLevel === 'ad' && mapped.length > 0) {
+        const adIds = mapped.map((r) => r.adId);
+        const thumbs = await fetchAdThumbnails(providerToken, adIds);
+        for (const row of mapped) {
+          const thumb = thumbs.get(row.adId);
+          if (thumb) row.thumbnail = thumb;
+        }
+      }
 
       // ---------------------------------------------------------------------
       // Scores / IDC (igual à planilha)
@@ -687,15 +740,15 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                             <div className="flex-shrink-0 h-10 w-10">
                               <img className="h-10 w-10 rounded object-cover" src={ad.thumbnail} alt="" />
                             </div>
-                            <div className="ml-4">
-                              <div className="text-sm font-medium text-gray-900">{ad.adName}</div>
-                              <div className="text-xs text-gray-500 flex items-center">
-                                ID: {ad.adId}
-                                <ExternalLink className="w-3 h-3 ml-1 cursor-pointer hover:text-indigo-500" />
-                              </div>
-                            </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{ad.adName}</div>
+                          <div className="text-xs text-gray-500 flex items-center">
+                            {selectedLevel === 'ad' ? `ID: ${ad.adId}` : ad.subtitle ?? `ID: ${ad.adId}`}
+                            <ExternalLink className="w-3 h-3 ml-1 cursor-pointer hover:text-indigo-500" />
                           </div>
-                        </td>
+                        </div>
+                      </div>
+                    </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <span
                             className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
