@@ -1,41 +1,31 @@
 import { createClient } from '@supabase/supabase-js';
 
-// Helper to safely access env vars in browser environments without crashing
-const getEnv = (key: string) => {
+// -----------------------------------------------------------------------------
+// CONFIGURAÇÃO DE CONEXÃO
+// -----------------------------------------------------------------------------
+// 1. Vá no Supabase -> Project Settings -> API
+// 2. Copie a "Project URL" e cole abaixo.
+// 3. Copie a "anon public key" e cole abaixo.
+// -----------------------------------------------------------------------------
+
+const SUPABASE_URL: string = 'https://boomatdjlaybryypqvzg.supabase.co';
+const SUPABASE_ANON_KEY: string = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJvb21hdGRqbGF5YnJ5eXBxdnpnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgxNzIzNzcsImV4cCI6MjA4Mzc0ODM3N30.3PTHfC1rT6xD0jT5YrkaPE-jSolGAcN1Xjp3C5idKic';
+
+// Validação simples para evitar erro de URL inválida se você esquecer de trocar
+const isValidUrl = (url: string) => {
   try {
-    // @ts-ignore
-    if (typeof process !== 'undefined' && process.env) {
-      // @ts-ignore
-      return process.env[key];
-    }
+    return Boolean(new URL(url));
   } catch (e) {
-    // Ignore error if process is undefined
+    return false;
   }
-  return undefined;
 };
 
-// -----------------------------------------------------------------------------
-// CONFIGURATION
-// -----------------------------------------------------------------------------
-// Please replace these values with your actual Supabase Project credentials.
-// You can find them in your Supabase Dashboard -> Project Settings -> API
-// -----------------------------------------------------------------------------
+const finalUrl = isValidUrl(SUPABASE_URL) ? SUPABASE_URL : 'https://placeholder.supabase.co';
+const finalKey = SUPABASE_ANON_KEY !== 'COLE_SUA_ANON_KEY_AQUI' ? SUPABASE_ANON_KEY : 'placeholder';
 
-// We use a dummy valid URL to prevent "Invalid URL" errors during client initialization
-// if the environment variables are not set.
-const DEFAULT_URL = 'https://placeholder.supabase.co';
-const DEFAULT_KEY = 'placeholder';
+export const supabase = createClient(finalUrl, finalKey);
 
-const envUrl = getEnv('SUPABASE_URL');
-const envKey = getEnv('SUPABASE_ANON_KEY');
-
-// If the env var is the placeholder text from previous steps or undefined, use the valid dummy URL
-const SUPABASE_URL = (envUrl && envUrl !== 'YOUR_SUPABASE_URL_HERE') ? envUrl : DEFAULT_URL;
-const SUPABASE_ANON_KEY = (envKey && envKey !== 'YOUR_SUPABASE_ANON_KEY_HERE') ? envKey : DEFAULT_KEY;
-
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
-// Helper to check if supabase is configured
+// Helper para verificar se o supabase está configurado corretamente
 export const isSupabaseConfigured = () => {
-    return SUPABASE_URL !== DEFAULT_URL && SUPABASE_ANON_KEY !== DEFAULT_KEY;
+    return finalUrl !== 'https://placeholder.supabase.co' && finalKey !== 'placeholder';
 };
