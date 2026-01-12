@@ -25,6 +25,9 @@
 - Faça login e crie a primeira empresa no fluxo de “Primeiro Setup” (usa a RPC `create_company`)
 - Preencha `meta_ad_account_id` (ex: `act_123...`) para o módulo de Tráfego puxar insights reais
 
+**Erro comum:** `violates foreign key constraint companies_created_by_fkey`
+- Rode novamente a parte do `supabase/schema.sql` que recria `create_company()` (ele faz backfill/cria o profile em `public.users`)
+
 ## Webhook de Leads (Supabase Edge Function)
 
 Arquivo: `supabase/functions/lead-webhook/index.ts`

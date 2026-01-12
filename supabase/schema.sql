@@ -105,6 +105,23 @@ create trigger on_auth_user_created
 after insert on auth.users
 for each row execute function public.handle_new_user();
 
+-- Backfill profiles for auth users created before this trigger existed
+do $$
+begin
+  if to_regclass('public.users') is not null then
+    insert into public.users (id, email, full_name, avatar_url)
+    select
+      au.id,
+      au.email,
+      coalesce(au.raw_user_meta_data->>'full_name', au.email, 'Usuário'),
+      au.raw_user_meta_data->>'avatar_url'
+    from auth.users au
+    left join public.users pu on pu.id = au.id
+    where pu.id is null;
+  end if;
+end
+$$;
+
 alter table public.users enable row level security;
 
 drop policy if exists "Users can read own profile" on public.users;
@@ -158,6 +175,21 @@ as $$
 declare
   new_company_id uuid;
 begin
+  -- Ensure the current user has a profile row (avoids FK violations on companies.created_by)
+  insert into public.users (id, email, full_name, avatar_url)
+  select
+    au.id,
+    au.email,
+    coalesce(au.raw_user_meta_data->>'full_name', au.email, 'Usuário'),
+    au.raw_user_meta_data->>'avatar_url'
+  from auth.users au
+  where au.id = auth.uid()
+  on conflict (id) do update
+  set
+    email = excluded.email,
+    full_name = excluded.full_name,
+    avatar_url = excluded.avatar_url;
+
   insert into public.companies (name, created_by)
   values (p_name, auth.uid())
   returning id into new_company_id;
