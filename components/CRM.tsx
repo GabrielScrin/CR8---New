@@ -3,6 +3,10 @@ import { MoreHorizontal, Phone, MessageCircle, RefreshCw } from 'lucide-react';
 import { Lead } from '../types';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
+interface CRMProps {
+  companyId?: string;
+}
+
 const mockLeads: Lead[] = [
   {
     id: '1',
@@ -11,7 +15,7 @@ const mockLeads: Lead[] = [
     email: 'juliana@email.com',
     status: 'new',
     source: 'Instagram',
-    lastInteraction: '10 min atrás',
+    lastInteraction: '10 min atras',
     value: 1500,
   },
   {
@@ -21,7 +25,7 @@ const mockLeads: Lead[] = [
     email: 'marcos@email.com',
     status: 'contacted',
     source: 'WhatsApp',
-    lastInteraction: '2 horas atrás',
+    lastInteraction: '2 horas atras',
     value: 2990,
   },
   {
@@ -31,7 +35,7 @@ const mockLeads: Lead[] = [
     email: 'contato@xyz.com',
     status: 'proposal',
     source: 'Manual',
-    lastInteraction: '1 dia atrás',
+    lastInteraction: '1 dia atras',
     value: 5000,
   },
   {
@@ -41,7 +45,7 @@ const mockLeads: Lead[] = [
     email: 'roberto@email.com',
     status: 'won',
     source: 'WhatsApp',
-    lastInteraction: '3 dias atrás',
+    lastInteraction: '3 dias atras',
     value: 1500,
   },
 ];
@@ -53,38 +57,42 @@ const formatRelativeTime = (dateIso?: string | null) => {
   const diffMin = Math.max(0, Math.floor(diffMs / 60000));
 
   if (diffMin < 1) return 'Agora';
-  if (diffMin < 60) return `${diffMin} min atrás`;
+  if (diffMin < 60) return `${diffMin} min atras`;
 
   const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours} horas atrás`;
+  if (diffHours < 24) return `${diffHours} horas atras`;
 
   const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays} dias atrás`;
+  return `${diffDays} dias atras`;
 };
 
-export const CRM: React.FC = () => {
+export const CRM: React.FC<CRMProps> = ({ companyId }) => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const demoMode = !isSupabaseConfigured();
 
   const fetchLeads = async () => {
-    if (!isSupabaseConfigured()) {
+    setErrorMsg(null);
+
+    if (demoMode) {
       setLeads(mockLeads);
       return;
     }
 
     setLoading(true);
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('leads')
-        .select('id,name,phone,email,status,source,utm_source,utm_campaign,value,last_interaction_at,created_at')
+        .select('id,company_id,name,phone,email,status,source,utm_source,utm_campaign,value,last_interaction_at,created_at')
         .order('created_at', { ascending: false })
         .limit(200);
 
-      if (error) {
-        console.error('Error fetching leads:', error);
-        setLeads(mockLeads);
-        return;
-      }
+      if (companyId) query = query.eq('company_id', companyId);
+
+      const { data, error } = await query;
+      if (error) throw error;
 
       const mapped: Lead[] = (data ?? []).map((d: any) => ({
         id: d.id,
@@ -99,10 +107,11 @@ export const CRM: React.FC = () => {
         value: d.value ?? undefined,
       }));
 
-      setLeads(mapped.length > 0 ? mapped : mockLeads);
-    } catch (err) {
+      setLeads(mapped);
+    } catch (err: any) {
       console.error(err);
-      setLeads(mockLeads);
+      setErrorMsg(err?.message || 'Erro ao carregar leads.');
+      setLeads([]);
     } finally {
       setLoading(false);
     }
@@ -110,7 +119,8 @@ export const CRM: React.FC = () => {
 
   useEffect(() => {
     fetchLeads();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
 
   const columns: Array<{ id: Lead['status']; title: string; color: string }> = [
     { id: 'new', title: 'Novos Leads', color: 'border-blue-400' },
@@ -122,7 +132,14 @@ export const CRM: React.FC = () => {
   return (
     <div className="h-full flex flex-col">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-bold text-gray-800">Pipeline de Vendas</h2>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-800">Pipeline de Vendas</h2>
+          {errorMsg && <p className="text-sm text-red-600 mt-1">{errorMsg}</p>}
+          {!demoMode && leads.length === 0 && !loading && (
+            <p className="text-sm text-gray-500 mt-1">Sem leads ainda (modo real). Envie via webhook para popular.</p>
+          )}
+        </div>
+
         <div className="flex space-x-2">
           <button
             onClick={fetchLeads}
@@ -182,7 +199,7 @@ export const CRM: React.FC = () => {
 
                       <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-50">
                         <div className="font-semibold text-gray-700 text-sm">
-                          {lead.value != null ? `R$ ${lead.value.toLocaleString()}` : '—'}
+                          {lead.value != null ? `R$ ${lead.value.toLocaleString()}` : '-'}
                         </div>
                         <div className="flex space-x-2">
                           <button className="p-1.5 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-md">

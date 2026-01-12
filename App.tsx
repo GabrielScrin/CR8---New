@@ -102,11 +102,11 @@ export default function App() {
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard />;
+        return <Dashboard companyId={user.companyId} />;
       case 'traffic':
-        return <TrafficAnalytics />;
+        return <TrafficAnalytics companyId={user.companyId} />;
       case 'crm':
-        return <CRM />;
+        return <CRM companyId={user.companyId} />;
       case 'livechat':
         return <LiveChat />;
       case 'contacts':

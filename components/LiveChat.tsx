@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ChatSession, ChatMessage } from '../types';
 import { Search, Bot, Paperclip, Send, User as UserIcon, MessageCircle } from 'lucide-react';
+import { isSupabaseConfigured } from '../lib/supabase';
 
 const mockSessions: ChatSession[] = [
   { id: '1', contactName: 'Ana Souza', platform: 'whatsapp', lastMessage: 'Gostaria de saber mais sobre o plano.', unread: 2, aiActive: true, tags: ['Interesse'] },
@@ -14,6 +15,19 @@ const mockMessages: ChatMessage[] = [
 ];
 
 export const LiveChat: React.FC = () => {
+  if (isSupabaseConfigured()) {
+    return (
+      <div className="flex h-[calc(100vh-8rem)] bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden items-center justify-center">
+        <div className="max-w-md text-center px-6">
+          <h2 className="text-xl font-bold text-gray-800">Live Chat</h2>
+          <p className="text-gray-500 mt-2 text-sm">
+            Integração WhatsApp/Instagram é a Fase 3. Aqui ficará a central omnichannel.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const [activeSessionId, setActiveSessionId] = useState<string | null>(mockSessions[0].id);
   const [messageInput, setMessageInput] = useState('');
 

@@ -4,10 +4,14 @@ import { Download, ExternalLink, Filter, RefreshCw } from 'lucide-react';
 import { AdMetric } from '../types';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
+interface TrafficAnalyticsProps {
+  companyId?: string;
+}
+
 const mockAds: AdMetric[] = [
   {
     id: '1',
-    adName: 'Vídeo Depoimento - Topo de Funil',
+    adName: 'Video depoimento - Topo de funil',
     adId: '23849102938',
     thumbnail: 'https://picsum.photos/50/50',
     status: 'active',
@@ -20,7 +24,7 @@ const mockAds: AdMetric[] = [
   },
   {
     id: '2',
-    adName: 'Carrossel Oferta - Remarketing',
+    adName: 'Carrossel oferta - Remarketing',
     adId: '23849102939',
     thumbnail: 'https://picsum.photos/51/51',
     status: 'active',
@@ -33,7 +37,7 @@ const mockAds: AdMetric[] = [
   },
   {
     id: '3',
-    adName: 'Imagem Estática - Prova Social',
+    adName: 'Imagem estatica - Prova social',
     adId: '23849102940',
     thumbnail: 'https://picsum.photos/52/52',
     status: 'paused',
@@ -52,7 +56,7 @@ const mockComparisonData = [
   { name: 'Qua', impacted: 2000, lastClick: 9800 },
   { name: 'Qui', impacted: 2780, lastClick: 3908 },
   { name: 'Sex', impacted: 1890, lastClick: 4800 },
-  { name: 'Sáb', impacted: 2390, lastClick: 3800 },
+  { name: 'Sab', impacted: 2390, lastClick: 3800 },
   { name: 'Dom', impacted: 3490, lastClick: 4300 },
 ];
 
@@ -83,29 +87,29 @@ const extractRoas = (purchaseRoas: any[] | undefined) => {
   return purchaseRoas.reduce((sum, r) => sum + parseNumber(r.value), 0);
 };
 
-export const TrafficAnalytics: React.FC = () => {
+export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId }) => {
   const [ads, setAds] = useState<AdMetric[]>([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const demoMode = !isSupabaseConfigured();
 
   const resolveAdAccountId = async () => {
     const envId = normalizeAdAccountId(META_AD_ACCOUNT_ID_ENV);
     if (envId) return envId;
 
-    const { data } = await supabase
-      .from('companies')
-      .select('meta_ad_account_id')
-      .not('meta_ad_account_id', 'is', null)
-      .limit(1)
-      .maybeSingle();
+    let query = supabase.from('companies').select('meta_ad_account_id');
+    if (companyId) query = query.eq('id', companyId);
 
+    const { data, error } = await query.limit(1).maybeSingle();
+    if (error) throw error;
     return normalizeAdAccountId(data?.meta_ad_account_id ?? '');
   };
 
   const fetchAds = async () => {
     setErrorMsg(null);
 
-    if (!isSupabaseConfigured()) {
+    if (demoMode) {
       setAds(mockAds);
       return;
     }
@@ -118,15 +122,15 @@ export const TrafficAnalytics: React.FC = () => {
 
       const providerToken = session?.provider_token;
       if (!providerToken) {
-        setErrorMsg('Faça login com Facebook (ads_read) para carregar métricas reais.');
-        setAds(mockAds);
+        setAds([]);
+        setErrorMsg('Para carregar dados reais, faca login com Facebook (escopo ads_read).');
         return;
       }
 
       const adAccountId = await resolveAdAccountId();
       if (!adAccountId) {
-        setErrorMsg('Defina `companies.meta_ad_account_id` no Supabase ou `VITE_META_AD_ACCOUNT_ID` no ambiente.');
-        setAds(mockAds);
+        setAds([]);
+        setErrorMsg('Faltou configurar o Meta Ad Account ID (act_...) na empresa.');
         return;
       }
 
@@ -139,7 +143,6 @@ export const TrafficAnalytics: React.FC = () => {
 
       const res = await fetch(url.toString());
       const json = await res.json();
-
       if (!res.ok || json?.error) {
         const msg = json?.error?.message || `Erro ao buscar insights (${res.status})`;
         throw new Error(msg);
@@ -159,11 +162,12 @@ export const TrafficAnalytics: React.FC = () => {
         leads: extractLeadsFromActions(row.actions),
       }));
 
-      setAds(mapped.length > 0 ? mapped : mockAds);
+      setAds(mapped);
+      if (mapped.length === 0) setErrorMsg('Sem dados de anuncios nesse periodo.');
     } catch (e: any) {
       console.error(e);
+      setAds([]);
       setErrorMsg(e?.message || 'Erro ao carregar dados da Meta.');
-      setAds(mockAds);
     } finally {
       setLoading(false);
     }
@@ -171,13 +175,14 @@ export const TrafficAnalytics: React.FC = () => {
 
   useEffect(() => {
     fetchAds();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId]);
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">Análise de Tráfego</h2>
+          <h2 className="text-2xl font-bold text-gray-800">Analise de Trafego</h2>
           {errorMsg && <p className="text-sm text-red-600 mt-1">{errorMsg}</p>}
         </div>
 
@@ -200,25 +205,31 @@ export const TrafficAnalytics: React.FC = () => {
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-        <h3 className="text-lg font-semibold mb-4 text-gray-700">Impactadas (Gerenciador) vs Last Click (Plataforma)</h3>
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={mockComparisonData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
-              <Tooltip
-                cursor={{ fill: '#F3F4F6' }}
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-              />
-              <Legend wrapperStyle={{ paddingTop: '20px' }} />
-              <Bar dataKey="impacted" name="Impactadas (Gerenciador)" fill="#6366F1" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="lastClick" name="Last Click (Plataforma)" fill="#10B981" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+      {demoMode && (
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <h3 className="text-lg font-semibold mb-4 text-gray-700">Comparacao (demo)</h3>
+          <div className="h-64 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={mockComparisonData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
+                <Tooltip
+                  cursor={{ fill: '#F3F4F6' }}
+                  contentStyle={{
+                    borderRadius: '8px',
+                    border: 'none',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+                  }}
+                />
+                <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                <Bar dataKey="impacted" name="Impactadas" fill="#6366F1" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="lastClick" name="Last Click" fill="#10B981" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
         <div className="overflow-x-auto">
@@ -229,7 +240,7 @@ export const TrafficAnalytics: React.FC = () => {
                   scope="col"
                   className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider sticky left-0 bg-gray-50 z-10"
                 >
-                  Anúncio
+                  Anuncio
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Status
@@ -250,50 +261,60 @@ export const TrafficAnalytics: React.FC = () => {
                   Leads
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Impressões
+                  Impressoes
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {ads.map((ad) => (
-                <tr key={ad.id} className="hover:bg-gray-50 transition-colors">
-                  <td className="px-6 py-4 whitespace-nowrap sticky left-0 bg-white z-10">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0 h-10 w-10">
-                        <img className="h-10 w-10 rounded object-cover" src={ad.thumbnail} alt="" />
-                      </div>
-                      <div className="ml-4">
-                        <div className="text-sm font-medium text-gray-900">{ad.adName}</div>
-                        <div className="text-xs text-gray-500 flex items-center">
-                          ID: {ad.adId}
-                          <ExternalLink className="w-3 h-3 ml-1 cursor-pointer hover:text-indigo-500" />
+              {ads.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-6 py-10 text-center text-sm text-gray-400">
+                    {demoMode ? 'Sem dados.' : 'Sem dados reais para mostrar ainda.'}
+                  </td>
+                </tr>
+              ) : (
+                ads.map((ad) => (
+                  <tr key={ad.id} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-6 py-4 whitespace-nowrap sticky left-0 bg-white z-10">
+                      <div className="flex items-center">
+                        <div className="flex-shrink-0 h-10 w-10">
+                          <img className="h-10 w-10 rounded object-cover" src={ad.thumbnail} alt="" />
+                        </div>
+                        <div className="ml-4">
+                          <div className="text-sm font-medium text-gray-900">{ad.adName}</div>
+                          <div className="text-xs text-gray-500 flex items-center">
+                            ID: {ad.adId}
+                            <ExternalLink className="w-3 h-3 ml-1 cursor-pointer hover:text-indigo-500" />
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span
-                      className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-                        ad.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                      }`}
-                    >
-                      {ad.status === 'active' ? 'Ativo' : 'Pausado'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">R$ {ad.spend.toFixed(2)}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.cpc != null ? `R$ ${ad.cpc.toFixed(2)}` : '—'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.ctr != null ? `${ad.ctr.toFixed(2)}%` : '—'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.roas != null ? ad.roas.toFixed(2) : '—'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.leads ?? '—'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.impressions.toLocaleString()}</td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span
+                        className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                          ad.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                        }`}
+                      >
+                        {ad.status === 'active' ? 'Ativo' : 'Pausado'}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">R$ {ad.spend.toFixed(2)}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {ad.cpc != null ? `R$ ${ad.cpc.toFixed(2)}` : '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {ad.ctr != null ? `${ad.ctr.toFixed(2)}%` : '-'}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.roas != null ? ad.roas.toFixed(2) : '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.leads ?? '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{ad.impressions.toLocaleString()}</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
-        <div className="p-4 border-t border-gray-100 bg-gray-50 text-xs text-gray-500">
-          *Período padrão: últimos 7 dias (Meta Insights).
-        </div>
+        <div className="p-4 border-t border-gray-100 bg-gray-50 text-xs text-gray-500">Periodo padrao: ultimos 7 dias.</div>
       </div>
     </div>
   );
