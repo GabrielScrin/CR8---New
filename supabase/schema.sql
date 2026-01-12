@@ -4,6 +4,46 @@
 create extension if not exists pgcrypto;
 
 -- -----------------------------------------------------------------------------
+-- Compatibility / migration safety
+-- -----------------------------------------------------------------------------
+-- If you already created tables manually in a previous demo (ex: `leads` without
+-- multi-tenant columns), these statements prevent policy creation from failing.
+
+alter table if exists public.company_members add column if not exists company_id uuid;
+alter table if exists public.campaigns add column if not exists company_id uuid;
+alter table if exists public.chats add column if not exists company_id uuid;
+
+alter table if exists public.leads add column if not exists company_id uuid;
+alter table if exists public.leads add column if not exists campaign_id uuid;
+alter table if exists public.leads add column if not exists assigned_to uuid;
+alter table if exists public.leads add column if not exists utm_source text;
+alter table if exists public.leads add column if not exists utm_campaign text;
+alter table if exists public.leads add column if not exists external_id text;
+alter table if exists public.leads add column if not exists value numeric;
+alter table if exists public.leads add column if not exists last_interaction_at timestamptz;
+alter table if exists public.leads add column if not exists raw jsonb;
+alter table if exists public.leads add column if not exists created_at timestamptz;
+alter table if exists public.leads add column if not exists updated_at timestamptz;
+
+do $$
+begin
+  if to_regclass('public.leads') is not null then
+    update public.leads
+    set
+      created_at = coalesce(created_at, now()),
+      updated_at = coalesce(updated_at, now()),
+      raw = coalesce(raw, '{}'::jsonb)
+    where
+      (created_at is null or updated_at is null or raw is null);
+  end if;
+end
+$$;
+
+alter table if exists public.leads alter column created_at set default now();
+alter table if exists public.leads alter column updated_at set default now();
+alter table if exists public.leads alter column raw set default '{}'::jsonb;
+
+-- -----------------------------------------------------------------------------
 -- Helpers
 -- -----------------------------------------------------------------------------
 
