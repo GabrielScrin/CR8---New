@@ -163,10 +163,21 @@ const extractMessagingConversationsFromActions = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t.includes('messaging_conversation_started') || t.includes('onsite_conversion.messaging'));
 
 const extractVideo3sFromActions = (actions: any[] | undefined) =>
-  extractActionSum(actions, (t) => t === 'video_view' || t === 'video_view_3s' || t.includes('video_view'));
+  extractActionSum(actions, (t) => {
+    const type = String(t || '').toLowerCase();
+    return type === 'video_view' || type === 'video_view_3s' || type === 'video_view_3_sec' || type === 'video_view_3s_watched';
+  });
 
 const extractVideo15sFromActions = (actions: any[] | undefined) =>
-  extractActionSum(actions, (t) => t === 'video_view_15s' || t.includes('video_view_15s'));
+  extractActionSum(actions, (t) => {
+    const type = String(t || '').toLowerCase();
+    return (
+      type === 'video_view_15s' ||
+      type === 'video_view_15_sec' ||
+      type === 'video_view_15s_watched' ||
+      type.startsWith('video_view_15')
+    );
+  });
 
 const normalizeObjective = (objective: unknown) => String(objective ?? '').trim().toUpperCase();
 
