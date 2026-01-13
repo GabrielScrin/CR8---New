@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { Download, ExternalLink, Filter, RefreshCw } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, ExternalLink, Filter, RefreshCw, X } from 'lucide-react';
 import { AdMetric } from '../types';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
@@ -219,6 +219,12 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   const [comparisonData, setComparisonData] = useState<any[]>([]);
   const [campaignFilterId, setCampaignFilterId] = useState<string>('');
   const [adsetFilterId, setAdsetFilterId] = useState<string>('');
+  const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
+  const [selectedAdsetIds, setSelectedAdsetIds] = useState<string[]>([]);
+
+  const [datePreset, setDatePreset] = useState<'last_7d' | 'last_30d' | 'this_month' | 'last_month' | 'custom'>('last_7d');
+  const [dateSince, setDateSince] = useState<string>('');
+  const [dateUntil, setDateUntil] = useState<string>('');
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -270,7 +276,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         render: (r) => (
           <span
             className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
-              r.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+              r.status === 'active'
+                ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
+                : 'bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] border border-[hsl(var(--border))]'
             }`}
           >
             {r.status === 'active' ? 'Ativo' : 'Pausado'}
@@ -284,8 +292,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         render: (r) =>
           r.results != null ? (
             <div className="leading-tight">
-              <div className="text-sm font-medium text-gray-900">{formatNumber(r.results)}</div>
-              <div className="text-xs text-gray-500">{r.resultLabel ?? 'Resultados'}</div>
+              <div className="text-sm font-medium text-[hsl(var(--foreground))]">{formatNumber(r.results)}</div>
+              <div className="text-xs text-[hsl(var(--muted-foreground))]">{r.resultLabel ?? 'Resultados'}</div>
             </div>
           ) : (
             '-'
@@ -329,7 +337,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           ) : r.classification === 'ruim' ? (
             <span className="px-2 py-0.5 rounded bg-red-50 text-red-800 text-xs font-semibold">Ruim</span>
           ) : (
-            <span className="px-2 py-0.5 rounded bg-gray-100 text-gray-800 text-xs font-semibold">-</span>
+            <span className="px-2 py-0.5 rounded bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] text-xs font-semibold">
+              -
+            </span>
           ),
       },
     ],
@@ -702,7 +712,11 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       const timeseriesUrl = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
       timeseriesUrl.searchParams.set('level', 'account');
       timeseriesUrl.searchParams.set('fields', 'date_start,spend,impressions,actions');
-      timeseriesUrl.searchParams.set('date_preset', 'last_7d');
+      if (datePreset === 'custom' && dateSince && dateUntil) {
+        timeseriesUrl.searchParams.set('time_range', JSON.stringify({ since: dateSince, until: dateUntil }));
+      } else {
+        timeseriesUrl.searchParams.set('date_preset', datePreset === 'custom' ? 'last_7d' : datePreset);
+      }
       timeseriesUrl.searchParams.set('time_increment', '1');
       timeseriesUrl.searchParams.set('limit', '50');
       timeseriesUrl.searchParams.set('access_token', providerToken);
@@ -726,10 +740,14 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       insightsUrl.searchParams.set('level', selectedLevel);
       {
         const filters: any[] = [];
-        if (selectedLevel === 'ad' && adsetFilterId) {
-          filters.push({ field: 'adset.id', operator: 'IN', value: [adsetFilterId] });
-        } else if (campaignFilterId) {
-          filters.push({ field: 'campaign.id', operator: 'IN', value: [campaignFilterId] });
+        const campaignIds = selectedCampaignIds.length ? selectedCampaignIds : campaignFilterId ? [campaignFilterId] : [];
+        const adsetIds = selectedAdsetIds.length ? selectedAdsetIds : adsetFilterId ? [adsetFilterId] : [];
+
+        if (selectedLevel === 'ad' && adsetIds.length) {
+          filters.push({ field: 'adset.id', operator: 'IN', value: adsetIds });
+        }
+        if (selectedLevel !== 'campaign' && campaignIds.length) {
+          filters.push({ field: 'campaign.id', operator: 'IN', value: campaignIds });
         }
         if (filters.length) insightsUrl.searchParams.set('filtering', JSON.stringify(filters));
       }
@@ -744,7 +762,11 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas,video_thruplay_watched_actions',
         ].join(','),
       );
-      insightsUrl.searchParams.set('date_preset', 'last_7d');
+      if (datePreset === 'custom' && dateSince && dateUntil) {
+        insightsUrl.searchParams.set('time_range', JSON.stringify({ since: dateSince, until: dateUntil }));
+      } else {
+        insightsUrl.searchParams.set('date_preset', datePreset === 'custom' ? 'last_7d' : datePreset);
+      }
       insightsUrl.searchParams.set('limit', '50');
       insightsUrl.searchParams.set('access_token', providerToken);
 
@@ -901,7 +923,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   useEffect(() => {
     void fetchTraffic();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId, selectedLevel, activeTab, campaignFilterId, adsetFilterId]);
+  }, [companyId, selectedLevel, activeTab, campaignFilterId, adsetFilterId, selectedCampaignIds, selectedAdsetIds, datePreset, dateSince, dateUntil]);
 
   const onChangeAdAccount = async (id: string) => {
     const normalized = normalizeAdAccountId(id);
@@ -918,6 +940,25 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   const onChangeLevel = (level: MetaLevel) => {
     setSelectedLevel(level);
     if (level !== 'ad') setAdsetFilterId('');
+  };
+
+  const toggleCampaignSelection = (id: string) => {
+    setSelectedCampaignIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const toggleAdsetSelection = (id: string) => {
+    setSelectedAdsetIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  };
+
+  const clearSelections = (level: MetaLevel) => {
+    if (level === 'campaign') {
+      setSelectedCampaignIds([]);
+      setSelectedAdsetIds([]);
+      return;
+    }
+    if (level === 'adset') {
+      setSelectedAdsetIds([]);
+    }
   };
 
   const onSelectPreset = (presetId: string) => {
@@ -1020,6 +1061,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   }, [rows]);
 
   const adsetOptions = useMemo(() => {
+    const campaignIds = selectedCampaignIds.length ? selectedCampaignIds : campaignFilterId ? [campaignFilterId] : [];
     const map = new Map<string, { name: string; campaignId?: string }>();
     for (const r of rows) {
       if (!r.adsetId) continue;
@@ -1027,9 +1069,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     }
     return Array.from(map.entries())
       .map(([id, v]) => ({ id, name: v.name, campaignId: v.campaignId }))
-      .filter((o) => (!campaignFilterId ? true : o.campaignId === campaignFilterId))
+      .filter((o) => (campaignIds.length ? Boolean(o.campaignId && campaignIds.includes(o.campaignId)) : true))
       .sort((a, b) => a.name.localeCompare(b.name));
-  }, [rows, campaignFilterId]);
+  }, [rows, campaignFilterId, selectedCampaignIds]);
 
   const drillDown = (row: AdMetric) => {
     if (selectedLevel === 'campaign' && row.campaignId) {
@@ -1158,7 +1200,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
               value={selectedAdAccountId}
               onChange={(e) => void onChangeAdAccount(e.target.value)}
               disabled={loadingAdAccounts || adAccounts.length === 0}
-              className="max-w-[340px] px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="max-w-[340px] px-3 py-2 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
               title={adAccounts.length === 0 ? 'Nenhuma conta encontrada' : 'Selecione a conta de anúncio'}
             >
               <option value="" disabled>
@@ -1183,7 +1225,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
           <button
             onClick={() => void fetchTraffic()}
-            className="flex items-center px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 shadow-sm"
+            className="flex items-center px-3 py-2 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] shadow-sm"
           >
             <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Atualizar
@@ -1191,7 +1233,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
           <button
             onClick={openColumnsModal}
-            className="flex items-center px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 hover:bg-gray-50 shadow-sm"
+            className="flex items-center px-3 py-2 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] shadow-sm"
           >
             <Filter className="w-4 h-4 mr-2" />
             Colunas
@@ -1208,15 +1250,29 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         </div>
       </div>
 
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-        <h3 className="text-lg font-semibold mb-4 text-gray-700">Leads (Meta) vs Gasto (últimos 7 dias){demoMode ? ' (demo)' : ''}</h3>
+      <div className="bg-[hsl(var(--card))] p-6 rounded-xl shadow-sm border border-[hsl(var(--border))]">
+        <h3 className="text-lg font-semibold mb-4 text-[hsl(var(--foreground))]">
+          Leads (Meta) vs Gasto (
+          {datePreset === 'last_7d'
+            ? 'últimos 7 dias'
+            : datePreset === 'last_30d'
+              ? 'últimos 30 dias'
+              : datePreset === 'this_month'
+                ? 'este mês'
+                : datePreset === 'last_month'
+                  ? 'mês passado'
+                  : dateSince && dateUntil
+                    ? `${dateSince} → ${dateUntil}`
+                    : 'período'}
+          ){demoMode ? ' (demo)' : ''}
+        </h3>
         <div className="h-64 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={demoMode ? mockComparisonData : comparisonData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fill: '#6B7280' }} />
-              <Tooltip cursor={{ fill: '#F3F4F6' }} />
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+              <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
+              <Tooltip cursor={{ fill: 'hsl(var(--secondary))' }} />
               <Legend wrapperStyle={{ paddingTop: '20px' }} />
               <Bar dataKey="metaSpend" name="Gasto (R$)" fill="#6366F1" radius={[4, 4, 0, 0]} />
               <Bar dataKey="metaLeads" name="Leads" fill="#10B981" radius={[4, 4, 0, 0]} />
@@ -1225,20 +1281,28 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         </div>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <div className="px-6 pt-4 border-b border-gray-100 flex items-center justify-between gap-4 flex-wrap">
+      <div className="bg-[hsl(var(--card))] rounded-xl shadow-sm border border-[hsl(var(--border))] overflow-hidden">
+        <div className="px-6 pt-4 border-b border-[hsl(var(--border))] flex items-center justify-between gap-4 flex-wrap">
           <div className="flex gap-6 text-sm font-medium">
             <button
               type="button"
               onClick={() => setActiveTab('meta')}
-              className={activeTab === 'meta' ? 'text-indigo-600 border-b-2 border-indigo-600 pb-2' : 'text-gray-500 pb-2 hover:text-gray-700'}
+              className={
+                activeTab === 'meta'
+                  ? 'text-[hsl(var(--primary))] border-b-2 border-[hsl(var(--primary))] pb-2'
+                  : 'text-[hsl(var(--muted-foreground))] pb-2 hover:text-[hsl(var(--foreground))]'
+              }
             >
               Performance de Anúncios
             </button>
             <button
               type="button"
               onClick={() => setActiveTab('platform')}
-              className={activeTab === 'platform' ? 'text-indigo-600 border-b-2 border-indigo-600 pb-2' : 'text-gray-500 pb-2 hover:text-gray-700'}
+              className={
+                activeTab === 'platform'
+                  ? 'text-[hsl(var(--primary))] border-b-2 border-[hsl(var(--primary))] pb-2'
+                  : 'text-[hsl(var(--muted-foreground))] pb-2 hover:text-[hsl(var(--foreground))]'
+              }
             >
               Dados de Plataforma
             </button>
@@ -1248,14 +1312,16 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
             <div className="flex items-center gap-4 flex-wrap">
               {!demoMode && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">Campanha:</span>
+                  <span className="text-xs text-[hsl(var(--muted-foreground))]">Campanha:</span>
                   <select
                     value={campaignFilterId}
                     onChange={(e) => {
                       setCampaignFilterId(e.target.value);
                       setAdsetFilterId('');
+                      setSelectedCampaignIds([]);
+                      setSelectedAdsetIds([]);
                     }}
-                    className="max-w-[320px] px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="max-w-[320px] px-3 py-2 bg-[hsl(var(--input))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
                     title="Filtrar por campanha"
                   >
                     <option value="">Todas</option>
@@ -1270,11 +1336,14 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
               {selectedLevel === 'ad' && !demoMode && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">Conjunto:</span>
+                  <span className="text-xs text-[hsl(var(--muted-foreground))]">Conjunto:</span>
                   <select
                     value={adsetFilterId}
-                    onChange={(e) => setAdsetFilterId(e.target.value)}
-                    className="max-w-[320px] px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    onChange={(e) => {
+                      setAdsetFilterId(e.target.value);
+                      setSelectedAdsetIds([]);
+                    }}
+                    className="max-w-[320px] px-3 py-2 bg-[hsl(var(--input))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
                     title="Filtrar por conjunto"
                   >
                     <option value="">Todos</option>
@@ -1288,25 +1357,44 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
               )}
 
               <div className="flex items-center gap-2">
-                <span className="text-xs text-gray-500">Nível:</span>
+                <span className="text-xs text-[hsl(var(--muted-foreground))]">Período:</span>
                 <select
-                  value={selectedLevel}
-                  onChange={(e) => onChangeLevel(e.target.value as MetaLevel)}
-                  className="px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  value={datePreset}
+                  onChange={(e) => setDatePreset(e.target.value as any)}
+                  className="px-3 py-2 bg-[hsl(var(--input))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
                 >
-                  <option value="campaign">Campanhas</option>
-                  <option value="adset">Conjuntos</option>
-                  <option value="ad">Anúncios</option>
+                  <option value="last_7d">Últimos 7 dias</option>
+                  <option value="last_30d">Últimos 30 dias</option>
+                  <option value="this_month">Este mês</option>
+                  <option value="last_month">Mês passado</option>
+                  <option value="custom">Personalizado</option>
                 </select>
+                {datePreset === 'custom' && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="date"
+                      value={dateSince}
+                      onChange={(e) => setDateSince(e.target.value)}
+                      className="px-3 py-2 bg-[hsl(var(--input))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                    />
+                    <span className="text-xs text-[hsl(var(--muted-foreground))]">até</span>
+                    <input
+                      type="date"
+                      value={dateUntil}
+                      onChange={(e) => setDateUntil(e.target.value)}
+                      className="px-3 py-2 bg-[hsl(var(--input))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                    />
+                  </div>
+                )}
               </div>
 
               {!demoMode && userId && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">Colunas:</span>
+                  <span className="text-xs text-[hsl(var(--muted-foreground))]">Colunas:</span>
                   <select
                     value={selectedPresetId}
                     onChange={(e) => onSelectPreset(e.target.value)}
-                    className="px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="px-3 py-2 bg-[hsl(var(--input))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
                   >
                     {presetOptions.map((p) => (
                       <option key={p.id} value={p.id}>
@@ -1320,49 +1408,151 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           )}
         </div>
 
-        <div className="overflow-auto max-h-[70vh]">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50 sticky top-0 z-10">
+        <div className="overflow-auto h-[60vh]">
+          <table className="min-w-full divide-y divide-[hsl(var(--border))]">
+            <thead className="bg-[hsl(var(--secondary))] sticky top-0 z-10">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{entityLabel}</th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wider w-10">
+                  {(selectedLevel === 'campaign' || selectedLevel === 'adset') && (
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 border border-[hsl(var(--border))] rounded bg-[hsl(var(--input))]"
+                      checked={
+                        rows.length > 0 &&
+                        (selectedLevel === 'campaign'
+                          ? rows.every((r) => selectedCampaignIds.includes(String(r.id)))
+                          : rows.every((r) => selectedAdsetIds.includes(String(r.id))))
+                      }
+                      onChange={() => {
+                        const ids = rows.map((r) => String(r.id));
+                        if (selectedLevel === 'campaign') {
+                          const all = ids.length > 0 && ids.every((id) => selectedCampaignIds.includes(id));
+                          setSelectedCampaignIds(all ? [] : ids);
+                        } else {
+                          const all = ids.length > 0 && ids.every((id) => selectedAdsetIds.includes(id));
+                          setSelectedAdsetIds(all ? [] : ids);
+                        }
+                      }}
+                    />
+                  )}
+                </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => onChangeLevel('campaign')}
+                        className={
+                          selectedLevel === 'campaign'
+                            ? 'text-[hsl(var(--foreground))] font-semibold'
+                            : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                        }
+                      >
+                        Campanha
+                        {selectedCampaignIds.length > 0 && (
+                          <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]">
+                            {selectedCampaignIds.length}
+                          </span>
+                        )}
+                      </button>
+                      <span className="text-[hsl(var(--muted-foreground))]">|</span>
+                      <button
+                        type="button"
+                        onClick={() => onChangeLevel('adset')}
+                        className={
+                          selectedLevel === 'adset'
+                            ? 'text-[hsl(var(--foreground))] font-semibold'
+                            : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                        }
+                      >
+                        Conjunto
+                        {selectedAdsetIds.length > 0 && (
+                          <span className="ml-2 px-2 py-0.5 rounded-full text-xs bg-[hsl(var(--accent))] text-[hsl(var(--accent-foreground))]">
+                            {selectedAdsetIds.length}
+                          </span>
+                        )}
+                      </button>
+                      <span className="text-[hsl(var(--muted-foreground))]">|</span>
+                      <button
+                        type="button"
+                        onClick={() => onChangeLevel('ad')}
+                        className={
+                          selectedLevel === 'ad'
+                            ? 'text-[hsl(var(--foreground))] font-semibold'
+                            : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                        }
+                      >
+                        Anúncio
+                      </button>
+                    </div>
+
+                    {(selectedLevel === 'campaign' && selectedCampaignIds.length > 0) ||
+                    (selectedLevel === 'adset' && selectedAdsetIds.length > 0) ? (
+                      <button
+                        type="button"
+                        onClick={() => clearSelections(selectedLevel)}
+                        className="text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                        title="Limpar seleção"
+                      >
+                        Limpar
+                      </button>
+                    ) : null}
+                  </div>
+                </th>
                 {tableColumns.map((c) => (
-                  <th key={c.key} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th key={c.key} className="px-6 py-3 text-left text-xs font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
                     {c.label}
                   </th>
                 ))}
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Etiquetas</th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Etiquetas</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-[hsl(var(--card))] divide-y divide-[hsl(var(--border))]">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={tableColumns.length + 2} className="px-6 py-10 text-center text-sm text-gray-400">
+                  <td colSpan={tableColumns.length + 3} className="px-6 py-10 text-center text-sm text-[hsl(var(--muted-foreground))]">
                     {demoMode ? 'Sem dados.' : 'Sem dados reais para mostrar ainda.'}
                   </td>
                 </tr>
               ) : (
                 rows.map((row) => (
-                  <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                  <tr key={row.id} className="hover:bg-[hsl(var(--secondary))] transition-colors">
+                    <td className="px-4 py-4 whitespace-nowrap align-top">
+                      {(selectedLevel === 'campaign' || selectedLevel === 'adset') && (
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 border border-[hsl(var(--border))] rounded bg-[hsl(var(--input))]"
+                          checked={
+                            selectedLevel === 'campaign'
+                              ? selectedCampaignIds.includes(String(row.id))
+                              : selectedAdsetIds.includes(String(row.id))
+                          }
+                          onChange={() =>
+                            selectedLevel === 'campaign' ? toggleCampaignSelection(String(row.id)) : toggleAdsetSelection(String(row.id))
+                          }
+                        />
+                      )}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <img className="h-10 w-10 rounded object-cover" src={row.thumbnail} alt="" />
                         <div className="ml-4">
                           {selectedLevel === 'ad' ? (
-                            <div className="text-sm font-medium text-gray-900">{row.adName}</div>
+                            <div className="text-sm font-medium text-[hsl(var(--foreground))]">{row.adName}</div>
                           ) : (
                             <button
                               type="button"
                               onClick={() => drillDown(row)}
-                              className="text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline text-left"
+                              className="text-sm font-medium text-[hsl(var(--foreground))] hover:text-[hsl(var(--primary))] hover:underline text-left"
                               title="Abrir nível abaixo"
                             >
                               {row.adName}
                             </button>
                           )}
-                          <div className="text-xs text-gray-500 flex items-center">
+                          <div className="text-xs text-[hsl(var(--muted-foreground))] flex items-center">
                             {row.subtitle ?? ''}
                             <ExternalLink
-                              className="w-3 h-3 ml-1 cursor-pointer hover:text-indigo-500"
+                              className="w-3 h-3 ml-1 cursor-pointer hover:text-[hsl(var(--primary))]"
                               title={`Abrir no Ads Manager (ID: ${row.adId})`}
                               onClick={() => openInAdsManager(row.adId)}
                             />
@@ -1371,14 +1561,14 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                       </div>
                     </td>
                     {tableColumns.map((c) => (
-                      <td key={c.key} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      <td key={c.key} className="px-6 py-4 whitespace-nowrap text-sm text-[hsl(var(--foreground))]">
                         {c.render(row)}
                       </td>
                     ))}
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-[hsl(var(--foreground))]">
                       <div className="flex gap-2 flex-wrap">
                         {(row.tags ?? []).map((t) => (
-                          <span key={t} className="px-2 py-0.5 rounded bg-gray-100 text-gray-800 text-xs font-medium">
+                          <span key={t} className="px-2 py-0.5 rounded bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))] text-xs font-medium">
                             {t}
                           </span>
                         ))}
@@ -1392,7 +1582,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           </table>
         </div>
 
-        <div className="p-4 border-t border-gray-100 bg-gray-50 text-xs text-gray-500 space-y-1">
+        <div className="p-4 border-t border-[hsl(var(--border))] bg-[hsl(var(--secondary))] text-xs text-[hsl(var(--muted-foreground))] space-y-1">
           <div>
             *Hook Rate: estimativa baseada em video views (3s) / impressões. Hold Rate: estimativa baseada em video views (15s/ThruPlay) / impressões (apenas anúncios em vídeo).
           </div>
@@ -1404,25 +1594,33 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
       {columnsModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl border border-gray-100 overflow-hidden max-h-[90vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+          <div className="bg-[hsl(var(--card))] rounded-xl shadow-xl w-full max-w-4xl border border-[hsl(var(--border))] overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="px-6 py-4 border-b border-[hsl(var(--border))] flex items-center justify-between">
               <div>
-                <div className="text-lg font-semibold text-gray-900">Colunas</div>
-                <div className="text-xs text-gray-500">Salve visualizações por usuário (e por nível).</div>
+                <div className="text-lg font-semibold text-[hsl(var(--foreground))]">Colunas</div>
+                <div className="text-xs text-[hsl(var(--muted-foreground))]">Salve visualizações por usuário (e por nível).</div>
               </div>
-              <button type="button" className="text-sm text-gray-500 hover:text-gray-700" onClick={() => setColumnsModalOpen(false)}>
-                Fechar
+              <button
+                type="button"
+                className="text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]"
+                onClick={() => setColumnsModalOpen(false)}
+              >
+                <span className="sr-only">Fechar</span>
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto flex-1 min-h-0">
-              <div className="space-y-5">
+            <div className="p-6 flex-1 min-h-0 overflow-hidden">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 h-full min-h-0">
+                <div className="space-y-5 min-h-0 overflow-y-auto pr-2">
                 <div>
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Colunas fixas (sempre visíveis)</div>
+                  <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
+                    Colunas fixas (sempre visíveis)
+                  </div>
                   <div className="mt-3 space-y-2">
                     {fixedColumns.map((c) => (
-                      <label key={c.key} className="flex items-center gap-2 text-sm text-gray-700">
-                        <input type="checkbox" checked disabled className="h-4 w-4" />
+                      <label key={c.key} className="flex items-center gap-2 text-sm text-[hsl(var(--foreground))]">
+                        <input type="checkbox" checked disabled className="h-4 w-4 accent-[hsl(var(--primary))]" />
                         <span>{c.label}</span>
                       </label>
                     ))}
@@ -1430,18 +1628,18 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                 </div>
 
                 <div>
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Métricas opcionais</div>
+                  <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Métricas opcionais</div>
                   <div className="mt-3 space-y-2">
                     {OPTIONAL_METRICS_ORDER.map((k) => {
                       const col = optionalColumnsDef[k];
                       const checked = draftOptionalColumns.includes(k);
                       return (
-                        <label key={k} className="flex items-center gap-2 text-sm text-gray-700">
+                        <label key={k} className="flex items-center gap-2 text-sm text-[hsl(var(--foreground))]">
                           <input
                             type="checkbox"
                             checked={checked}
                             onChange={() => toggleDraftColumn(k)}
-                            className="h-4 w-4"
+                            className="h-4 w-4 accent-[hsl(var(--primary))]"
                           />
                           <span>{col.label}</span>
                         </label>
@@ -1451,54 +1649,64 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                 </div>
               </div>
 
-              <div className="space-y-5">
+              <div className="space-y-5 min-h-0 overflow-y-auto pr-2">
                 <div>
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
                     Colunas selecionadas ({fixedColumns.length + draftOptionalColumns.length})
                   </div>
-                  <div className="mt-3 border border-gray-200 rounded-lg overflow-hidden">
-                    <div className="px-4 py-2 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">Fixas</div>
-                    <div className="divide-y divide-gray-200">
+                  <div className="mt-3 border border-[hsl(var(--border))] rounded-lg overflow-hidden">
+                    <div className="px-4 py-2 bg-[hsl(var(--secondary))] text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
+                      Fixas
+                    </div>
+                    <div className="divide-y divide-[hsl(var(--border))]">
                       {fixedColumns.map((c) => (
-                        <div key={c.key} className="px-4 py-3 text-sm text-gray-700 flex items-center justify-between">
+                        <div
+                          key={c.key}
+                          className="px-4 py-3 text-sm text-[hsl(var(--foreground))] flex items-center justify-between"
+                        >
                           <span>{c.label}</span>
-                          <span className="text-xs text-gray-400">fixa</span>
+                          <span className="text-xs text-[hsl(var(--muted-foreground))]">fixa</span>
                         </div>
                       ))}
                     </div>
 
-                    <div className="px-4 py-2 bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">Opcionais</div>
-                    <div className="divide-y divide-gray-200">
+                    <div className="px-4 py-2 bg-[hsl(var(--secondary))] text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
+                      Opcionais
+                    </div>
+                    <div className="divide-y divide-[hsl(var(--border))]">
                       {draftOptionalColumns.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-gray-500">Nenhuma métrica opcional selecionada.</div>
+                        <div className="px-4 py-3 text-sm text-[hsl(var(--muted-foreground))]">Nenhuma métrica opcional selecionada.</div>
                       ) : (
                         draftOptionalColumns.map((k) => (
-                          <div key={k} className="px-4 py-3 text-sm text-gray-700 flex items-center justify-between gap-3">
+                          <div
+                            key={k}
+                            className="px-4 py-3 text-sm text-[hsl(var(--foreground))] flex items-center justify-between gap-3"
+                          >
                             <span className="min-w-0 truncate">{optionalColumnsDef[k].label}</span>
                             <div className="flex items-center gap-2 shrink-0">
                               <button
                                 type="button"
-                                className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
+                                className="px-2 py-1 text-xs border border-[hsl(var(--border))] rounded hover:bg-[hsl(var(--secondary))]"
                                 onClick={() => moveDraftColumn(k, -1)}
                                 title="Mover para cima"
                               >
-                                ↑
+                                <ArrowUp className="w-3 h-3" />
                               </button>
                               <button
                                 type="button"
-                                className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
+                                className="px-2 py-1 text-xs border border-[hsl(var(--border))] rounded hover:bg-[hsl(var(--secondary))]"
                                 onClick={() => moveDraftColumn(k, 1)}
                                 title="Mover para baixo"
                               >
-                                ↓
+                                <ArrowDown className="w-3 h-3" />
                               </button>
                               <button
                                 type="button"
-                                className="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50"
+                                className="px-2 py-1 text-xs border border-[hsl(var(--border))] rounded hover:bg-[hsl(var(--secondary))]"
                                 onClick={() => toggleDraftColumn(k)}
                                 title="Remover"
                               >
-                                ✕
+                                <X className="w-3 h-3" />
                               </button>
                             </div>
                           </div>
@@ -1509,23 +1717,24 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                 </div>
 
                 <div className="space-y-2">
-                  <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Nome da visualização</div>
+                  <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Nome da visualização</div>
                   <input
                     value={draftPresetName}
                     onChange={(e) => setDraftPresetName(e.target.value)}
                     placeholder={selectedPresetId === DEFAULT_PRESET_ID ? 'Ex: Meu relatório' : ''}
-                    className="w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    className="w-full px-3 py-2 bg-[hsl(var(--input))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
                   />
-                  <div className="text-xs text-gray-500">
+                  <div className="text-xs text-[hsl(var(--muted-foreground))]">
                     {selectedPresetId === DEFAULT_PRESET_ID
                       ? 'Para salvar, digite um nome e clique em “Salvar”.'
                       : 'Você pode salvar as mudanças nesta visualização ou salvar como uma nova.'}
                   </div>
                 </div>
               </div>
+              </div>
             </div>
 
-            <div className="px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3 flex-wrap">
+            <div className="px-6 py-4 border-t border-[hsl(var(--border))] flex items-center justify-between gap-3 flex-wrap">
               <div>
                 {selectedPresetId !== DEFAULT_PRESET_ID && (
                   <button
@@ -1542,7 +1751,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                 <button
                   type="button"
                   onClick={() => setColumnsModalOpen(false)}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                  className="px-3 py-2 text-sm border border-[hsl(var(--border))] rounded-md hover:bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))]"
                 >
                   Cancelar
                 </button>
@@ -1562,7 +1771,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                   type="button"
                   onClick={() => void onSavePreset('create')}
                   disabled={savingPreset}
-                  className="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-2 text-sm border border-[hsl(var(--border))] rounded-md hover:bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {selectedPresetId === DEFAULT_PRESET_ID ? 'Salvar' : 'Salvar como nova'}
                 </button>
