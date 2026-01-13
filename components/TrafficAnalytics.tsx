@@ -156,11 +156,39 @@ const extractActionSum = (actions: any[] | undefined, matcher: (actionType: stri
 const extractLeadsFromActions = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t.includes('lead') || t === 'onsite_conversion.lead_grouped');
 
+const extractPurchasesFromActions = (actions: any[] | undefined) =>
+  extractActionSum(actions, (t) => t === 'purchase' || t.endsWith('.purchase') || t.includes('purchase'));
+
+const extractMessagingConversationsFromActions = (actions: any[] | undefined) =>
+  extractActionSum(actions, (t) => t.includes('messaging_conversation_started') || t.includes('onsite_conversion.messaging'));
+
 const extractVideo3sFromActions = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t === 'video_view' || t === 'video_view_3s' || t.includes('video_view'));
 
 const extractVideo15sFromActions = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t === 'video_view_15s' || t.includes('video_view_15s'));
+
+const normalizeObjective = (objective: unknown) => String(objective ?? '').trim().toUpperCase();
+
+const resolvePrimaryResult = (row: any, computed: { leads?: number; purchases?: number; conversations?: number; linkClicks?: number; clicks?: number; video3s?: number }) => {
+  const objective = normalizeObjective(row?.objective ?? row?.campaign_objective ?? row?.objective_name ?? row?.campaign?.objective);
+
+  const pick = (value: number | undefined, label: string) => ({ value: typeof value === 'number' ? value : undefined, label });
+
+  if (objective.includes('LEAD')) return pick(computed.leads, 'Leads');
+  if (objective.includes('MESSAGE')) return pick(computed.conversations, 'Conversas');
+  if (objective.includes('VIDEO')) return pick(computed.video3s, 'Views 3s');
+  if (objective.includes('TRAFFIC')) return pick(computed.linkClicks ?? computed.clicks, 'Cliques no link');
+  if (objective.includes('CONVERS') || objective.includes('SALE') || objective.includes('PURCHASE')) return pick(computed.purchases, 'Compras');
+
+  if ((computed.leads ?? 0) > 0) return pick(computed.leads, 'Leads');
+  if ((computed.purchases ?? 0) > 0) return pick(computed.purchases, 'Compras');
+  if ((computed.conversations ?? 0) > 0) return pick(computed.conversations, 'Conversas');
+  if ((computed.linkClicks ?? 0) > 0) return pick(computed.linkClicks, 'Cliques no link');
+  if ((computed.clicks ?? 0) > 0) return pick(computed.clicks, 'Cliques');
+  if ((computed.video3s ?? 0) > 0) return pick(computed.video3s, 'Views 3s');
+  return pick(undefined, 'Resultados');
+};
 
 const extractRoas = (purchaseRoas: any[] | undefined) => {
   if (!Array.isArray(purchaseRoas) || purchaseRoas.length === 0) return undefined;
@@ -216,7 +244,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     [],
   );
 
-  const fixedColumns: TableColumn[] = useMemo(
+  const fixedColumnsPrefix: TableColumn[] = useMemo(
     () => [
       {
         key: 'status',
@@ -232,6 +260,25 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         ),
       },
       { key: 'spend', label: 'Investido', render: (r) => formatCurrency(r.spend) },
+      {
+        key: 'results',
+        label: 'Resultados',
+        render: (r) =>
+          r.results != null ? (
+            <div className="leading-tight">
+              <div className="text-sm font-medium text-gray-900">{formatNumber(r.results)}</div>
+              <div className="text-xs text-gray-500">{r.resultLabel ?? 'Resultados'}</div>
+            </div>
+          ) : (
+            '-'
+          ),
+      },
+    ],
+    [],
+  );
+
+  const fixedColumnsSuffix: TableColumn[] = useMemo(
+    () => [
       { key: 'leads', label: 'Leads', render: (r) => (r.leads ?? '-') },
       { key: 'cpa', label: 'CPL', render: (r) => (r.cpa != null ? formatCurrency(r.cpa) : '-') },
       { key: 'hookRate', label: 'Hook Rate', render: (r) => (r.hookRate != null ? formatPercent(r.hookRate, 0) : '-') },
@@ -271,10 +318,12 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     [],
   );
 
+  const fixedColumns: TableColumn[] = useMemo(() => [...fixedColumnsPrefix, ...fixedColumnsSuffix], [fixedColumnsPrefix, fixedColumnsSuffix]);
+
   const tableColumns: TableColumn[] = useMemo(() => {
     const optional = visibleOptionalColumns.map((k) => optionalColumnsDef[k]).filter(Boolean);
-    return [...fixedColumns, ...optional];
-  }, [fixedColumns, optionalColumnsDef, visibleOptionalColumns]);
+    return [...fixedColumnsPrefix, ...optional, ...fixedColumnsSuffix];
+  }, [fixedColumnsPrefix, fixedColumnsSuffix, optionalColumnsDef, visibleOptionalColumns]);
 
   const presetsStorageKey = (uid: string, level: MetaLevel) => `cr8:traffic:presets:${uid}:${level}`;
   const activePresetStorageKey = (uid: string, level: MetaLevel) => `cr8:traffic:activePreset:${uid}:${level}`;
@@ -412,30 +461,32 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   };
 
   const computeScores = (items: AdMetric[]) => {
-    const leadsValues = items.map((r) => r.leads ?? 0);
+    const resultsValues = items.map((r) => r.results ?? 0);
     const ctrValues = items.map((r) => r.ctr ?? 0);
-    const cplValues = items.map((r) => r.cpa).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const cprValues = items
+      .map((r) => r.costPerResult)
+      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
 
-    const minLeads = leadsValues.length ? Math.min(...leadsValues) : 0;
-    const maxLeads = leadsValues.length ? Math.max(...leadsValues) : 0;
+    const minResults = resultsValues.length ? Math.min(...resultsValues) : 0;
+    const maxResults = resultsValues.length ? Math.max(...resultsValues) : 0;
     const minCtr = ctrValues.length ? Math.min(...ctrValues) : 0;
     const maxCtr = ctrValues.length ? Math.max(...ctrValues) : 0;
-    const minCpl = cplValues.length ? Math.min(...cplValues) : 0;
-    const maxCpl = cplValues.length ? Math.max(...cplValues) : 0;
+    const minCpr = cprValues.length ? Math.min(...cprValues) : 0;
+    const maxCpr = cprValues.length ? Math.max(...cprValues) : 0;
 
     return items.map((row) => {
-      const leads = row.leads ?? 0;
-      const cpl = row.cpa;
+      const results = row.results ?? 0;
+      const cpr = row.costPerResult;
       const ctr = row.ctr ?? 0;
 
-      const scoreLeads01 = normalizeHigherBetter(leads, minLeads, maxLeads);
-      const scoreCpl01 = cpl != null ? normalizeLowerBetter(cpl, minCpl, maxCpl) : 0;
+      const scoreResults01 = normalizeHigherBetter(results, minResults, maxResults);
+      const scoreCpr01 = cpr != null ? normalizeLowerBetter(cpr, minCpr, maxCpr) : 0;
       const scoreCtr01 = normalizeHigherBetter(ctr, minCtr, maxCtr);
 
-      const idc01 = (scoreLeads01 + scoreCpl01 + scoreCtr01) / 3;
+      const idc01 = (scoreResults01 + scoreCpr01 + scoreCtr01) / 3;
 
       const classification: AdMetric['classification'] =
-        leads === 0
+        results === 0
           ? undefined
           : idc01 >= IDC_THRESHOLDS.otimo
             ? 'otimo'
@@ -445,9 +496,10 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                 ? 'regular'
                 : 'ruim';
 
+      const resultLabel = (row.resultLabel || 'Resultados').slice(0, 12);
       const scores = [
-        { label: 'Leads', value: Math.round(scoreLeads01 * 100) },
-        { label: 'CPL', value: Math.round(scoreCpl01 * 100) },
+        { label: resultLabel, value: Math.round(scoreResults01 * 100) },
+        { label: 'C/Res', value: Math.round(scoreCpr01 * 100) },
         { label: 'CTR', value: Math.round(scoreCtr01 * 100) },
       ];
 
@@ -662,7 +714,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
             : selectedLevel === 'adset'
               ? 'adset_id,adset_name,campaign_id,campaign_name'
               : 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name',
-          'impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas',
+          'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas',
         ].join(','),
       );
       insightsUrl.searchParams.set('date_preset', 'last_7d');
@@ -698,8 +750,16 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
         const video3s = extractVideo3sFromActions(row.actions);
         const video15s = extractVideo15sFromActions(row.actions);
-        const hookRate = impressions > 0 && video3s != null ? video3s / impressions : undefined;
-        const holdRate = impressions > 0 && video15s != null ? video15s / impressions : undefined;
+        const hookRate = impressions > 0 && video3s != null && video3s > 0 ? video3s / impressions : undefined;
+        const holdRate = impressions > 0 && video15s != null && video15s > 0 ? video15s / impressions : undefined;
+
+        const linkClicks = row.inline_link_clicks != null ? Math.floor(parseNumber(row.inline_link_clicks)) : undefined;
+        const clicks = row.clicks != null ? Math.floor(parseNumber(row.clicks)) : undefined;
+        const purchases = extractPurchasesFromActions(row.actions);
+        const conversations = extractMessagingConversationsFromActions(row.actions);
+        const primary = resolvePrimaryResult(row, { leads, purchases, conversations, linkClicks, clicks, video3s });
+        const results = primary.value;
+        const costPerResult = results && results > 0 ? spend / results : undefined;
 
         const subtitle =
           selectedLevel === 'campaign'
@@ -726,12 +786,15 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           adId: String(entityId),
           subtitle,
           thumbnail: baseThumb,
+          results,
+          resultLabel: primary.label,
+          costPerResult,
           status: mapMetaEffectiveStatusToLocal(effectiveStatuses.get(String(entityId))),
           spend,
           impressions,
           reach: row.reach != null ? Math.floor(parseNumber(row.reach)) : undefined,
-          clicks: row.clicks != null ? Math.floor(parseNumber(row.clicks)) : undefined,
-          inlineLinkClicks: row.inline_link_clicks != null ? Math.floor(parseNumber(row.inline_link_clicks)) : undefined,
+          clicks,
+          inlineLinkClicks: linkClicks,
           cpm: row.cpm != null ? parseNumber(row.cpm) : undefined,
           frequency: row.frequency != null ? parseNumber(row.frequency) : undefined,
           cpc: row.cpc != null ? parseNumber(row.cpc) : undefined,
@@ -922,6 +985,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           return Number.isFinite(r.spend) ? r.spend.toFixed(2) : '';
         case 'impressions':
           return Number.isFinite(r.impressions) ? String(r.impressions) : '';
+        case 'results':
+          return r.results != null ? String(r.results) : '';
         case 'reach':
           return r.reach != null ? String(r.reach) : '';
         case 'clicks':
@@ -1182,8 +1247,13 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           </table>
         </div>
 
-        <div className="p-4 border-t border-gray-100 bg-gray-50 text-xs text-gray-500">
-          *Hook Rate: estimativa baseada em video views (3s) / impressões. Hold Rate: estimativa baseada em video views (15s) / impressões.
+        <div className="p-4 border-t border-gray-100 bg-gray-50 text-xs text-gray-500 space-y-1">
+          <div>
+            *Hook Rate: estimativa baseada em video views (3s) / impressões. Hold Rate: estimativa baseada em video views (15s) / impressões (apenas anúncios em vídeo).
+          </div>
+          <div>
+            *IDC: média dos scores (Resultados, C/Res e CTR) normalizados entre os itens desta tabela. Classificação: Ótimo/Bom/Regular/Ruim por faixas de IDC.
+          </div>
         </div>
       </div>
 

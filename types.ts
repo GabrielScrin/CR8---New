@@ -15,6 +15,9 @@ export interface AdMetric {
   adId: string;
   thumbnail: string;
   subtitle?: string;
+  results?: number;
+  resultLabel?: string;
+  costPerResult?: number;
   status: 'active' | 'paused';
   spend: number;
   impressions: number;
