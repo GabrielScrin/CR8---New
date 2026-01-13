@@ -1,4 +1,4 @@
-# CR-8 (Traffic OS) — Supabase + Vercel
+# CR8 (Traffic OS) — Supabase + Vercel
 
 ## Rodar local
 

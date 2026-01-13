@@ -1,0 +1,150 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+
+:root {
+  --primary: 220 100% 52%;
+  --primary-foreground: 0 0% 100%;
+
+  --accent: 153 75% 43%;
+  --accent-foreground: 0 0% 100%;
+
+  --background: 220 20% 7%;
+  --foreground: 210 40% 98%;
+
+  --card: 220 20% 10%;
+  --card-foreground: 210 40% 98%;
+
+  --popover: 220 20% 12%;
+  --popover-foreground: 210 40% 98%;
+
+  --secondary: 220 15% 15%;
+  --secondary-foreground: 210 40% 98%;
+
+  --muted: 220 15% 18%;
+  --muted-foreground: 215 20% 55%;
+
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+
+  --border: 220 15% 20%;
+  --input: 220 15% 18%;
+  --ring: 220 100% 52%;
+
+  --radius: 0.75rem;
+
+  --sidebar-background: 220 20% 8%;
+  --sidebar-foreground: 210 20% 70%;
+  --sidebar-primary: 220 100% 52%;
+  --sidebar-primary-foreground: 0 0% 100%;
+  --sidebar-accent: 220 15% 15%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-border: 220 15% 15%;
+
+  --gradient-primary: linear-gradient(135deg, hsl(220 100% 52%) 0%, hsl(240 80% 60%) 100%);
+  --gradient-accent: linear-gradient(135deg, hsl(153 75% 43%) 0%, hsl(180 70% 45%) 100%);
+  --gradient-card: linear-gradient(180deg, hsl(220 20% 12%) 0%, hsl(220 20% 8%) 100%);
+
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4), 0 2px 4px -2px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 20px -5px hsl(220 100% 52% / 0.35);
+}
+
+html {
+  font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  margin: 0;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.35);
+}
+
+/* Small helpers */
+.cr8-card {
+  background: hsl(var(--card));
+  color: hsl(var(--card-foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-md);
+}
+
+.cr8-glow {
+  box-shadow: var(--shadow-glow);
+}
+
+.cr8-text-gradient {
+  background-image: var(--gradient-primary);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Basic animation utilities (replacing tailwindcss-animate classes) */
+.animate-in {
+  animation: cr8-fade-in 200ms ease-out both;
+}
+
+.slide-in-from-right-10 {
+  animation: cr8-slide-in-right 200ms ease-out both;
+}
+
+.fade-in-0 {
+  opacity: 0;
+}
+
+@keyframes cr8-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes cr8-slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(2.5rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Shimmer */
+.animate-shimmer {
+  background: linear-gradient(90deg, hsl(var(--muted)) 0%, hsl(var(--muted-foreground) / 0.12) 50%, hsl(var(--muted)) 100%);
+  background-size: 200% 100%;
+  animation: cr8-shimmer 1.5s infinite;
+}
+
+@keyframes cr8-shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}

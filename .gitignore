@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 supabase/.temp/
+features/
 
 # Editor directories and files
 .vscode/*

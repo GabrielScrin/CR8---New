@@ -11,7 +11,7 @@ import { isSupabaseConfigured, supabase } from './lib/supabase';
 
 const PlaceholderView = ({ title }: { title: string }) => (
   <div className="flex flex-col items-center justify-center h-full text-gray-400">
-    <div className="text-6xl mb-4 font-thin opacity-20">CR-8</div>
+    <div className="text-6xl mb-4 font-thin opacity-20">CR8</div>
     <h3 className="text-xl font-medium text-gray-600">Módulo {title}</h3>
     <p className="mt-2 text-sm">Esta funcionalidade estará disponível na próxima versão.</p>
   </div>

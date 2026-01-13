@@ -1,6 +1,6 @@
-# Instruções de Exclusão de Dados (CR-8)
+# Instruções de Exclusão de Dados (CR8)
 
-Esta página descreve como solicitar a exclusão de dados pessoais associados ao uso do CR-8.
+Esta página descreve como solicitar a exclusão de dados pessoais associados ao uso do CR8.
 
 ## 1) Como solicitar a exclusão
 
@@ -12,7 +12,7 @@ Inclua no texto:
 
 - E-mail utilizado no login (ou o provedor, ex: Facebook)
 - Seu nome (opcional)
-- `company_id` (se souber) ou o nome da empresa/cliente criado no CR-8
+- `company_id` (se souber) ou o nome da empresa/cliente criado no CR8
 - O que você deseja excluir:
   - (A) Somente sua conta de usuário
   - (B) Sua conta + dados associados da empresa/cliente (leads, chats, etc.)
@@ -36,4 +36,3 @@ Respondemos e processamos solicitações de exclusão em até **30 dias**.
 ## 4) Confirmação
 
 Após concluída a exclusão, responderemos na própria issue confirmando a execução.
-

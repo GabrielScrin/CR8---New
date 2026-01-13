@@ -141,7 +141,7 @@ const normalizeLowerBetter = (value: number, min: number, max: number) => {
 };
 
 const svgAvatarDataUrl = (text: string, fg = '#111827', bg = '#E5E7EB') => {
-  const label = (text || 'CR-8').trim().slice(0, 2).toUpperCase();
+  const label = (text || 'CR8').trim().slice(0, 2).toUpperCase();
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="100%" height="100%" rx="12" ry="12" fill="${bg}"/><text x="50%" y="56%" text-anchor="middle" font-size="30" font-family="Inter,system-ui,Segoe UI,Roboto,Arial" fill="${fg}">${label}</text></svg>`;
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 };

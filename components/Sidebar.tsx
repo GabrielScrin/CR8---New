@@ -35,10 +35,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, r
   ];
 
   return (
-    <div className="h-screen w-64 bg-slate-900 text-white flex flex-col fixed left-0 top-0 shadow-xl z-50">
-      <div className="p-6 flex items-center space-x-3 border-b border-slate-800">
-        <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center font-bold text-xl">8</div>
-        <span className="text-xl font-bold tracking-tight">CR-8</span>
+    <div className="h-screen w-64 bg-[hsl(var(--sidebar-background))] text-[hsl(var(--foreground))] flex flex-col fixed left-0 top-0 shadow-xl z-50 border-r border-[hsl(var(--sidebar-border))]">
+      <div className="p-6 flex items-center space-x-3 border-b border-[hsl(var(--sidebar-border))]">
+        <div className="w-8 h-8 rounded-lg bg-[hsl(var(--primary))] flex items-center justify-center cr8-glow overflow-hidden">
+          <img src="/cr8-logo.svg" alt="CR8" className="w-8 h-8 object-contain" />
+        </div>
+        <span className="text-xl font-bold tracking-tight">CR8</span>
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4 space-y-1">
@@ -48,8 +50,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, r
             onClick={() => setCurrentView(item.id)}
             className={`w-full flex items-center px-6 py-3 text-sm font-medium transition-colors ${
               currentView === item.id
-                ? 'bg-indigo-600 text-white border-r-4 border-indigo-300'
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+                ? 'bg-[hsl(var(--sidebar-primary))] text-[hsl(var(--sidebar-primary-foreground))] border-r-4 border-[hsl(var(--accent))]'
+                : 'text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-accent-foreground))]'
             }`}
           >
             <item.icon className="w-5 h-5 mr-3" />
@@ -58,14 +60,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, r
         ))}
       </nav>
 
-      <div className="p-4 border-t border-slate-800">
+      <div className="p-4 border-t border-[hsl(var(--sidebar-border))]">
         <div className="flex items-center mb-4 px-2">
-          <div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
-          <span className="text-xs text-slate-400 uppercase tracking-wider">{role}</span>
+          <div className="w-2 h-2 rounded-full bg-[hsl(var(--accent))] mr-2"></div>
+          <span className="text-xs text-[hsl(var(--sidebar-foreground))] uppercase tracking-wider">{role}</span>
         </div>
         <button 
           onClick={onLogout}
-          className="w-full flex items-center px-2 py-2 text-sm text-red-400 hover:bg-slate-800 rounded-md transition-colors"
+          className="w-full flex items-center px-2 py-2 text-sm text-red-400 hover:bg-[hsl(var(--sidebar-accent))] rounded-md transition-colors"
         >
           <LogOut className="w-4 h-4 mr-3" />
           Sair

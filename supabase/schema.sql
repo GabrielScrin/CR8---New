@@ -1,4 +1,4 @@
--- CR-8 (Traffic OS) - Phase 1 schema (Supabase Postgres)
+-- CR8 (Traffic OS) - Phase 1 schema (Supabase Postgres)
 -- Apply this in Supabase SQL Editor (or via migrations if you use Supabase CLI).
 
 create extension if not exists pgcrypto;

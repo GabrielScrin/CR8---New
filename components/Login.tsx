@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import { ShieldCheck, Facebook, AlertCircle, Mail, Lock, ArrowRight } from 'lucide-react';
 import { getSupabaseConfigHints, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { User } from '../types';
@@ -120,15 +121,23 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-900 px-4">
-      <div className="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md space-y-6">
+    <div className="min-h-screen flex items-center justify-center bg-[hsl(var(--background))] px-4">
+      <motion.div
+        initial={{ opacity: 0, y: 10, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.35, ease: 'easeOut' }}
+        className="bg-[hsl(var(--card))] text-[hsl(var(--foreground))] border border-[hsl(var(--border))] p-8 rounded-2xl shadow-2xl w-full max-w-md space-y-6"
+      >
         <div className="text-center">
-          <h1 className="text-4xl font-bold text-indigo-600 mb-2">CR-8</h1>
-          <p className="text-gray-500">Sistema Operacional de Tráfego & CRM</p>
+          <div className="mx-auto mb-3 h-12 w-12 rounded-xl bg-[hsl(var(--primary))] flex items-center justify-center cr8-glow overflow-hidden">
+            <img src="/cr8-logo.svg" alt="CR8" className="h-12 w-12 object-contain" />
+          </div>
+          <h1 className="text-4xl font-extrabold mb-2 cr8-text-gradient">CR8</h1>
+          <p className="text-[hsl(var(--muted-foreground))]">Sistema Operacional de Tráfego & CRM</p>
         </div>
 
         {errorMsg && (
-          <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm flex items-center">
+          <div className="bg-red-500/10 text-red-300 p-3 rounded-lg text-sm flex items-center border border-red-500/20">
             <AlertCircle className="w-4 h-4 mr-2" />
             {errorMsg}
           </div>
@@ -136,7 +145,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
         <form onSubmit={handleEmailLogin} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700">E-mail</label>
+            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">E-mail</label>
             <div className="mt-1 relative rounded-md shadow-sm">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Mail className="h-4 w-4 text-gray-400" />
@@ -146,14 +155,14 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 border"
+                className="focus:ring-[hsl(var(--ring))] focus:border-[hsl(var(--ring))] block w-full pl-10 sm:text-sm border-[hsl(var(--border))] rounded-md py-2 border bg-[hsl(var(--input))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
                 placeholder="seu@email.com"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700">Senha</label>
+            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Senha</label>
             <div className="mt-1 relative rounded-md shadow-sm">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Lock className="h-4 w-4 text-gray-400" />
@@ -164,7 +173,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 minLength={6}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="focus:ring-indigo-500 focus:border-indigo-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md py-2 border"
+                className="focus:ring-[hsl(var(--ring))] focus:border-[hsl(var(--ring))] block w-full pl-10 sm:text-sm border-[hsl(var(--border))] rounded-md py-2 border bg-[hsl(var(--input))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
                 placeholder="••••••"
               />
             </div>
@@ -177,10 +186,10 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 type="checkbox"
                 checked={acceptedTerms}
                 onChange={(e) => setAcceptedTerms(e.target.checked)}
-                className="w-4 h-4 border border-gray-300 rounded bg-gray-50 focus:ring-3 focus:ring-indigo-300"
+                className="w-4 h-4 border border-[hsl(var(--border))] rounded bg-[hsl(var(--input))] focus:ring-2 focus:ring-[hsl(var(--ring))]"
               />
             </div>
-            <label htmlFor="terms" className="ml-2 text-sm font-medium text-gray-900">
+            <label htmlFor="terms" className="ml-2 text-sm font-medium text-[hsl(var(--foreground))]">
               Aceito os <a href="#" className="text-indigo-600 hover:underline">Termos de Uso</a>.
             </label>
           </div>
@@ -189,7 +198,9 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
             type="submit"
             disabled={!acceptedTerms || isLoading}
             className={`w-full flex items-center justify-center px-5 py-3 text-base font-medium text-white rounded-lg transition-colors ${
-              acceptedTerms && !isLoading ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-gray-400 cursor-not-allowed'
+              acceptedTerms && !isLoading
+                ? 'bg-[hsl(var(--primary))] hover:opacity-90'
+                : 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] cursor-not-allowed'
             }`}
           >
             {isLoading ? 'Processando...' : isSignUp ? 'Criar Conta' : 'Entrar'}
@@ -199,17 +210,17 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-gray-300"></div>
+            <div className="w-full border-t border-[hsl(var(--border))]"></div>
           </div>
           <div className="relative flex justify-center text-sm">
-            <span className="px-2 bg-white text-gray-500">Ou continue com</span>
+            <span className="px-2 bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))]">Ou continue com</span>
           </div>
         </div>
 
         <button
           onClick={handleFacebookLogin}
           type="button"
-          className="w-full flex items-center justify-center px-5 py-3 border border-gray-300 shadow-sm text-sm font-medium rounded-lg text-gray-700 bg-white hover:bg-gray-50"
+          className="w-full flex items-center justify-center px-5 py-3 border border-[hsl(var(--border))] shadow-sm text-sm font-medium rounded-lg text-[hsl(var(--foreground))] bg-[hsl(var(--secondary))] hover:opacity-90"
         >
           <Facebook className="w-5 h-5 mr-3 text-blue-600" />
           Facebook
@@ -225,15 +236,15 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </button>
         </div>
 
-        <div className="text-center text-xs text-gray-400 mt-4">
+        <div className="text-center text-xs text-[hsl(var(--muted-foreground))] mt-4">
           {!isBackendReady && (
-            <span className="text-yellow-600 block mb-1">
+            <span className="text-yellow-400 block mb-1">
               Modo Demo Ativo (faltando: {supabaseHints.missing.join(', ')})
             </span>
           )}
           &copy; 2024 8 Engage.
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 };
