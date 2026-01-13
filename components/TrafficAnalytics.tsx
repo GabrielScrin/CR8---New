@@ -1148,7 +1148,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">Análise de Tráfego Deep Dive</h2>
+          <h2 className="text-2xl font-bold text-[hsl(var(--foreground))]">Análise de Tráfego Deep Dive</h2>
           {errorMsg && <p className="text-sm text-red-600 mt-1">{errorMsg}</p>}
         </div>
 

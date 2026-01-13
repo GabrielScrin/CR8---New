@@ -37,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, r
   return (
     <div className="h-screen w-64 bg-[hsl(var(--sidebar-background))] text-[hsl(var(--foreground))] flex flex-col fixed left-0 top-0 shadow-xl z-50 border-r border-[hsl(var(--sidebar-border))]">
       <div className="p-6 flex items-center space-x-3 border-b border-[hsl(var(--sidebar-border))]">
-        <div className="w-8 h-8 rounded-lg bg-[hsl(var(--primary))] flex items-center justify-center cr8-glow overflow-hidden">
+        <div className="w-8 h-8 rounded-lg bg-transparent flex items-center justify-center overflow-hidden ring-1 ring-[hsl(var(--sidebar-border))]">
           <img src="/cr8-logo.svg" alt="CR8" className="w-8 h-8 object-contain" />
         </div>
         <span className="text-xl font-bold tracking-tight">CR8</span>

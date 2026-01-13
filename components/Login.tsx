@@ -129,7 +129,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
         className="bg-[hsl(var(--card))] text-[hsl(var(--foreground))] border border-[hsl(var(--border))] p-8 rounded-2xl shadow-2xl w-full max-w-md space-y-6"
       >
         <div className="text-center">
-          <div className="mx-auto mb-3 h-12 w-12 rounded-xl bg-[hsl(var(--primary))] flex items-center justify-center cr8-glow overflow-hidden">
+          <div className="mx-auto mb-3 h-12 w-12 rounded-xl bg-transparent flex items-center justify-center overflow-hidden ring-1 ring-[hsl(var(--border))]">
             <img src="/cr8-logo.svg" alt="CR8" className="h-12 w-12 object-contain" />
           </div>
           <h1 className="text-4xl font-extrabold mb-2 cr8-text-gradient">CR8</h1>
