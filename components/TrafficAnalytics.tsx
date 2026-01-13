@@ -1189,7 +1189,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
       {columnsModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl border border-gray-100 overflow-hidden">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl border border-gray-100 overflow-hidden max-h-[90vh] flex flex-col">
             <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
               <div>
                 <div className="text-lg font-semibold text-gray-900">Colunas</div>
@@ -1200,7 +1200,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
               </button>
             </div>
 
-            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6 overflow-y-auto flex-1 min-h-0">
               <div className="space-y-5">
                 <div>
                   <div className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Colunas fixas (sempre visíveis)</div>
