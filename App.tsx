@@ -10,10 +10,25 @@ import { Role, User } from './types';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 
 const PlaceholderView = ({ title }: { title: string }) => (
-  <div className="flex flex-col items-center justify-center h-full text-gray-400">
+  <div className="flex flex-col items-center justify-center h-full text-[hsl(var(--muted-foreground))]">
     <div className="text-6xl mb-4 font-thin opacity-20">CR8</div>
-    <h3 className="text-xl font-medium text-gray-600">Módulo {title}</h3>
+    <h3 className="text-xl font-medium text-[hsl(var(--foreground))]">Módulo {title}</h3>
     <p className="mt-2 text-sm">Esta funcionalidade estará disponível na próxima versão.</p>
+  </div>
+);
+
+const LoadingScreen = () => (
+  <div className="min-h-screen flex items-center justify-center bg-[hsl(var(--background))] text-[hsl(var(--foreground))]">
+    <div className="flex flex-col items-center gap-4">
+      <div className="h-16 w-16 rounded-2xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] shadow-lg flex items-center justify-center overflow-hidden">
+        <img src="/cr8-logo.svg" alt="CR8" className="h-14 w-14 object-contain" />
+      </div>
+      <div className="text-center">
+        <div className="text-2xl font-extrabold cr8-text-gradient">CR8</div>
+        <div className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">Carregando sessão…</div>
+      </div>
+      <div className="h-8 w-8 rounded-full border-2 border-[hsl(var(--border))] border-t-[hsl(var(--primary))] animate-spin" />
+    </div>
   </div>
 );
 
@@ -87,9 +102,7 @@ export default function App() {
     setCurrentView('dashboard');
   };
 
-  if (loadingSession) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-100 text-gray-500">Carregando sessão...</div>;
-  }
+  if (loadingSession) return <LoadingScreen />;
 
   if (!user) {
     return <Login onLogin={handleLogin} />;
@@ -132,3 +145,4 @@ export default function App() {
     </Layout>
   );
 }
+
