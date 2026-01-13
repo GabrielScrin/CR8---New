@@ -217,6 +217,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   const [activeTab, setActiveTab] = useState<TrafficTab>('meta');
   const [selectedLevel, setSelectedLevel] = useState<MetaLevel>('ad');
   const [comparisonData, setComparisonData] = useState<any[]>([]);
+  const [campaignFilterId, setCampaignFilterId] = useState<string>('');
+  const [adsetFilterId, setAdsetFilterId] = useState<string>('');
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -722,6 +724,15 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
       const insightsUrl = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
       insightsUrl.searchParams.set('level', selectedLevel);
+      {
+        const filters: any[] = [];
+        if (selectedLevel === 'ad' && adsetFilterId) {
+          filters.push({ field: 'adset.id', operator: 'IN', value: [adsetFilterId] });
+        } else if (campaignFilterId) {
+          filters.push({ field: 'campaign.id', operator: 'IN', value: [campaignFilterId] });
+        }
+        if (filters.length) insightsUrl.searchParams.set('filtering', JSON.stringify(filters));
+      }
       insightsUrl.searchParams.set(
         'fields',
         [
@@ -803,6 +814,30 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           adId: String(entityId),
           subtitle,
           thumbnail: baseThumb,
+          campaignId:
+            selectedLevel === 'campaign'
+              ? String(entityId)
+              : row.campaign_id != null
+                ? String(row.campaign_id)
+                : undefined,
+          campaignName:
+            selectedLevel === 'campaign'
+              ? (row.campaign_name != null ? String(row.campaign_name) : entityName != null ? String(entityName) : undefined)
+              : row.campaign_name != null
+                ? String(row.campaign_name)
+                : undefined,
+          adsetId:
+            selectedLevel === 'adset'
+              ? String(entityId)
+              : row.adset_id != null
+                ? String(row.adset_id)
+                : undefined,
+          adsetName:
+            selectedLevel === 'adset'
+              ? (row.adset_name != null ? String(row.adset_name) : entityName != null ? String(entityName) : undefined)
+              : row.adset_name != null
+                ? String(row.adset_name)
+                : undefined,
           results,
           resultLabel: primary.label,
           costPerResult,
@@ -866,7 +901,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   useEffect(() => {
     void fetchTraffic();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId, selectedLevel, activeTab]);
+  }, [companyId, selectedLevel, activeTab, campaignFilterId, adsetFilterId]);
 
   const onChangeAdAccount = async (id: string) => {
     const normalized = normalizeAdAccountId(id);
@@ -878,6 +913,11 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       // ignore
     }
     await fetchTraffic(normalized);
+  };
+
+  const onChangeLevel = (level: MetaLevel) => {
+    setSelectedLevel(level);
+    if (level !== 'ad') setAdsetFilterId('');
   };
 
   const onSelectPreset = (presetId: string) => {
@@ -968,6 +1008,42 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   const presetOptions: TrafficViewPreset[] = presets.length
     ? presets
     : [{ id: DEFAULT_PRESET_ID, name: DEFAULT_PRESET_NAME, level: selectedLevel, optionalColumns: [] }];
+
+  const campaignOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const r of rows) {
+      if (r.campaignId) map.set(r.campaignId, r.campaignName || r.campaignId);
+    }
+    return Array.from(map.entries())
+      .map(([id, name]) => ({ id, name }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [rows]);
+
+  const adsetOptions = useMemo(() => {
+    const map = new Map<string, { name: string; campaignId?: string }>();
+    for (const r of rows) {
+      if (!r.adsetId) continue;
+      map.set(r.adsetId, { name: r.adsetName || r.adsetId, campaignId: r.campaignId });
+    }
+    return Array.from(map.entries())
+      .map(([id, v]) => ({ id, name: v.name, campaignId: v.campaignId }))
+      .filter((o) => (!campaignFilterId ? true : o.campaignId === campaignFilterId))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }, [rows, campaignFilterId]);
+
+  const drillDown = (row: AdMetric) => {
+    if (selectedLevel === 'campaign' && row.campaignId) {
+      setCampaignFilterId(row.campaignId);
+      setAdsetFilterId('');
+      onChangeLevel('adset');
+      return;
+    }
+    if (selectedLevel === 'adset' && row.adsetId) {
+      if (row.campaignId) setCampaignFilterId(row.campaignId);
+      setAdsetFilterId(row.adsetId);
+      onChangeLevel('ad');
+    }
+  };
 
   const openInAdsManager = (entityId: string) => {
     const act = String(selectedAdAccountId ?? '').replace(/^act_/, '');
@@ -1170,11 +1246,52 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
           {activeTab === 'meta' && (
             <div className="flex items-center gap-4 flex-wrap">
+              {!demoMode && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Campanha:</span>
+                  <select
+                    value={campaignFilterId}
+                    onChange={(e) => {
+                      setCampaignFilterId(e.target.value);
+                      setAdsetFilterId('');
+                    }}
+                    className="max-w-[320px] px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    title="Filtrar por campanha"
+                  >
+                    <option value="">Todas</option>
+                    {campaignOptions.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {selectedLevel === 'ad' && !demoMode && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">Conjunto:</span>
+                  <select
+                    value={adsetFilterId}
+                    onChange={(e) => setAdsetFilterId(e.target.value)}
+                    className="max-w-[320px] px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    title="Filtrar por conjunto"
+                  >
+                    <option value="">Todos</option>
+                    {adsetOptions.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-500">Nível:</span>
                 <select
                   value={selectedLevel}
-                  onChange={(e) => setSelectedLevel(e.target.value as MetaLevel)}
+                  onChange={(e) => onChangeLevel(e.target.value as MetaLevel)}
                   className="px-3 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="campaign">Campanhas</option>
@@ -1203,9 +1320,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           )}
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="overflow-auto max-h-[70vh]">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+            <thead className="bg-gray-50 sticky top-0 z-10">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{entityLabel}</th>
                 {tableColumns.map((c) => (
@@ -1230,7 +1347,18 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                       <div className="flex items-center">
                         <img className="h-10 w-10 rounded object-cover" src={row.thumbnail} alt="" />
                         <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">{row.adName}</div>
+                          {selectedLevel === 'ad' ? (
+                            <div className="text-sm font-medium text-gray-900">{row.adName}</div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => drillDown(row)}
+                              className="text-sm font-medium text-gray-900 hover:text-indigo-600 hover:underline text-left"
+                              title="Abrir nível abaixo"
+                            >
+                              {row.adName}
+                            </button>
+                          )}
                           <div className="text-xs text-gray-500 flex items-center">
                             {row.subtitle ?? ''}
                             <ExternalLink

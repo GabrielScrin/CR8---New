@@ -15,6 +15,10 @@ export interface AdMetric {
   adId: string;
   thumbnail: string;
   subtitle?: string;
+  campaignId?: string;
+  campaignName?: string;
+  adsetId?: string;
+  adsetName?: string;
   results?: number;
   resultLabel?: string;
   costPerResult?: number;
