@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { ShieldCheck, Facebook, AlertCircle, Mail, Lock, ArrowRight } from 'lucide-react';
+import { Facebook, AlertCircle, Mail, Lock, ArrowRight } from 'lucide-react';
 import { getSupabaseConfigHints, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { User } from '../types';
 

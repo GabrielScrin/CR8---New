@@ -396,9 +396,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     };
 
     for (let page = 0; page < 5; page += 1) {
-      const url = nextUrl ?? buildFirstUrl();
-      const res = await fetch(url);
-      const json = await res.json();
+      const url: string = nextUrl ?? buildFirstUrl();
+      const res: Response = await fetch(url);
+      const json: any = await res.json();
       if (!res.ok || json?.error) {
         const msg = json?.error?.message || `Erro ao listar contas de anúncio (${res.status})`;
         throw Object.assign(new Error(msg), { metaError: json?.error });
@@ -1551,11 +1551,14 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                           )}
                           <div className="text-xs text-[hsl(var(--muted-foreground))] flex items-center">
                             {row.subtitle ?? ''}
-                            <ExternalLink
-                              className="w-3 h-3 ml-1 cursor-pointer hover:text-[hsl(var(--primary))]"
+                            <button
+                              type="button"
+                              className="ml-1 inline-flex items-center hover:text-[hsl(var(--primary))]"
                               title={`Abrir no Ads Manager (ID: ${row.adId})`}
                               onClick={() => openInAdsManager(row.adId)}
-                            />
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                            </button>
                           </div>
                         </div>
                       </div>

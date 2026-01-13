@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
-import { User, Role } from '../types';
+import { User } from '../types';
 import { Bell, Bot, ChevronDown } from 'lucide-react';
 
 interface LayoutProps {
