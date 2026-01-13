@@ -192,7 +192,7 @@ const resolvePrimaryResult = (row: any, computed: { leads?: number; purchases?: 
   const pick = (value: number | undefined, label: string) => ({ value: typeof value === 'number' ? value : undefined, label });
 
   if (objective.includes('LEAD')) return pick(computed.leads, 'Leads');
-  if (objective.includes('MESSAGE')) return pick(computed.conversations, 'Conversas');
+  if (objective.includes('MESSAGE')) return pick(computed.conversations, 'Leads');
   if (objective.includes('VIDEO')) return pick(computed.video3s, 'Views 3s');
   if (objective.includes('TRAFFIC')) return pick(computed.linkClicks ?? computed.clicks, 'Cliques no link');
   if (objective.includes('CONVERS') || objective.includes('SALE') || objective.includes('PURCHASE')) return pick(computed.purchases, 'Compras');
@@ -713,7 +713,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           ts.map((row: any) => ({
             name: String(row.date_start ?? '').slice(5).replace('-', '/'),
             metaSpend: parseNumber(row.spend),
-            metaLeads: extractLeadsFromActions(row.actions) ?? 0,
+            metaLeads: (extractLeadsFromActions(row.actions) ?? 0) + (extractMessagingConversationsFromActions(row.actions) ?? 0),
           })),
         );
       } else {
@@ -730,7 +730,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
             : selectedLevel === 'adset'
               ? 'adset_id,adset_name,campaign_id,campaign_name'
               : 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name',
-          'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas,video_3_sec_watched_actions,video_15_sec_watched_actions',
+          'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas,video_thruplay_watched_actions',
         ].join(','),
       );
       insightsUrl.searchParams.set('date_preset', 'last_7d');
@@ -759,25 +759,22 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
         const impressions = Math.floor(parseNumber(row.impressions));
         const spend = parseNumber(row.spend);
-        const leads = extractLeadsFromActions(row.actions);
-        const cpa = leads && leads > 0 ? spend / leads : undefined;
+        const formLeads = extractLeadsFromActions(row.actions) ?? 0;
+        const conversations = extractMessagingConversationsFromActions(row.actions) ?? 0;
+        const leads = formLeads + conversations;
+        const cpa = leads > 0 ? spend / leads : undefined;
         const ctr = typeof row.ctr === 'string' || typeof row.ctr === 'number' ? parseNumber(row.ctr) : undefined;
         const roas = extractRoas(row.purchase_roas);
 
-        const video3s =
-          extractActionTotal(row.video_3_sec_watched_actions) ??
-          extractVideo3sFromActions(row.actions);
-        const video15s =
-          extractActionTotal(row.video_15_sec_watched_actions) ??
-          extractVideo15sFromActions(row.actions);
+        const video3s = extractVideo3sFromActions(row.actions);
+        const video15s = extractVideo15sFromActions(row.actions) ?? extractActionTotal(row.video_thruplay_watched_actions);
         const hookRate = impressions > 0 && video3s != null && video3s > 0 ? video3s / impressions : undefined;
         const holdRate = impressions > 0 && video15s != null && video15s > 0 ? video15s / impressions : undefined;
 
         const linkClicks = row.inline_link_clicks != null ? Math.floor(parseNumber(row.inline_link_clicks)) : undefined;
         const clicks = row.clicks != null ? Math.floor(parseNumber(row.clicks)) : undefined;
         const purchases = extractPurchasesFromActions(row.actions);
-        const conversations = extractMessagingConversationsFromActions(row.actions);
-        const primary = resolvePrimaryResult(row, { leads, purchases, conversations, linkClicks, clicks, video3s });
+        const primary = resolvePrimaryResult(row, { leads, purchases, conversations: conversations || undefined, linkClicks, clicks, video3s });
         const results = primary.value;
         const costPerResult = results && results > 0 ? spend / results : undefined;
 
@@ -1269,7 +1266,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
         <div className="p-4 border-t border-gray-100 bg-gray-50 text-xs text-gray-500 space-y-1">
           <div>
-            *Hook Rate: estimativa baseada em video views (3s) / impressões. Hold Rate: estimativa baseada em video views (15s) / impressões (apenas anúncios em vídeo).
+            *Hook Rate: estimativa baseada em video views (3s) / impressões. Hold Rate: estimativa baseada em video views (15s/ThruPlay) / impressões (apenas anúncios em vídeo).
           </div>
           <div>
             *IDC: média dos scores (Resultados, C/Res e CTR) normalizados entre os itens desta tabela. Classificação: Ótimo/Bom/Regular/Ruim por faixas de IDC.
