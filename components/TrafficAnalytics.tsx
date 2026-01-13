@@ -153,6 +153,11 @@ const extractActionSum = (actions: any[] | undefined, matcher: (actionType: stri
   return matches.reduce((sum, a) => sum + parseNumber(a.value), 0);
 };
 
+const extractActionTotal = (actions: any[] | undefined) => {
+  if (!Array.isArray(actions) || actions.length === 0) return undefined;
+  return actions.reduce((sum, a) => sum + parseNumber(a?.value), 0);
+};
+
 const extractLeadsFromActions = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t.includes('lead') || t === 'onsite_conversion.lead_grouped');
 
@@ -725,7 +730,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
             : selectedLevel === 'adset'
               ? 'adset_id,adset_name,campaign_id,campaign_name'
               : 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name',
-          'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas',
+          'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas,video_3_sec_watched_actions,video_15_sec_watched_actions',
         ].join(','),
       );
       insightsUrl.searchParams.set('date_preset', 'last_7d');
@@ -759,8 +764,12 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         const ctr = typeof row.ctr === 'string' || typeof row.ctr === 'number' ? parseNumber(row.ctr) : undefined;
         const roas = extractRoas(row.purchase_roas);
 
-        const video3s = extractVideo3sFromActions(row.actions);
-        const video15s = extractVideo15sFromActions(row.actions);
+        const video3s =
+          extractActionTotal(row.video_3_sec_watched_actions) ??
+          extractVideo3sFromActions(row.actions);
+        const video15s =
+          extractActionTotal(row.video_15_sec_watched_actions) ??
+          extractVideo15sFromActions(row.actions);
         const hookRate = impressions > 0 && video3s != null && video3s > 0 ? video3s / impressions : undefined;
         const holdRate = impressions > 0 && video15s != null && video15s > 0 ? video15s / impressions : undefined;
 
