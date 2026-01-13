@@ -453,3 +453,51 @@ with check (
       and public.is_company_member(c.company_id)
   )
 );
+
+-- -----------------------------------------------------------------------------
+-- Traffic view presets (per-user column presets for Traffic Analytics)
+-- -----------------------------------------------------------------------------
+
+create table if not exists public.traffic_view_presets (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users (id) on delete cascade,
+  level text not null check (level in ('campaign', 'adset', 'ad')),
+  name text not null,
+  optional_columns jsonb not null default '[]'::jsonb,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create index if not exists traffic_view_presets_user_level_idx on public.traffic_view_presets (user_id, level);
+
+drop trigger if exists set_traffic_view_presets_updated_at on public.traffic_view_presets;
+create trigger set_traffic_view_presets_updated_at
+before update on public.traffic_view_presets
+for each row execute function public.set_updated_at();
+
+alter table public.traffic_view_presets enable row level security;
+
+drop policy if exists "Users can read own traffic view presets" on public.traffic_view_presets;
+create policy "Users can read own traffic view presets"
+on public.traffic_view_presets
+for select
+using (user_id = auth.uid());
+
+drop policy if exists "Users can create own traffic view presets" on public.traffic_view_presets;
+create policy "Users can create own traffic view presets"
+on public.traffic_view_presets
+for insert
+with check (user_id = auth.uid());
+
+drop policy if exists "Users can update own traffic view presets" on public.traffic_view_presets;
+create policy "Users can update own traffic view presets"
+on public.traffic_view_presets
+for update
+using (user_id = auth.uid())
+with check (user_id = auth.uid());
+
+drop policy if exists "Users can delete own traffic view presets" on public.traffic_view_presets;
+create policy "Users can delete own traffic view presets"
+on public.traffic_view_presets
+for delete
+using (user_id = auth.uid());

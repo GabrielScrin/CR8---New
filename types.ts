@@ -18,6 +18,11 @@ export interface AdMetric {
   status: 'active' | 'paused';
   spend: number;
   impressions: number;
+  reach?: number;
+  clicks?: number;
+  inlineLinkClicks?: number;
+  cpm?: number;
+  frequency?: number;
   leads?: number;
   cpc?: number;
   ctr?: number;
