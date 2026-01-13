@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { MoreHorizontal, Phone, MessageCircle, RefreshCw, GripVertical } from 'lucide-react';
 import { Lead } from '../types';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
@@ -17,11 +17,11 @@ import {
 import { SortableContext, useSortable, rectSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { createPortal } from 'react-dom';
+import { NewLeadModal } from './NewLeadModal';
 
 // --- Tipos e Dados Mockados ---
 
 type LeadStatus = Lead['status'];
-const ALL_STATUSES: LeadStatus[] = ['new', 'contacted', 'proposal', 'won', 'lost'];
 
 interface CRMProps {
   companyId?: string;
@@ -155,6 +155,7 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeLead, setActiveLead] = useState<Lead | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const demoMode = !isSupabaseConfigured();
 
@@ -168,7 +169,7 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
     return grouped;
   }, [leads]);
 
-  const fetchLeads = async () => {
+  const fetchLeads = useCallback(async () => {
     setErrorMsg(null);
     if (demoMode) {
       setLeads(mockLeads);
@@ -191,6 +192,8 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
         utm_campaign: d.utm_campaign ?? undefined,
         lastInteraction: formatRelativeTime(d.last_interaction_at ?? d.created_at),
         value: d.value ?? undefined,
+        assigned_to: d.assigned_to ?? undefined,
+        raw: d.raw ?? undefined
       }));
       setLeads(mapped);
     } catch (err: any) {
@@ -200,12 +203,11 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [companyId, demoMode]);
 
   useEffect(() => {
     fetchLeads();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId]);
+  }, [fetchLeads]);
 
   const updateLeadStatus = async (leadId: string, newStatus: LeadStatus) => {
     if (demoMode) return;
@@ -215,9 +217,12 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
     } catch (err: any) {
       console.error('Falha ao atualizar o status do lead:', err);
       setErrorMsg('Falha ao salvar a alteração. A página será atualizada.');
-      // Reverter a mudança otimista recarregando os dados
       setTimeout(() => fetchLeads(), 1000);
     }
+  };
+
+  const handleAddNewLead = (newLead: Lead) => {
+    setLeads(prevLeads => [newLead, ...prevLeads]);
   };
 
   const columns: Array<{ id: LeadStatus; title: string; color: string }> = [
@@ -255,7 +260,6 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
     const newStatus = over.data.current?.type === 'Column' ? (over.id as LeadStatus) : (over.data.current?.lead.status as LeadStatus);
 
     if (oldStatus !== newStatus) {
-      // Atualização otimista da UI
       setLeads((prevLeads) => {
         const leadIndex = prevLeads.findIndex((l) => l.id === leadId);
         if (leadIndex === -1) return prevLeads;
@@ -264,52 +268,62 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
         updatedLeads[leadIndex] = { ...updatedLeads[leadIndex], status: newStatus };
         return updatedLeads;
       });
-
-      // Persistir a mudança no banco de dados
       void updateLeadStatus(leadId, newStatus);
     }
   };
 
   return (
-    <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      <div className="h-full flex flex-col">
-        <div className="flex justify-between items-center mb-6">
-          <div>
-            <h2 className="text-2xl font-bold text-[hsl(var(--foreground))]">Pipeline de Vendas</h2>
-            {errorMsg && <p className="text-sm text-red-600 mt-1">{errorMsg}</p>}
-            {!demoMode && leads.length === 0 && !loading && (
-              <p className="text-sm text-gray-500 mt-1">Sem leads ainda. Envie via webhook para popular.</p>
-            )}
-            {demoMode && <p className="text-sm text-yellow-600 mt-1">Modo demonstração. Os dados não serão salvos.</p>}
+    <>
+      <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <div className="h-full flex flex-col">
+          <div className="flex justify-between items-center mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-[hsl(var(--foreground))]">Pipeline de Vendas</h2>
+              {errorMsg && <p className="text-sm text-red-600 mt-1">{errorMsg}</p>}
+              {!demoMode && leads.length === 0 && !loading && (
+                <p className="text-sm text-gray-500 mt-1">Sem leads ainda. Use o botão "+ Novo Lead" ou envie via webhook.</p>
+              )}
+              {demoMode && <p className="text-sm text-yellow-600 mt-1">Modo demonstração. Os dados não serão salvos.</p>}
+            </div>
+
+            <div className="flex space-x-2">
+              <button onClick={fetchLeads} className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600" title="Atualizar">
+                <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
+              </button>
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                disabled={demoMode}
+              >
+                + Novo Lead
+              </button>
+            </div>
           </div>
 
-          <div className="flex space-x-2">
-            <button onClick={fetchLeads} className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600" title="Atualizar">
-              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
-            </button>
-            <button className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm">
-              + Novo Lead
-            </button>
+          <div className="flex-1 overflow-x-auto">
+            <div className="flex space-x-4 min-w-[1000px] h-full pb-4">
+              <SortableContext items={columns.map(c => c.id)} strategy={rectSortingStrategy}>
+                {columns.map((col) => (
+                  <KanbanColumn key={col.id} id={col.id} title={col.title} color={col.color} leads={leadsByStatus[col.id] ?? []} />
+                ))}
+              </SortableContext>
+            </div>
           </div>
         </div>
-
-        <div className="flex-1 overflow-x-auto">
-          <div className="flex space-x-4 min-w-[1000px] h-full pb-4">
-            <SortableContext items={columns.map(c => c.id)} strategy={rectSortingStrategy}>
-              {columns.map((col) => (
-                <KanbanColumn key={col.id} id={col.id} title={col.title} color={col.color} leads={leadsByStatus[col.id] ?? []} />
-              ))}
-            </SortableContext>
-          </div>
-        </div>
-      </div>
-      {typeof document !== 'undefined' &&
-        createPortal(
-          <DragOverlay>
-            {activeLead ? <LeadCard lead={activeLead} /> : null}
-          </DragOverlay>,
-          document.body
-        )}
-    </DndContext>
+        {typeof document !== 'undefined' &&
+          createPortal(
+            <DragOverlay>
+              {activeLead ? <LeadCard lead={activeLead} /> : null}
+            </DragOverlay>,
+            document.body
+          )}
+      </DndContext>
+      <NewLeadModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSave={handleAddNewLead}
+        companyId={companyId}
+      />
+    </>
   );
 };
