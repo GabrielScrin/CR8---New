@@ -133,7 +133,7 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
     <div className="h-full flex flex-col">
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h2 className="text-2xl font-bold text-gray-800">Pipeline de Vendas</h2>
+          <h2 className="text-2xl font-bold text-[hsl(var(--foreground))]">Pipeline de Vendas</h2>
           {errorMsg && <p className="text-sm text-red-600 mt-1">{errorMsg}</p>}
           {!demoMode && leads.length === 0 && !loading && (
             <p className="text-sm text-gray-500 mt-1">Sem leads ainda (modo real). Envie via webhook para popular.</p>
@@ -220,4 +220,3 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
     </div>
   );
 };
-

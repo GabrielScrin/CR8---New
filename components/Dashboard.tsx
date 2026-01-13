@@ -130,7 +130,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ companyId }) => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-2xl font-bold text-gray-800">Visao Geral</h2>
+        <h2 className="text-2xl font-bold text-[hsl(var(--foreground))]">Visao Geral</h2>
         {errorMsg && <p className="text-sm text-red-600 mt-1">{errorMsg}</p>}
         {!demoMode && !companyId && <p className="text-sm text-gray-500 mt-1">Selecione/crie uma empresa para ver dados reais.</p>}
       </div>
@@ -223,4 +223,3 @@ export const Dashboard: React.FC<DashboardProps> = ({ companyId }) => {
     </div>
   );
 };
-
