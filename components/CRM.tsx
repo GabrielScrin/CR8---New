@@ -65,56 +65,59 @@ const LeadCard: React.FC<{ lead: Lead }> = ({ lead }) => {
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const sourceStyle = useMemo(() => {
+    switch (lead.source) {
+      case 'WhatsApp':
+        return 'bg-[hsl(var(--accent)/0.1)] text-[hsl(var(--accent))]';
+      case 'Instagram':
+        return 'bg-pink-500/10 text-pink-400'; // Mantendo rosa para Instagram por falta de variável
+      default:
+        return 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]';
+    }
+  }, [lead.source]);
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className="bg-white p-4 rounded-lg shadow-sm border border-gray-100 touch-none group"
+      className="cr8-card p-3 touch-none group relative"
     >
       <div className="flex justify-between items-start mb-2">
-        <span
-          className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider ${
-            lead.source === 'WhatsApp'
-              ? 'bg-green-100 text-green-700'
-              : lead.source === 'Instagram'
-              ? 'bg-pink-100 text-pink-700'
-              : 'bg-gray-100 text-gray-600'
-          }`}
-        >
+        <span className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold tracking-wider ${sourceStyle}`}>
           {lead.source}
         </span>
         <div className="flex items-center">
           <button
             {...attributes}
             {...listeners}
-            className="text-gray-400 hover:text-gray-600 cursor-grab p-1"
+            className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] cursor-grab p-1"
             title="Mover lead"
           >
             <GripVertical className="w-4 h-4" />
           </button>
-          <button className="text-gray-400 hover:text-gray-600 p-1 opacity-0 group-hover:opacity-100">
+          <button className="text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] p-1 opacity-0 group-hover:opacity-100 transition-opacity">
             <MoreHorizontal className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      <h4 className="font-medium text-gray-900 mb-1">{lead.name}</h4>
-      <p className="text-sm text-gray-500 mb-1 truncate">{lead.email}</p>
-      <p className="text-xs text-gray-400">{lead.lastInteraction}</p>
-
-      <div className="flex justify-between items-center mt-3 pt-3 border-t border-gray-50">
-        <div className="font-semibold text-gray-700 text-sm">
+      <h4 className="font-semibold text-[hsl(var(--card-foreground))] mb-1">{lead.name}</h4>
+      <p className="text-sm text-[hsl(var(--muted-foreground))] mb-2 truncate" title={lead.email}>{lead.email}</p>
+      
+      <div className="flex justify-between items-center mt-3 pt-3 border-t border-[hsl(var(--border))]">
+        <div className="font-bold text-[hsl(var(--card-foreground))] text-sm">
           {lead.value != null ? `R$ ${lead.value.toLocaleString()}` : '-'}
         </div>
-        <div className="flex space-x-1">
-          <button className="p-1.5 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-md">
+        <div className="flex space-x-0.5">
+          <button className="p-1.5 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--accent))] hover:bg-[hsl(var(--accent)/0.1)] rounded-md transition-colors">
             <MessageCircle className="w-4 h-4" />
           </button>
-          <button className="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-md">
+          <button className="p-1.5 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))] hover:bg-[hsl(var(--primary)/0.1)] rounded-md transition-colors">
             <Phone className="w-4 h-4" />
           </button>
         </div>
       </div>
+      <p className="text-xs text-[hsl(var(--muted-foreground))] absolute top-3 right-12 opacity-0 group-hover:opacity-100 transition-opacity">{lead.lastInteraction}</p>
     </div>
   );
 };
@@ -132,12 +135,12 @@ const KanbanColumn: React.FC<ColumnProps> = ({ id, title, color, leads }) => {
   const leadIds = useMemo(() => leads.map((l) => l.id), [leads]);
 
   return (
-    <div ref={setNodeRef} className="flex-1 bg-gray-50 rounded-xl p-4 flex flex-col border border-gray-200 min-w-[280px]">
+    <div ref={setNodeRef} className="flex-1 bg-[hsl(var(--secondary))] rounded-xl p-3 flex flex-col border border-[hsl(var(--border))] min-w-[280px]">
       <div className={`flex justify-between items-center mb-4 pb-2 border-b-2 ${color}`}>
-        <h3 className="font-semibold text-gray-700">{title}</h3>
-        <span className="bg-gray-200 text-gray-600 text-xs px-2 py-1 rounded-full">{leads.length}</span>
+        <h3 className="font-semibold text-[hsl(var(--foreground))]">{title}</h3>
+        <span className="bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] text-xs px-2 py-1 rounded-full font-medium">{leads.length}</span>
       </div>
-      <div className="space-y-3 overflow-y-auto scrollbar-hide flex-1">
+      <div className="space-y-3 overflow-y-auto flex-1 pr-1">
         <SortableContext items={leadIds} strategy={rectSortingStrategy}>
           {leads.map((lead) => (
             <LeadCard key={lead.id} lead={lead} />
@@ -226,11 +229,11 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
   };
 
   const columns: Array<{ id: LeadStatus; title: string; color: string }> = [
-    { id: 'new', title: 'Novos Leads', color: 'border-blue-400' },
+    { id: 'new', title: 'Novos Leads', color: 'border-[hsl(var(--primary))]' },
     { id: 'contacted', title: 'Em Contato', color: 'border-yellow-400' },
     { id: 'proposal', title: 'Proposta Enviada', color: 'border-purple-400' },
-    { id: 'won', title: 'Fechado/Ganho', color: 'border-green-400' },
-    { id: 'lost', title: 'Perdido', color: 'border-red-400' },
+    { id: 'won', title: 'Fechado/Ganho', color: 'border-[hsl(var(--accent))]' },
+    { id: 'lost', title: 'Perdido', color: 'border-[hsl(var(--destructive))]' },
   ];
 
   const sensors = useSensors(
@@ -279,20 +282,24 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
           <div className="flex justify-between items-center mb-6">
             <div>
               <h2 className="text-2xl font-bold text-[hsl(var(--foreground))]">Pipeline de Vendas</h2>
-              {errorMsg && <p className="text-sm text-red-600 mt-1">{errorMsg}</p>}
+              {errorMsg && <p className="text-sm text-[hsl(var(--destructive))] mt-1">{errorMsg}</p>}
               {!demoMode && leads.length === 0 && !loading && (
-                <p className="text-sm text-gray-500 mt-1">Sem leads ainda. Use o botão "+ Novo Lead" ou envie via webhook.</p>
+                <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">Sem leads ainda. Use o botão "+ Novo Lead" ou envie via webhook.</p>
               )}
-              {demoMode && <p className="text-sm text-yellow-600 mt-1">Modo demonstração. Os dados não serão salvos.</p>}
+              {demoMode && <p className="text-sm text-[hsl(var(--accent))] mt-1">Modo demonstração. Os dados não serão salvos.</p>}
             </div>
 
             <div className="flex space-x-2">
-              <button onClick={fetchLeads} className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600" title="Atualizar">
+              <button
+                onClick={() => void fetchLeads()}
+                className="p-2 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-lg hover:bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                title="Atualizar"
+              >
                 <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
               </button>
               <button
                 onClick={() => setIsModalOpen(true)}
-                className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                className="bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] px-4 py-2 rounded-lg hover:opacity-90 transition-opacity shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                 disabled={demoMode}
               >
                 + Novo Lead

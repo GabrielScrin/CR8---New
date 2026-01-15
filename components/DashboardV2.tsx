@@ -632,6 +632,8 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.35, delay: index * 0.06 }}
+              whileHover={{ scale: 1.03, transition: { duration: 0.2 } }}
+              layout
               className="cr8-card p-5 relative overflow-hidden"
             >
               <div className="flex items-start justify-between gap-3">
@@ -669,6 +671,8 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.15 }}
+          whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
+          layout
           className="cr8-card p-5 lg:col-span-2"
         >
           <div className="flex items-center justify-between gap-3 mb-4">
@@ -761,6 +765,8 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.2 }}
+          whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
+          layout
           className="cr8-card p-5"
         >
           <h3 className="text-lg font-bold text-[hsl(var(--foreground))] mb-4">Top campanhas (Meta)</h3>
@@ -773,10 +779,22 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
           ) : topCampaigns.length === 0 ? (
             <p className="text-sm text-[hsl(var(--muted-foreground))]">Sem campanhas com gasto no período.</p>
           ) : (
-            <div className="space-y-2">
+            <motion.div
+              variants={{
+                visible: { transition: { staggerChildren: 0.05 } },
+              }}
+              initial="hidden"
+              animate="visible"
+              className="space-y-2"
+            >
               {topCampaigns.map((c, idx) => (
-                <div
+                <motion.div
                   key={c.id}
+                  variants={{
+                    hidden: { opacity: 0, x: -20 },
+                    visible: { opacity: 1, x: 0 },
+                  }}
+                  transition={{ duration: 0.3 }}
                   className="flex items-center gap-3 p-3 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] transition-colors"
                 >
                   <div className="h-8 w-8 rounded-lg bg-[hsl(var(--primary))]/20 text-[hsl(var(--primary))] flex items-center justify-center text-xs font-bold">
@@ -791,9 +809,9 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
                   <div className="text-right">
                     <p className="text-sm font-bold text-[hsl(var(--foreground))]">{formatCurrency(c.spend)}</p>
                   </div>
-                </div>
+                </motion.div>
               ))}
-            </div>
+            </motion.div>
           )}
         </motion.div>
       </div>
@@ -803,6 +821,8 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.25 }}
+          whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
+          layout
           className="cr8-card p-5"
         >
           <h3 className="text-lg font-bold text-[hsl(var(--foreground))] mb-4">Top canais</h3>
@@ -815,13 +835,28 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
           ) : topChannels.length === 0 ? (
             <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhum lead no período.</p>
           ) : (
-            <div className="space-y-2">
+            <motion.div
+              variants={{
+                visible: { transition: { staggerChildren: 0.05 } },
+              }}
+              initial="hidden"
+              animate="visible"
+              className="space-y-2"
+            >
               {topChannels.map((c, idx) => {
                 const ui = sourceUi[c.source] ?? sourceUi.manual;
                 const total = topChannels.reduce((sum, it) => sum + it.count, 0) || 0;
                 const pct = total ? (c.count / total) * 100 : 0;
                 return (
-                  <div key={c.source} className="flex items-center gap-3 p-3 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))]">
+                  <motion.div
+                    key={c.source}
+                    variants={{
+                      hidden: { opacity: 0, x: -20 },
+                      visible: { opacity: 1, x: 0 },
+                    }}
+                    transition={{ duration: 0.3 }}
+                    className="flex items-center gap-3 p-3 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))]"
+                  >
                     <div className="h-8 w-8 rounded-lg bg-[hsl(var(--primary))]/20 text-[hsl(var(--primary))] flex items-center justify-center text-xs font-bold">
                       #{idx + 1}
                     </div>
@@ -836,10 +871,10 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
                       <p className="text-sm font-bold text-[hsl(var(--foreground))]">{formatNumber(c.count)}</p>
                       <p className="text-xs text-[hsl(var(--muted-foreground))]">{pct.toFixed(0)}%</p>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
-            </div>
+            </motion.div>
           )}
         </motion.div>
 
@@ -847,6 +882,8 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.45, delay: 0.3 }}
+          whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
+          layout
           className="cr8-card p-5"
         >
           <div className="flex items-center justify-between gap-3 mb-4">
@@ -863,13 +900,25 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
           ) : recentLeads.length === 0 ? (
             <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhum lead ainda.</p>
           ) : (
-            <div className="space-y-2">
+            <motion.div
+              variants={{
+                visible: { transition: { staggerChildren: 0.05 } },
+              }}
+              initial="hidden"
+              animate="visible"
+              className="space-y-2"
+            >
               {recentLeads.map((l) => {
                 const src = normalizeLeadSource(l.source);
                 const ui = sourceUi[src] ?? sourceUi.manual;
                 return (
-                  <div
+                  <motion.div
                     key={l.id}
+                    variants={{
+                      hidden: { opacity: 0, x: -20 },
+                      visible: { opacity: 1, x: 0 },
+                    }}
+                    transition={{ duration: 0.3 }}
                     className="flex items-center gap-3 p-3 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] transition-colors"
                   >
                     <div className={`h-9 w-9 rounded-full flex items-center justify-center ${ui.color}`}>{ui.icon}</div>
@@ -878,10 +927,10 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
                       <p className="text-xs text-[hsl(var(--muted-foreground))] truncate">{ui.label}</p>
                     </div>
                     <div className="text-xs text-[hsl(var(--muted-foreground))] whitespace-nowrap">{timeAgoPt(l.created_at)}</div>
-                  </div>
+                  </motion.div>
                 );
               })}
-            </div>
+            </motion.div>
           )}
         </motion.div>
       </div>
@@ -890,6 +939,8 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.45, delay: 0.35 }}
+        whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
+        layout
         className="cr8-card p-5"
       >
         <div className="flex items-center justify-between gap-3 mb-4">
