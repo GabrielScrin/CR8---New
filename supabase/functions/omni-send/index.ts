@@ -1,0 +1,149 @@
+// Supabase Edge Function: omni-send
+// Outbound messaging helper (Phase 3)
+//
+// - Inserts the message into `public.chat_messages`
+// - Updates `public.chats.last_message(_at)`
+// - Optionally sends the message via WhatsApp provider (Evolution API) if configured
+//
+// Required env:
+// - SUPABASE_URL
+// - SUPABASE_SERVICE_ROLE_KEY
+//
+// Optional env (Evolution API):
+// - EVOLUTION_API_URL         e.g. https://evolution.yourdomain.com
+// - EVOLUTION_API_KEY
+// - EVOLUTION_INSTANCE        e.g. default
+
+import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
+
+const corsHeaders: Record<string, string> = {
+  'access-control-allow-origin': '*',
+  'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type',
+  'access-control-allow-methods': 'POST, OPTIONS',
+};
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+
+const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL') ?? '';
+const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') ?? '';
+const EVOLUTION_INSTANCE = Deno.env.get('EVOLUTION_INSTANCE') ?? '';
+
+const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+  auth: { persistSession: false },
+});
+
+const jsonResponse = (status: number, data: unknown) =>
+  new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, 'content-type': 'application/json' },
+  });
+
+type SendBody = {
+  chat_id: string;
+  content: string;
+};
+
+const normalizeWhatsAppNumber = (value: string): string => value.replace(/\D/g, '');
+
+const decodeJwtSub = (authorizationHeader: string | null): string | null => {
+  if (!authorizationHeader) return null;
+  const match = authorizationHeader.match(/^Bearer\s+(.+)$/i);
+  if (!match) return null;
+  const token = match[1];
+  const parts = token.split('.');
+  if (parts.length < 2) return null;
+  try {
+    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
+    const json = atob(padded);
+    const obj = JSON.parse(json);
+    return typeof obj?.sub === 'string' ? obj.sub : null;
+  } catch {
+    return null;
+  }
+};
+
+async function sendViaEvolution(to: string, text: string) {
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) return { ok: false, skipped: true };
+
+  const url = `${EVOLUTION_API_URL.replace(/\/+$/, '')}/message/sendText/${encodeURIComponent(EVOLUTION_INSTANCE)}`;
+  const number = normalizeWhatsAppNumber(to);
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      apikey: EVOLUTION_API_KEY,
+    },
+    body: JSON.stringify({ number, text }),
+  });
+
+  const payloadText = await res.text().catch(() => '');
+  if (!res.ok) return { ok: false, status: res.status, body: payloadText };
+  return { ok: true, body: payloadText };
+}
+
+serve(async (req) => {
+  try {
+    if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+    if (req.method !== 'POST') return jsonResponse(405, { ok: false, error: 'method not allowed' });
+
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return jsonResponse(500, { ok: false, error: 'missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY' });
+    }
+
+    const body = (await req.json().catch(() => null)) as SendBody | null;
+    if (!body?.chat_id || !body?.content) return jsonResponse(400, { ok: false, error: 'missing chat_id/content' });
+
+    // verify_jwt should be enabled for this function; we still check the caller belongs to the chat's company.
+    const userId = decodeJwtSub(req.headers.get('authorization'));
+    if (!userId) return jsonResponse(401, { ok: false, error: 'missing/invalid authorization' });
+
+    const { data: chat, error: chatError } = await supabaseAdmin
+      .from('chats')
+      .select('id, company_id, platform, external_thread_id, last_message_at')
+      .eq('id', body.chat_id)
+      .maybeSingle();
+    if (chatError) return jsonResponse(500, { ok: false, error: chatError.message });
+    if (!chat) return jsonResponse(404, { ok: false, error: 'chat not found' });
+
+    const { data: membership, error: memberError } = await supabaseAdmin
+      .from('company_members')
+      .select('user_id')
+      .eq('company_id', (chat as any).company_id)
+      .eq('user_id', userId)
+      .maybeSingle();
+    if (memberError) return jsonResponse(500, { ok: false, error: memberError.message });
+    if (!membership) return jsonResponse(403, { ok: false, error: 'forbidden' });
+
+    const nowIso = new Date().toISOString();
+
+    const { error: msgError } = await supabaseAdmin.from('chat_messages').insert([
+      {
+        chat_id: chat.id,
+        sender: 'agent',
+        content: body.content,
+        raw: { outbound: true, user_id: userId },
+        created_at: nowIso,
+      },
+    ] as any);
+    if (msgError) return jsonResponse(500, { ok: false, error: msgError.message });
+
+    const { error: updError } = await supabaseAdmin
+      .from('chats')
+      .update({ last_message: body.content, last_message_at: nowIso })
+      .eq('id', chat.id);
+    if (updError) return jsonResponse(500, { ok: false, error: updError.message });
+
+    let provider: any = { ok: false, skipped: true };
+    if (chat.platform === 'whatsapp' && chat.external_thread_id) {
+      provider = await sendViaEvolution(chat.external_thread_id, body.content);
+    }
+
+    return jsonResponse(200, { ok: true, provider });
+  } catch (e: any) {
+    return jsonResponse(500, { ok: false, error: e?.message ?? 'unknown error' });
+  }
+});

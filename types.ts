@@ -63,13 +63,13 @@ export interface ChatMessage {
   sender: 'user' | 'agent' | 'system';
   content: string;
   timestamp: Date;
-  platform: 'whatsapp' | 'instagram';
+  platform: 'whatsapp' | 'instagram' | 'web' | 'meta';
 }
 
 export interface ChatSession {
   id: string;
   contactName: string;
-  platform: 'whatsapp' | 'instagram';
+  platform: 'whatsapp' | 'instagram' | 'web' | 'meta';
   lastMessage: string;
   unread: number;
   aiActive: boolean;

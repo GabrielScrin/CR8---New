@@ -121,7 +121,7 @@ export default function App() {
       case 'crm':
         return <CRM companyId={user.companyId} />;
       case 'livechat':
-        return <LiveChat />;
+        return <LiveChat companyId={user.companyId} userId={user.id} />;
       case 'contacts':
         return <PlaceholderView title="Contatos & Leads" />;
       case 'forms':
@@ -145,4 +145,3 @@ export default function App() {
     </Layout>
   );
 }
-
