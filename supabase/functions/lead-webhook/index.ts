@@ -1,6 +1,7 @@
 // Supabase Edge Function: lead-webhook
 // - Recebe leads (Landing Pages / Facebook Lead Ads)
-// - Enriquece dados (DDD, Roleta de Leads)
+// - Enriquece dados (DDD via BrasilAPI + normalização de telefone)
+// - Distribui automaticamente (roleta) via RPC
 // - Insere em public.leads (usa SERVICE_ROLE para bypass de RLS)
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
@@ -12,18 +13,15 @@ const corsHeaders: Record<string, string> = {
   'access-control-allow-methods': 'POST, GET, OPTIONS',
 };
 
-// --- Configuração ---
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const LEAD_WEBHOOK_SECRET = Deno.env.get('LEAD_WEBHOOK_SECRET') ?? '';
 const FB_VERIFY_TOKEN = Deno.env.get('FB_VERIFY_TOKEN') ?? '';
 
-// --- Cliente Supabase Admin ---
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
-// --- Tipos ---
 type LeadPayload = {
   company_id: string;
   name?: string | null;
@@ -40,75 +38,71 @@ type LeadPayload = {
   assigned_to?: string | null;
 };
 
-// --- Funções de Negócio (Fase 2) ---
+const onlyDigits = (value: string) => value.replace(/\D/g, '');
 
-/**
- * Enriquecimento de Dados: Busca o estado/cidade pelo DDD do telefone.
- * @param lead - O payload do lead.
- */
+const toE164BR = (digits: string): string | null => {
+  const d = onlyDigits(digits);
+  if (!d) return null;
+  if (d.startsWith('55') && (d.length === 12 || d.length === 13)) return `+${d}`;
+  if (d.length === 10 || d.length === 11) return `+55${d}`;
+  return null;
+};
+
+const dddFromDigits = (digits: string): string | null => {
+  const d = onlyDigits(digits);
+  if (d.startsWith('55') && d.length >= 4) return d.slice(2, 4);
+  if (d.length >= 2) return d.slice(0, 2);
+  return null;
+};
+
 async function enrichLead(lead: LeadPayload): Promise<void> {
-  if (!lead.phone) return;
+  const phone = lead.phone ? String(lead.phone) : '';
+  const digits = phone ? onlyDigits(phone) : '';
+  const e164 = digits ? toE164BR(digits) : null;
 
-  const phone = lead.phone.replace(/\D/g, '');
-  if (phone.length < 10) return; // Precisa de pelo menos DDD + numero
+  if (!lead.raw) lead.raw = {};
+  lead.raw.phone_meta = {
+    digits: digits || null,
+    e164,
+    valid: digits ? e164 != null : null,
+    whatsapp_possible: digits ? e164 != null : null,
+  };
 
-  const ddd = phone.substring(0, 2);
+  // Padroniza o campo phone para facilitar uso no CRM/WhatsApp futuro
+  if (e164) lead.phone = e164;
+  else if (digits) lead.phone = digits;
+
+  const ddd = digits ? dddFromDigits(digits) : null;
+  if (!ddd) return;
+
   try {
     const res = await fetch(`https://brasilapi.com.br/api/ddd/v1/${ddd}`);
-    if (res.ok) {
-      const dddInfo = await res.json();
-      if (!lead.raw) lead.raw = {};
-      lead.raw.ddd_info = {
-        state: dddInfo.state,
-        cities: dddInfo.cities.slice(0, 5), // Limita para não poluir o JSON
-      };
-    }
+    if (!res.ok) return;
+    const dddInfo: any = await res.json();
+    lead.raw.ddd_info = {
+      state: dddInfo?.state ?? null,
+      cities: Array.isArray(dddInfo?.cities) ? dddInfo.cities.slice(0, 10) : [],
+    };
   } catch (error) {
-    console.error(`Falha ao enriquecer DDD ${ddd}:`, error.message);
+    console.error(`Falha ao enriquecer DDD ${ddd}:`, (error as any)?.message ?? error);
   }
 }
 
-/**
- * Distribuição de Leads (Roleta): Associa o lead a um vendedor.
- * A estratégia é pegar o vendedor com menos leads na empresa.
- * @param supabase - Cliente Supabase.
- * @param lead - O payload do lead.
- */
 async function assignLead(supabase: SupabaseClient, lead: LeadPayload): Promise<void> {
   try {
-    // 1. Buscar vendedores da empresa
-    const { data: sellers, error: sellerError } = await supabase
-      .from('company_members')
-      .select('user_id')
-      .eq('company_id', lead.company_id)
-      .eq('member_role', 'vendedor');
-
-    if (sellerError) throw sellerError;
-    if (!sellers || sellers.length === 0) {
-      console.log(`Sem vendedores para a empresa ${lead.company_id}.`);
-      return;
-    }
-
-    // 2. Encontrar o vendedor com menos leads associados
-    // Usamos um RPC para essa lógica ser reusável e eficiente no DB
-    const { data: targetSeller, error: rpcError } = await supabase.rpc(
-      'get_salesperson_with_fewest_leads',
-      { p_company_id: lead.company_id }
-    );
-
-    if (rpcError) throw rpcError;
-
-    if (targetSeller) {
-      lead.assigned_to = targetSeller;
-      if (!lead.raw) lead.raw = {};
-      lead.raw.assignment_log = `Assigned to ${targetSeller} via round-robin.`;
-    }
+    const { data: targetSeller, error } = await supabase.rpc('get_salesperson_with_fewest_leads', {
+      p_company_id: lead.company_id,
+    });
+    if (error) throw error;
+    if (!targetSeller) return;
+    lead.assigned_to = String(targetSeller);
+    if (!lead.raw) lead.raw = {};
+    lead.raw.assignment_log = `Assigned to ${lead.assigned_to} via round-robin.`;
   } catch (error) {
-    console.error(`Falha na distribuição de leads para a empresa ${lead.company_id}:`, error.message);
+    console.error(`Falha na distribuição de leads para a empresa ${lead.company_id}:`, (error as any)?.message ?? error);
   }
 }
 
-// --- Helpers ---
 const isFacebookWebhook = (body: any) => body && typeof body === 'object' && Array.isArray(body.entry);
 
 const jsonResponse = (status: number, data: unknown) =>
@@ -117,12 +111,11 @@ const jsonResponse = (status: number, data: unknown) =>
     headers: { ...corsHeaders, 'content-type': 'application/json' },
   });
 
-// --- Handler Principal da Edge Function ---
 serve(async (req) => {
   try {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
 
-    // Verificação do Facebook (GET)
+    // Facebook Webhook verification handshake (GET)
     if (req.method === 'GET') {
       const url = new URL(req.url);
       const mode = url.searchParams.get('hub.mode');
@@ -132,18 +125,21 @@ serve(async (req) => {
       if (mode === 'subscribe' && token && challenge && token === FB_VERIFY_TOKEN) {
         return new Response(challenge, { status: 200, headers: corsHeaders });
       }
+
       return jsonResponse(400, { ok: false, error: 'invalid webhook verification' });
     }
 
-    // A partir daqui, apenas POST
     if (req.method !== 'POST') return jsonResponse(405, { ok: false, error: 'method not allowed' });
 
-    // Validações de Segurança e Configuração
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return jsonResponse(500, { ok: false, error: 'missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY' });
     }
-    if (LEAD_WEBHOOK_SECRET && req.headers.get('x-webhook-secret') !== LEAD_WEBHOOK_SECRET) {
-      return jsonResponse(401, { ok: false, error: 'invalid webhook secret' });
+
+    if (LEAD_WEBHOOK_SECRET) {
+      const provided = req.headers.get('x-webhook-secret') ?? '';
+      if (provided !== LEAD_WEBHOOK_SECRET) {
+        return jsonResponse(401, { ok: false, error: 'invalid webhook secret' });
+      }
     }
 
     const companyId = new URL(req.url).searchParams.get('company_id') ?? req.headers.get('x-company-id');
@@ -152,38 +148,33 @@ serve(async (req) => {
     const body = await req.json().catch(() => null);
     if (!body) return jsonResponse(400, { ok: false, error: 'invalid json' });
 
-    const leadsToInsert: LeadPayload[] = [];
     const nowIso = new Date().toISOString();
+    const leadsToInsert: LeadPayload[] = [];
 
-    // Processa payload do Facebook Lead Ads
+    // Facebook Lead Ads payload: store leadgen_id as external_id
     if (isFacebookWebhook(body)) {
       for (const entry of body.entry) {
-        for (const change of entry?.changes ?? []) {
+        const changes: any[] = Array.isArray(entry?.changes) ? entry.changes : [];
+        for (const change of changes) {
           const value = change?.value ?? {};
           const leadgenId = value?.leadgen_id;
           if (!leadgenId) continue;
 
-          // NOTA: O payload real do FB com nome/email/telefone vem via API da Graph.
-          // Aqui, apenas registramos o ID. A proxima fase seria buscar os dados completos.
-          // Para a Fase 2, vamos simular dados para permitir o fluxo de roleta.
-          const lead: LeadPayload = {
+          leadsToInsert.push({
             company_id: companyId,
             external_id: String(leadgenId),
-            name: `Lead ${String(leadgenId).substring(0, 5)}`,
-            email: `lead_${String(leadgenId).substring(0, 5)}@fb.com`,
-            phone: `119${Math.floor(Math.random() * 90000000) + 10000000}`,
+            name: null,
+            email: null,
+            phone: null,
             status: 'new',
             source: 'Meta Lead Ads',
             last_interaction_at: nowIso,
             raw: body,
-          };
-          leadsToInsert.push(lead);
+          });
         }
       }
-    }
-    // Processa payload genérico (ex: Landing Page)
-    else {
-      const lead: LeadPayload = {
+    } else {
+      leadsToInsert.push({
         company_id: companyId,
         external_id: body.external_id ?? null,
         name: body.name ?? null,
@@ -196,30 +187,22 @@ serve(async (req) => {
         value: body.value ?? null,
         last_interaction_at: nowIso,
         raw: body.raw ?? body,
-      };
-      leadsToInsert.push(lead);
+      });
     }
 
-    if (leadsToInsert.length === 0) {
-      return jsonResponse(200, { ok: true, inserted: 0, message: 'No valid leads found in payload' });
-    }
+    if (leadsToInsert.length === 0) return jsonResponse(200, { ok: true, inserted: 0 });
 
-    // --- Executa a lógica da Fase 2 para cada lead ---
     for (const lead of leadsToInsert) {
       await enrichLead(lead);
       await assignLead(supabaseAdmin, lead);
     }
 
-    // --- Insere os leads no banco de dados ---
     const { error } = await supabaseAdmin.from('leads').upsert(leadsToInsert, {
-      onConflict: 'company_id, external_id',
-      ignoreDuplicates: false, // `false` para garantir que a atualização (roleta) ocorra se o lead já existir
+      onConflict: 'company_id,external_id',
+      ignoreDuplicates: false,
     });
 
-    if (error) {
-      console.error('Supabase error:', error);
-      return jsonResponse(500, { ok: false, error: error.message });
-    }
+    if (error) return jsonResponse(500, { ok: false, error: error.message });
 
     return jsonResponse(200, { ok: true, inserted: leadsToInsert.length });
   } catch (e: any) {
@@ -227,4 +210,3 @@ serve(async (req) => {
     return jsonResponse(500, { ok: false, error: e?.message ?? 'unknown error' });
   }
 });
-

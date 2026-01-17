@@ -54,6 +54,8 @@ export interface Lead {
   utm_campaign?: string;
   lastInteraction: string;
   value?: number;
+  assigned_to?: string;
+  raw?: any;
 }
 
 export interface ChatMessage {

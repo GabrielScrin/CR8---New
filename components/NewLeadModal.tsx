@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { Lead } from '../types';
 
@@ -7,6 +7,39 @@ interface NewLeadModalProps {
   onClose: () => void;
   onSave: (newLead: Lead) => void;
   companyId?: string;
+}
+
+type DddInfo = { state: string; cities: string[] };
+
+const onlyDigits = (value: string) => value.replace(/\D/g, '');
+
+const toE164BR = (digits: string): string | null => {
+  const d = onlyDigits(digits);
+  if (!d) return null;
+  if (d.startsWith('55') && (d.length === 12 || d.length === 13)) return `+${d}`;
+  if (d.length === 10 || d.length === 11) return `+55${d}`;
+  return null;
+};
+
+const dddFromDigits = (digits: string): string | null => {
+  const d = onlyDigits(digits);
+  if (d.startsWith('55') && d.length >= 4) return d.slice(2, 4);
+  if (d.length >= 2) return d.slice(0, 2);
+  return null;
+};
+
+async function fetchDddInfo(ddd: string): Promise<DddInfo | null> {
+  try {
+    const res = await fetch(`https://brasilapi.com.br/api/ddd/v1/${ddd}`);
+    if (!res.ok) return null;
+    const data = (await res.json()) as any;
+    return {
+      state: data?.state ?? '',
+      cities: Array.isArray(data?.cities) ? data.cities.slice(0, 10) : [],
+    };
+  } catch {
+    return null;
+  }
 }
 
 export const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onSave, companyId }) => {
@@ -18,51 +51,11 @@ export const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onS
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !companyId) {
-      setError('O nome do lead é obrigatório.');
-      return;
-    }
-    setLoading(true);
-    setError(null);
-
-    try {
-      // Usaremos um RPC para centralizar a lógica de criação e distribuição
-      const { data, error: rpcError } = await supabase.rpc('create_lead_manual', {
-        p_company_id: companyId,
-        p_name: name,
-        p_email: email || null,
-        p_phone: phone || null,
-        p_value: value ? parseFloat(value) : null,
-        p_source: source,
-      });
-
-      if (rpcError) throw rpcError;
-
-      // O RPC retorna o lead criado, podemos usar para atualizar a UI
-      const newLead = data[0];
-
-      onSave({
-        ...newLead,
-        // O RPC deve retornar todos os campos necessários,
-        // mas podemos preencher alguns defaults caso não venham.
-        id: newLead.id,
-        status: newLead.status || 'new',
-        lastInteraction: 'Agora',
-      });
-      
-      handleClose();
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || 'Ocorreu um erro ao criar o lead.');
-    } finally {
-      setLoading(false);
-    }
-  };
+  const phoneDigits = useMemo(() => onlyDigits(phone), [phone]);
+  const phoneE164 = useMemo(() => toE164BR(phone), [phone]);
+  const phoneValid = useMemo(() => phoneDigits.length === 0 || phoneE164 != null, [phoneDigits.length, phoneE164]);
 
   const handleClose = () => {
-    // Reset state
     setName('');
     setEmail('');
     setPhone('');
@@ -73,93 +66,179 @@ export const NewLeadModal: React.FC<NewLeadModalProps> = ({ isOpen, onClose, onS
     onClose();
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!companyId) {
+      setError('Empresa não definida.');
+      return;
+    }
+    if (!name.trim()) {
+      setError('O nome do lead é obrigatório.');
+      return;
+    }
+    if (!phoneValid) {
+      setError('Telefone inválido. Use DDD + número (ex: 11999999999).');
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const ddd = phoneDigits ? dddFromDigits(phoneDigits) : null;
+      const dddInfo = ddd ? await fetchDddInfo(ddd) : null;
+
+      const raw = {
+        phone_meta: {
+          digits: phoneDigits || null,
+          e164: phoneE164,
+          valid: phoneDigits ? phoneE164 != null : null,
+          whatsapp_possible: phoneDigits ? phoneE164 != null : null,
+        },
+        ddd_info: dddInfo,
+      };
+
+      const argsWithRaw: Record<string, unknown> = {
+        p_company_id: companyId,
+        p_name: name.trim(),
+        p_email: email.trim() || null,
+        p_phone: phoneE164 ?? (phoneDigits || null),
+        p_value: value ? parseFloat(value) : null,
+        p_source: source,
+        p_raw: raw,
+      };
+
+      let { data, error: rpcError } = await supabase.rpc('create_lead_manual', argsWithRaw);
+
+      if (rpcError) {
+        // Back-compat: DB ainda pode estar com a assinatura antiga (sem p_raw)
+        const msg = String(rpcError.message ?? '');
+        if (msg.includes('create_lead_manual') && msg.toLowerCase().includes('p_raw')) {
+          const { p_raw: _ignored, ...argsWithoutRaw } = argsWithRaw;
+          ({ data, error: rpcError } = await supabase.rpc('create_lead_manual', argsWithoutRaw));
+        }
+      }
+
+      if (rpcError) throw rpcError;
+
+      const newLead = Array.isArray(data) ? data[0] : null;
+      if (!newLead?.id) throw new Error('Falha ao criar lead.');
+
+      onSave({
+        id: newLead.id,
+        name: newLead.name ?? name.trim(),
+        phone: newLead.phone ?? (phoneE164 ?? phoneDigits),
+        email: newLead.email ?? email.trim(),
+        status: newLead.status ?? 'new',
+        source: newLead.source ?? source,
+        lastInteraction: 'Agora',
+        value: newLead.value ?? (value ? parseFloat(value) : undefined),
+        assigned_to: newLead.assigned_to ?? undefined,
+        raw: newLead.raw ?? undefined,
+      });
+
+      handleClose();
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || 'Ocorreu um erro ao criar o lead.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex justify-center items-center">
-      <div className="bg-white rounded-lg p-8 shadow-2xl w-full max-w-md">
-        <h2 className="text-2xl font-bold mb-6">Adicionar Novo Lead</h2>
-        
-        <form onSubmit={handleSubmit}>
-          <div className="space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+      <div className="cr8-card w-full max-w-md p-6">
+        <h2 className="text-xl font-bold text-[hsl(var(--foreground))]">Adicionar novo lead</h2>
+        <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">O lead será distribuído automaticamente (roleta).</p>
+
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Nome *</label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+              placeholder="Ex: Maria Souza"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">E-mail</label>
+            <input
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              type="email"
+              className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+              placeholder="email@dominio.com"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Telefone / WhatsApp</label>
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              type="tel"
+              className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+              placeholder="(11) 99999-9999"
+            />
+            {phoneDigits.length > 0 && (
+              <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+                Normalizado: {phoneE164 ?? 'inválido'} {phoneE164 ? '(E.164)' : ''}
+              </p>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-gray-700">Nome *</label>
+              <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Valor (R$)</label>
               <input
-                type="text"
-                id="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                required
+                value={value}
+                onChange={(e) => setValue(e.target.value)}
+                type="number"
+                step="0.01"
+                className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                placeholder="1500.00"
               />
             </div>
+
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-gray-700">Email</label>
-              <input
-                type="email"
-                id="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-            <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-gray-700">Telefone</label>
-              <input
-                type="tel"
-                id="phone"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-              />
-            </div>
-            <div className="flex space-x-4">
-                <div className="flex-1">
-                    <label htmlFor="value" className="block text-sm font-medium text-gray-700">Valor (R$)</label>
-                    <input
-                        type="number"
-                        id="value"
-                        value={value}
-                        onChange={(e) => setValue(e.target.value)}
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                        placeholder="1500.00"
-                    />
-                </div>
-                <div className="flex-1">
-                    <label htmlFor="source" className="block text-sm font-medium text-gray-700">Fonte</label>
-                    <select
-                        id="source"
-                        value={source}
-                        onChange={(e) => setSource(e.target.value)}
-                        className="mt-1 block w-full px-3 py-2 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    >
-                        <option>Manual</option>
-                        <option>Instagram</option>
-                        <option>WhatsApp</option>
-                        <option>Facebook</option>
-                        <option>Site</option>
-                    </select>
-                </div>
+              <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Fonte</label>
+              <select
+                value={source}
+                onChange={(e) => setSource(e.target.value)}
+                className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+              >
+                <option>Manual</option>
+                <option>Instagram</option>
+                <option>WhatsApp</option>
+                <option>Facebook</option>
+                <option>Site</option>
+              </select>
             </div>
           </div>
 
-          {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-[hsl(var(--destructive))]">{error}</p>}
 
-          <div className="mt-8 flex justify-end space-x-3">
+          <div className="mt-2 flex justify-end gap-2">
             <button
               type="button"
               onClick={handleClose}
               disabled={loading}
-              className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="px-4 py-2 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] disabled:opacity-50"
             >
               Cancelar
             </button>
             <button
               type="submit"
               disabled={loading}
-              className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
+              className="px-4 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 disabled:opacity-50"
             >
-              {loading ? 'Salvando...' : 'Salvar Lead'}
+              {loading ? 'Salvando...' : 'Salvar lead'}
             </button>
           </div>
         </form>
