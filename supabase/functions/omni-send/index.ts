@@ -3,16 +3,16 @@
 //
 // - Inserts the message into `public.chat_messages`
 // - Updates `public.chats.last_message(_at)`
-// - Optionally sends the message via WhatsApp provider (Evolution API) if configured
+// - Sends message via WhatsApp Cloud API (Meta) if configured
 //
 // Required env:
 // - SUPABASE_URL
 // - SUPABASE_SERVICE_ROLE_KEY
 //
-// Optional env (Evolution API):
-// - EVOLUTION_API_URL         e.g. https://evolution.yourdomain.com
-// - EVOLUTION_API_KEY
-// - EVOLUTION_INSTANCE        e.g. default
+// Optional env (WhatsApp Cloud API):
+// - WHATSAPP_ACCESS_TOKEN
+// - WHATSAPP_PHONE_NUMBER_ID
+// - WHATSAPP_API_VERSION (default: v20.0)
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
@@ -26,9 +26,9 @@ const corsHeaders: Record<string, string> = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-const EVOLUTION_API_URL = Deno.env.get('EVOLUTION_API_URL') ?? '';
-const EVOLUTION_API_KEY = Deno.env.get('EVOLUTION_API_KEY') ?? '';
-const EVOLUTION_INSTANCE = Deno.env.get('EVOLUTION_INSTANCE') ?? '';
+const WHATSAPP_ACCESS_TOKEN = Deno.env.get('WHATSAPP_ACCESS_TOKEN') ?? '';
+const WHATSAPP_PHONE_NUMBER_ID = Deno.env.get('WHATSAPP_PHONE_NUMBER_ID') ?? '';
+const WHATSAPP_API_VERSION = Deno.env.get('WHATSAPP_API_VERSION') ?? 'v20.0';
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
@@ -65,19 +65,24 @@ const decodeJwtSub = (authorizationHeader: string | null): string | null => {
   }
 };
 
-async function sendViaEvolution(to: string, text: string) {
-  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) return { ok: false, skipped: true };
+async function sendViaWhatsAppCloud(to: string, text: string) {
+  if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) return { ok: false, skipped: true };
 
-  const url = `${EVOLUTION_API_URL.replace(/\/+$/, '')}/message/sendText/${encodeURIComponent(EVOLUTION_INSTANCE)}`;
-  const number = normalizeWhatsAppNumber(to);
+  const number = normalizeWhatsAppNumber(to.replace(/@.*/, ''));
+  const url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${encodeURIComponent(WHATSAPP_PHONE_NUMBER_ID)}/messages`;
 
   const res = await fetch(url, {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      apikey: EVOLUTION_API_KEY,
+      authorization: `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
     },
-    body: JSON.stringify({ number, text }),
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to: number,
+      type: 'text',
+      text: { body: text },
+    }),
   });
 
   const payloadText = await res.text().catch(() => '');
@@ -139,7 +144,7 @@ serve(async (req) => {
 
     let provider: any = { ok: false, skipped: true };
     if (chat.platform === 'whatsapp' && chat.external_thread_id) {
-      provider = await sendViaEvolution(chat.external_thread_id, body.content);
+      provider = await sendViaWhatsAppCloud(chat.external_thread_id, body.content);
     }
 
     return jsonResponse(200, { ok: true, provider });

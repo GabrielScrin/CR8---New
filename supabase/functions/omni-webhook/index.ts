@@ -1,5 +1,5 @@
 // Supabase Edge Function: omni-webhook
-// Inbound omnichannel webhook (WhatsApp/Instagram/etc)
+// Inbound omnichannel webhook (WhatsApp Cloud API / Instagram / etc)
 //
 // Goals (Phase 3):
 // - Receive inbound messages from providers
@@ -16,6 +16,9 @@
 //
 // Optional env:
 // - OMNI_WEBHOOK_SECRET
+// - WHATSAPP_VERIFY_TOKEN (for Meta webhook verification)
+// - WHATSAPP_APP_SECRET (optional, to verify X-Hub-Signature-256)
+// - WHATSAPP_COMPANY_ID (fallback when webhook can't include company_id)
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
@@ -29,6 +32,9 @@ const corsHeaders: Record<string, string> = {
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const OMNI_WEBHOOK_SECRET = Deno.env.get('OMNI_WEBHOOK_SECRET') ?? '';
+const WHATSAPP_VERIFY_TOKEN = Deno.env.get('WHATSAPP_VERIFY_TOKEN') ?? '';
+const WHATSAPP_APP_SECRET = Deno.env.get('WHATSAPP_APP_SECRET') ?? '';
+const WHATSAPP_COMPANY_ID = Deno.env.get('WHATSAPP_COMPANY_ID') ?? '';
 
 const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
@@ -67,30 +73,81 @@ function parseInbound(body: any): ParsedInbound | null {
     };
   }
 
-  // Evolution API (best-effort)
-  // Common shapes vary by version; we attempt a few.
-  const evoMessage = body?.data?.message ?? body?.message ?? body?.data;
-  const evoText = evoMessage?.conversation ?? evoMessage?.extendedTextMessage?.text ?? body?.text;
-  const evoRemote = evoMessage?.key?.remoteJid ?? evoMessage?.remoteJid ?? body?.remoteJid;
-  if (typeof evoText === 'string' && typeof evoRemote === 'string') {
-    const contactName =
-      body?.data?.pushName ?? body?.pushName ?? evoMessage?.pushName ?? body?.data?.senderName ?? body?.senderName ?? null;
-    return {
-      platform: 'whatsapp',
-      threadId: evoRemote,
-      contactName,
-      from: evoRemote,
-      text: evoText,
-      timestamp: new Date().toISOString(),
-    };
+  // WhatsApp Cloud API (Meta)
+  // https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
+  if (body?.object === 'whatsapp_business_account' && Array.isArray(body?.entry)) {
+    for (const entry of body.entry) {
+      const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+      for (const change of changes) {
+        const value = change?.value ?? {};
+        const messages = Array.isArray(value?.messages) ? value.messages : [];
+        if (messages.length === 0) continue;
+
+        const contacts = Array.isArray(value?.contacts) ? value.contacts : [];
+        const contactName = contacts?.[0]?.profile?.name ?? null;
+
+        const msg = messages[0];
+        const from = msg?.from ? String(msg.from) : null;
+        const tsSec = msg?.timestamp ? Number(msg.timestamp) : null;
+        const timestamp = tsSec ? new Date(tsSec * 1000).toISOString() : new Date().toISOString();
+
+        let text = '';
+        if (msg?.type === 'text' && msg?.text?.body) text = String(msg.text.body);
+        else if (msg?.type === 'button' && msg?.button?.text) text = String(msg.button.text);
+        else if (msg?.type === 'interactive' && msg?.interactive) text = '[interactive]';
+        else text = '[mensagem]';
+
+        if (!from || !text) continue;
+        return { platform: 'whatsapp', threadId: from, contactName, from, text, timestamp };
+      }
+    }
   }
 
   return null;
 }
 
+const toHex = (buffer: ArrayBuffer) =>
+  Array.from(new Uint8Array(buffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+async function verifyMetaSignature(req: Request, rawBody: string): Promise<boolean> {
+  if (!WHATSAPP_APP_SECRET) return true;
+  const header = req.headers.get('x-hub-signature-256') ?? '';
+  const match = header.match(/^sha256=(.+)$/i);
+  if (!match) return false;
+  const expectedHex = match[1].toLowerCase();
+
+  const key = await crypto.subtle.importKey(
+    'raw',
+    new TextEncoder().encode(WHATSAPP_APP_SECRET),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign']
+  );
+  const sig = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody));
+  const actualHex = toHex(sig).toLowerCase();
+  return actualHex === expectedHex;
+}
+
 serve(async (req) => {
   try {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
+
+    // Meta webhook verification handshake (GET)
+    if (req.method === 'GET') {
+      const url = new URL(req.url);
+      const mode = url.searchParams.get('hub.mode');
+      const token = url.searchParams.get('hub.verify_token');
+      const challenge = url.searchParams.get('hub.challenge');
+
+      if (mode === 'subscribe' && token && challenge && token === WHATSAPP_VERIFY_TOKEN) {
+        return new Response(challenge, { status: 200, headers: corsHeaders });
+      }
+
+      return jsonResponse(403, { ok: false, error: 'invalid verification token' });
+    }
+
     if (req.method !== 'POST') return jsonResponse(405, { ok: false, error: 'method not allowed' });
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -104,14 +161,26 @@ serve(async (req) => {
       }
     }
 
-    const companyId = new URL(req.url).searchParams.get('company_id') ?? req.headers.get('x-company-id');
+    const companyId =
+      new URL(req.url).searchParams.get('company_id') ?? req.headers.get('x-company-id') ?? WHATSAPP_COMPANY_ID;
     if (!companyId) return jsonResponse(400, { ok: false, error: 'missing company_id' });
 
-    const body = await req.json().catch(() => null);
+    const rawBody = await req.text().catch(() => '');
+    if (!rawBody) return jsonResponse(400, { ok: false, error: 'missing body' });
+    if (!(await verifyMetaSignature(req, rawBody))) return jsonResponse(401, { ok: false, error: 'invalid signature' });
+
+    const body = (() => {
+      try {
+        return JSON.parse(rawBody);
+      } catch {
+        return null;
+      }
+    })();
     if (!body) return jsonResponse(400, { ok: false, error: 'invalid json' });
 
     const parsed = parseInbound(body);
-    if (!parsed) return jsonResponse(400, { ok: false, error: 'unsupported payload' });
+    // WhatsApp status updates have no messages; ignore them.
+    if (!parsed) return jsonResponse(200, { ok: true, inserted: 0 });
 
     const lastMessageAt = parsed.timestamp ? new Date(parsed.timestamp).toISOString() : new Date().toISOString();
 
