@@ -154,7 +154,10 @@ serve(async (req) => {
       return jsonResponse(500, { ok: false, error: 'missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY' });
     }
 
-    if (OMNI_WEBHOOK_SECRET) {
+    // For Meta (WhatsApp Cloud API) webhooks we rely on signature verification, not custom headers.
+    const hasMetaSignature = Boolean(req.headers.get('x-hub-signature-256'));
+
+    if (OMNI_WEBHOOK_SECRET && !hasMetaSignature) {
       const provided = req.headers.get('x-webhook-secret') ?? '';
       if (provided !== OMNI_WEBHOOK_SECRET) {
         return jsonResponse(401, { ok: false, error: 'invalid webhook secret' });
