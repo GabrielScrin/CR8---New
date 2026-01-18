@@ -75,33 +75,47 @@ function parseInbound(body: any): ParsedInbound | null {
 
   // WhatsApp Cloud API (Meta)
   // https://developers.facebook.com/docs/whatsapp/cloud-api/webhooks/components
-  if (body?.object === 'whatsapp_business_account' && Array.isArray(body?.entry)) {
+  //
+  // Obs: o "Teste" no painel da Meta às vezes envia apenas o `value` (sem `object/entry`),
+  // então aceitamos também formatos parciais.
+  const tryParseWhatsAppValue = (value: any): ParsedInbound | null => {
+    const messages = Array.isArray(value?.messages) ? value.messages : [];
+    if (messages.length === 0) return null;
+
+    const contacts = Array.isArray(value?.contacts) ? value.contacts : [];
+    const contactName = contacts?.[0]?.profile?.name ?? null;
+
+    const msg = messages[0];
+    const from = msg?.from ? String(msg.from) : null;
+    const tsSec = msg?.timestamp ? Number(msg.timestamp) : null;
+    const timestamp = tsSec ? new Date(tsSec * 1000).toISOString() : new Date().toISOString();
+
+    let text = '';
+    if (msg?.type === 'text' && msg?.text?.body) text = String(msg.text.body);
+    else if (msg?.type === 'button' && msg?.button?.text) text = String(msg.button.text);
+    else if (msg?.type === 'interactive' && msg?.interactive) text = '[interactive]';
+    else text = '[mensagem]';
+
+    if (!from || !text) return null;
+    return { platform: 'whatsapp', threadId: from, contactName, from, text, timestamp };
+  };
+
+  // Full envelope
+  if (Array.isArray(body?.entry) && (body?.object === 'whatsapp_business_account' || body?.object == null)) {
     for (const entry of body.entry) {
       const changes = Array.isArray(entry?.changes) ? entry.changes : [];
       for (const change of changes) {
-        const value = change?.value ?? {};
-        const messages = Array.isArray(value?.messages) ? value.messages : [];
-        if (messages.length === 0) continue;
-
-        const contacts = Array.isArray(value?.contacts) ? value.contacts : [];
-        const contactName = contacts?.[0]?.profile?.name ?? null;
-
-        const msg = messages[0];
-        const from = msg?.from ? String(msg.from) : null;
-        const tsSec = msg?.timestamp ? Number(msg.timestamp) : null;
-        const timestamp = tsSec ? new Date(tsSec * 1000).toISOString() : new Date().toISOString();
-
-        let text = '';
-        if (msg?.type === 'text' && msg?.text?.body) text = String(msg.text.body);
-        else if (msg?.type === 'button' && msg?.button?.text) text = String(msg.button.text);
-        else if (msg?.type === 'interactive' && msg?.interactive) text = '[interactive]';
-        else text = '[mensagem]';
-
-        if (!from || !text) continue;
-        return { platform: 'whatsapp', threadId: from, contactName, from, text, timestamp };
+        const parsed = tryParseWhatsAppValue(change?.value ?? {});
+        if (parsed) return parsed;
       }
     }
   }
+
+  // Test payloads sometimes send `value` directly or nested
+  const parsedDirect = tryParseWhatsAppValue(body);
+  if (parsedDirect) return parsedDirect;
+  const parsedNested = tryParseWhatsAppValue(body?.value);
+  if (parsedNested) return parsedNested;
 
   return null;
 }
