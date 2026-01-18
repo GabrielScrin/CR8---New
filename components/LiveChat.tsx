@@ -399,10 +399,16 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
     setError(null);
 
     try {
-      const { error: fnError } = await supabase.functions.invoke('omni-send', {
+      const { data, error: fnError } = await supabase.functions.invoke('omni-send', {
         body: { chat_id: activeChatId, content },
       });
       if (fnError) throw fnError;
+
+      const provider = (data as any)?.provider;
+      if (provider && provider.ok === false && provider.skipped !== true) {
+        const status = provider.status ? `HTTP ${provider.status}` : 'erro';
+        setError(`Mensagem salva, mas o provedor recusou o envio (${status}).`);
+      }
     } catch (e: any) {
       console.error(e);
       const baseMsg = String(e?.message ?? 'Falha ao enviar mensagem.');
