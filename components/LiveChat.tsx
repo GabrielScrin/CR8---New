@@ -111,20 +111,29 @@ const CreateChatModal: React.FC<{
 
     setLoading(true);
     try {
-      const { data, error: insError } = await supabase
-        .from('chats')
-        .insert([
-          {
-            company_id: companyId,
-            platform,
-            external_thread_id: threadId.trim(),
-            last_message: null,
-            last_message_at: null,
-            raw: { contact_name: contactName.trim() || null, from: threadId.trim() },
-          } as any,
-        ])
-        .select('id')
-        .maybeSingle();
+      const payloadWithRaw: any = {
+        company_id: companyId,
+        platform,
+        external_thread_id: threadId.trim(),
+        last_message: null,
+        last_message_at: null,
+        raw: { contact_name: contactName.trim() || null, from: threadId.trim() },
+      };
+
+      let { data, error: insError } = await supabase.from('chats').insert([payloadWithRaw]).select('id').maybeSingle();
+
+      if (insError) {
+        const msg = String(insError.message ?? '');
+        const isRawCacheError =
+          msg.toLowerCase().includes('raw') &&
+          (msg.toLowerCase().includes('schema cache') || msg.toLowerCase().includes('could not find'));
+
+        // Back-compat: se o schema ainda não tem a coluna `raw`, tenta criar sem ela.
+        if (isRawCacheError) {
+          const { raw: _raw, ...payloadWithoutRaw } = payloadWithRaw;
+          ({ data, error: insError } = await supabase.from('chats').insert([payloadWithoutRaw]).select('id').maybeSingle());
+        }
+      }
 
       if (insError) throw insError;
       if (!data?.id) throw new Error('Falha ao criar conversa.');
@@ -240,18 +249,42 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
     setError(null);
     setLoading(true);
     try {
-      const [{ data: chatRows, error: chatError }, { data: readsRows, error: readsError }] = await Promise.all([
-        supabase
-          .from('chats')
-          .select('id, company_id, platform, external_thread_id, last_message, last_message_at, ai_active, taken_by, taken_at, tags, raw')
-          .eq('company_id', companyId)
-          .order('last_message_at', { ascending: false })
-          .limit(200),
+      const [{ data: readsRows, error: readsError }] = await Promise.all([
         supabase.from('chat_reads').select('chat_id, last_read_at').order('last_read_at', { ascending: false }),
       ]);
-
-      if (chatError) throw chatError;
       if (readsError) throw readsError;
+
+      // Prefer carregar `raw` quando existir. Se o PostgREST ainda não atualizou o schema cache, faz fallback.
+      let chatRows: any[] | null = null;
+      let chatError: any = null;
+
+      ({ data: chatRows, error: chatError } = await supabase
+        .from('chats')
+        .select(
+          'id, company_id, platform, external_thread_id, last_message, last_message_at, ai_active, taken_by, taken_at, tags, raw'
+        )
+        .eq('company_id', companyId)
+        .order('last_message_at', { ascending: false })
+        .limit(200));
+
+      if (chatError) {
+        const msg = String(chatError.message ?? '');
+        const isRawCacheError =
+          msg.toLowerCase().includes('raw') &&
+          (msg.toLowerCase().includes('schema cache') || msg.toLowerCase().includes('could not find'));
+
+        if (!isRawCacheError) throw chatError;
+
+        ({ data: chatRows, error: chatError } = await supabase
+          .from('chats')
+          .select('id, company_id, platform, external_thread_id, last_message, last_message_at, ai_active, taken_by, taken_at, tags')
+          .eq('company_id', companyId)
+          .order('last_message_at', { ascending: false })
+          .limit(200));
+
+        if (chatError) throw chatError;
+        chatRows = (chatRows ?? []).map((c) => ({ ...c, raw: {} }));
+      }
 
       const chatsMapped = (chatRows ?? []) as unknown as ChatRow[];
       setChats(chatsMapped);
