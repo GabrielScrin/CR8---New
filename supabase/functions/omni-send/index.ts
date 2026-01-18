@@ -47,22 +47,12 @@ type SendBody = {
 
 const normalizeWhatsAppNumber = (value: string): string => value.replace(/\D/g, '');
 
-const decodeJwtSub = (authorizationHeader: string | null): string | null => {
+const extractBearerToken = (authorizationHeader: string | null): string | null => {
   if (!authorizationHeader) return null;
   const match = authorizationHeader.match(/^Bearer\s+(.+)$/i);
   if (!match) return null;
-  const token = match[1];
-  const parts = token.split('.');
-  if (parts.length < 2) return null;
-  try {
-    const payload = parts[1].replace(/-/g, '+').replace(/_/g, '/');
-    const padded = payload + '='.repeat((4 - (payload.length % 4)) % 4);
-    const json = atob(padded);
-    const obj = JSON.parse(json);
-    return typeof obj?.sub === 'string' ? obj.sub : null;
-  } catch {
-    return null;
-  }
+  const token = match[1]?.trim();
+  return token ? token : null;
 };
 
 async function sendViaWhatsAppCloud(to: string, text: string) {
@@ -103,8 +93,14 @@ serve(async (req) => {
     if (!body?.chat_id || !body?.content) return jsonResponse(400, { ok: false, error: 'missing chat_id/content' });
 
     // verify_jwt should be enabled for this function; we still check the caller belongs to the chat's company.
-    const userId = decodeJwtSub(req.headers.get('authorization'));
-    if (!userId) return jsonResponse(401, { ok: false, error: 'missing/invalid authorization' });
+    const token = extractBearerToken(req.headers.get('authorization'));
+    if (!token) return jsonResponse(401, { ok: false, error: 'missing authorization' });
+
+    // More robust than decoding JWT locally (and avoids edge runtime differences).
+    const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token);
+    if (authError) return jsonResponse(401, { ok: false, error: authError.message });
+    const userId = authData?.user?.id;
+    if (!userId) return jsonResponse(401, { ok: false, error: 'invalid session' });
 
     const { data: chat, error: chatError } = await supabaseAdmin
       .from('chats')

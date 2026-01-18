@@ -405,7 +405,16 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
       if (fnError) throw fnError;
     } catch (e: any) {
       console.error(e);
-      setError(e?.message ?? 'Falha ao enviar mensagem.');
+      const baseMsg = String(e?.message ?? 'Falha ao enviar mensagem.');
+      const status = e?.context?.status;
+      const body = e?.context?.body;
+
+      const details =
+        typeof status === 'number'
+          ? ` (HTTP ${status}${body ? `: ${typeof body === 'string' ? body : JSON.stringify(body)}` : ''})`
+          : '';
+
+      setError(`${baseMsg}${details}`);
     }
   }, [activeChatId, messageInput]);
 
