@@ -402,10 +402,16 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
       // Garanta que o JWT vá no header (evita 401 do gateway quando o invoke não anexa o token em alguns fluxos).
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        throw new Error('Sessão inválida. Faça logout/login e tente novamente.');
+      }
 
       const { data, error: fnError } = await supabase.functions.invoke('omni-send', {
         body: { chat_id: activeChatId, content },
-        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          authorization: `Bearer ${accessToken}`,
+        },
       });
       if (fnError) throw fnError;
 

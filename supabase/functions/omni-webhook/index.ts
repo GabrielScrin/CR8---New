@@ -155,6 +155,11 @@ serve(async (req) => {
       const token = url.searchParams.get('hub.verify_token');
       const challenge = url.searchParams.get('hub.challenge');
 
+      // Health check (useful to confirm the function is deployed/reachable)
+      if (!mode && !token && !challenge) {
+        return jsonResponse(200, { ok: true });
+      }
+
       if (mode === 'subscribe' && token && challenge && token === WHATSAPP_VERIFY_TOKEN) {
         return new Response(challenge, { status: 200, headers: corsHeaders });
       }
