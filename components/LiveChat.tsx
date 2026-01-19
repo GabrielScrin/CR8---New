@@ -234,6 +234,11 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
   const [messages, setMessages] = useState<MessageRow[]>([]);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [companyInfo, setCompanyInfo] = useState<{
+    name: string | null;
+    whatsapp_phone_number_id: string | null;
+    whatsapp_waba_id: string | null;
+  } | null>(null);
 
   const activeChat = useMemo(() => chats.find((c) => c.id === activeChatId) ?? null, [chats, activeChatId]);
   const sessions: ChatSession[] = useMemo(() => chats.map((c) => toChatSession(c, unreadByChatId[c.id] ?? 0)), [chats, unreadByChatId]);
@@ -243,6 +248,31 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
     if (!q) return sessions;
     return sessions.filter((s) => `${s.contactName} ${s.lastMessage}`.toLowerCase().includes(q));
   }, [sessions, search]);
+
+  useEffect(() => {
+    if (readOnlyMode || !companyId) return;
+    let cancelled = false;
+    void (async () => {
+      const { data, error } = await supabase
+        .from('companies')
+        .select('name, whatsapp_phone_number_id, whatsapp_waba_id')
+        .eq('id', companyId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        setCompanyInfo(null);
+        return;
+      }
+      setCompanyInfo({
+        name: (data as any)?.name ?? null,
+        whatsapp_phone_number_id: (data as any)?.whatsapp_phone_number_id ?? null,
+        whatsapp_waba_id: (data as any)?.whatsapp_waba_id ?? null,
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, readOnlyMode]);
 
   const loadChats = useCallback(async () => {
     if (readOnlyMode || !companyId) return;
@@ -407,7 +437,7 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
       }
 
       const { data, error: fnError } = await supabase.functions.invoke('omni-send', {
-        body: { chat_id: activeChatId, content },
+        body: { chat_id: activeChatId, content, access_token: accessToken },
         headers: {
           Authorization: `Bearer ${accessToken}`,
           authorization: `Bearer ${accessToken}`,
@@ -517,6 +547,26 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
                 placeholder="Buscar conversa..."
                 className="w-full pl-10 pr-3 py-2 rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
               />
+            </div>
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-3 text-xs">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[hsl(var(--muted-foreground))]">Empresa</span>
+                <span className="text-[hsl(var(--foreground))] font-medium truncate max-w-[12rem]">
+                  {companyInfo?.name ?? (companyId ? `${companyId.slice(0, 8)}…` : '—')}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 mt-2">
+                <span className="text-[hsl(var(--muted-foreground))]">WA phone_number_id</span>
+                <span className="text-[hsl(var(--foreground))] font-mono truncate max-w-[12rem]">
+                  {companyInfo?.whatsapp_phone_number_id ?? '—'}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-3 mt-2">
+                <span className="text-[hsl(var(--muted-foreground))]">WABA</span>
+                <span className="text-[hsl(var(--foreground))] font-mono truncate max-w-[12rem]">
+                  {companyInfo?.whatsapp_waba_id ?? '—'}
+                </span>
+              </div>
             </div>
           </div>
           <div className="flex-1 overflow-y-auto">

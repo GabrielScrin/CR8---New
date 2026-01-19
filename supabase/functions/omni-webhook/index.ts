@@ -163,6 +163,19 @@ function extractWhatsAppPhoneNumberId(body: any): string | null {
   return null;
 }
 
+function extractWhatsAppWabaId(body: any): string | null {
+  // Full envelope: entry.id is the WhatsApp Business Account ID (WABA ID)
+  if (Array.isArray(body?.entry)) {
+    const first = body.entry?.[0];
+    if (first?.id) return String(first.id);
+  }
+
+  // Some test payloads may include id at top-level
+  if (body?.id) return String(body.id);
+
+  return null;
+}
+
 serve(async (req) => {
   try {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -226,6 +239,18 @@ serve(async (req) => {
           .from('companies')
           .select('id')
           .eq('whatsapp_phone_number_id', phoneNumberId)
+          .maybeSingle();
+        if (companyError) return jsonResponse(500, { ok: false, error: companyError.message });
+        companyId = company?.id ?? null;
+      }
+    }
+    if (!companyId) {
+      const wabaId = extractWhatsAppWabaId(body);
+      if (wabaId) {
+        const { data: company, error: companyError } = await supabaseAdmin
+          .from('companies')
+          .select('id')
+          .eq('whatsapp_waba_id', wabaId)
           .maybeSingle();
         if (companyError) return jsonResponse(500, { ok: false, error: companyError.message });
         companyId = company?.id ?? null;

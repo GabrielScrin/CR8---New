@@ -43,6 +43,7 @@ const jsonResponse = (status: number, data: unknown) =>
 type SendBody = {
   chat_id: string;
   content: string;
+  access_token?: string;
 };
 
 const normalizeWhatsAppNumber = (value: string): string => value.replace(/\D/g, '');
@@ -55,11 +56,25 @@ const extractBearerToken = (authorizationHeader: string | null): string | null =
   return token ? token : null;
 };
 
-async function sendViaWhatsAppCloud(to: string, text: string) {
-  if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) return { ok: false, skipped: true };
+const extractAccessToken = (req: Request, body: SendBody): string | null => {
+  const headerToken = extractBearerToken(req.headers.get('authorization')) ?? extractBearerToken(req.headers.get('Authorization'));
+  if (headerToken) return headerToken;
+
+  const customHeaderToken =
+    extractBearerToken(req.headers.get('x-supabase-auth')) ??
+    extractBearerToken(req.headers.get('x-access-token')) ??
+    extractBearerToken(req.headers.get('x-token'));
+  if (customHeaderToken) return customHeaderToken;
+
+  if (typeof body?.access_token === 'string' && body.access_token.trim()) return body.access_token.trim();
+  return null;
+};
+
+async function sendViaWhatsAppCloud(phoneNumberId: string, to: string, text: string) {
+  if (!WHATSAPP_ACCESS_TOKEN || !phoneNumberId) return { ok: false, skipped: true };
 
   const number = normalizeWhatsAppNumber(to.replace(/@.*/, ''));
-  const url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${encodeURIComponent(WHATSAPP_PHONE_NUMBER_ID)}/messages`;
+  const url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${encodeURIComponent(phoneNumberId)}/messages`;
 
   const res = await fetch(url, {
     method: 'POST',
@@ -93,8 +108,14 @@ serve(async (req) => {
     if (!body?.chat_id || !body?.content) return jsonResponse(400, { ok: false, error: 'missing chat_id/content' });
 
     // verify_jwt should be enabled for this function; we still check the caller belongs to the chat's company.
-    const token = extractBearerToken(req.headers.get('authorization'));
-    if (!token) return jsonResponse(401, { ok: false, error: 'missing authorization' });
+    const token = extractAccessToken(req, body);
+    if (!token) {
+      return jsonResponse(401, {
+        ok: false,
+        error: 'missing authorization',
+        hint: 'envie o access_token do Supabase via header Authorization: Bearer <token> (ou body.access_token)',
+      });
+    }
 
     // More robust than decoding JWT locally (and avoids edge runtime differences).
     const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token);
@@ -140,7 +161,19 @@ serve(async (req) => {
 
     let provider: any = { ok: false, skipped: true };
     if (chat.platform === 'whatsapp' && chat.external_thread_id) {
-      provider = await sendViaWhatsAppCloud(chat.external_thread_id, body.content);
+      const { data: company, error: companyError } = await supabaseAdmin
+        .from('companies')
+        .select('whatsapp_phone_number_id')
+        .eq('id', (chat as any).company_id)
+        .maybeSingle();
+      if (companyError) return jsonResponse(500, { ok: false, error: companyError.message });
+
+      const phoneNumberId = (company as any)?.whatsapp_phone_number_id || WHATSAPP_PHONE_NUMBER_ID;
+      if (!phoneNumberId) {
+        provider = { ok: false, skipped: true, reason: 'missing WHATSAPP_PHONE_NUMBER_ID (env or companies.whatsapp_phone_number_id)' };
+      } else {
+        provider = await sendViaWhatsAppCloud(String(phoneNumberId), chat.external_thread_id, body.content);
+      }
     }
 
     return jsonResponse(200, { ok: true, provider });
