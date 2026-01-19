@@ -205,6 +205,8 @@ serve(async (req) => {
       return jsonResponse(500, { ok: false, error: 'missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY' });
     }
 
+    console.log('[omni-webhook] inbound request', { method: req.method, url: req.url });
+
     // For Meta (WhatsApp Cloud API) webhooks we rely on signature verification, not custom headers.
     const hasMetaSignature = Boolean(req.headers.get('x-hub-signature-256'));
 
@@ -216,8 +218,14 @@ serve(async (req) => {
     }
 
     const rawBody = await req.text().catch(() => '');
-    if (!rawBody) return jsonResponse(400, { ok: false, error: 'missing body' });
-    if (!(await verifyMetaSignature(req, rawBody))) return jsonResponse(401, { ok: false, error: 'invalid signature' });
+    if (!rawBody) {
+      console.warn('[omni-webhook] missing body');
+      return jsonResponse(400, { ok: false, error: 'missing body' });
+    }
+    if (!(await verifyMetaSignature(req, rawBody))) {
+      console.warn('[omni-webhook] invalid signature');
+      return jsonResponse(401, { ok: false, error: 'invalid signature' });
+    }
 
     const body = (() => {
       try {
@@ -226,14 +234,25 @@ serve(async (req) => {
         return null;
       }
     })();
-    if (!body) return jsonResponse(400, { ok: false, error: 'invalid json' });
+    if (!body) {
+      console.warn('[omni-webhook] invalid json');
+      return jsonResponse(400, { ok: false, error: 'invalid json' });
+    }
 
     const url = new URL(req.url);
     const companyIdFromReq = url.searchParams.get('company_id') ?? req.headers.get('x-company-id');
 
     let companyId = companyIdFromReq ?? null;
+    const phoneNumberId = extractWhatsAppPhoneNumberId(body);
+    const wabaId = extractWhatsAppWabaId(body);
+
+    console.log('[omni-webhook] routing hints', {
+      companyIdFromReq: companyIdFromReq ? String(companyIdFromReq).slice(0, 8) : null,
+      phoneNumberId,
+      wabaId,
+    });
+
     if (!companyId) {
-      const phoneNumberId = extractWhatsAppPhoneNumberId(body);
       if (phoneNumberId) {
         const { data: company, error: companyError } = await supabaseAdmin
           .from('companies')
@@ -245,7 +264,6 @@ serve(async (req) => {
       }
     }
     if (!companyId) {
-      const wabaId = extractWhatsAppWabaId(body);
       if (wabaId) {
         const { data: company, error: companyError } = await supabaseAdmin
           .from('companies')
@@ -257,11 +275,21 @@ serve(async (req) => {
       }
     }
     if (!companyId) companyId = WHATSAPP_COMPANY_ID || null;
-    if (!companyId) return jsonResponse(400, { ok: false, error: 'missing company_id' });
+    if (!companyId) {
+      console.warn('[omni-webhook] missing company_id (no mapping matched)');
+      return jsonResponse(400, { ok: false, error: 'missing company_id' });
+    }
+
+    console.log('[omni-webhook] resolved company', { companyId: String(companyId).slice(0, 8) });
 
     const parsed = parseInbound(body);
     // WhatsApp status updates have no messages; ignore them.
-    if (!parsed) return jsonResponse(200, { ok: true, inserted: 0 });
+    if (!parsed) {
+      console.log('[omni-webhook] no message payload (ignored)');
+      return jsonResponse(200, { ok: true, inserted: 0 });
+    }
+
+    console.log('[omni-webhook] parsed', { platform: parsed.platform, threadId: parsed.threadId, timestamp: parsed.timestamp ?? null });
 
     const lastMessageAt = parsed.timestamp ? new Date(parsed.timestamp).toISOString() : new Date().toISOString();
 
@@ -292,6 +320,8 @@ serve(async (req) => {
     if (chatError) return jsonResponse(500, { ok: false, error: chatError.message });
     if (!chat?.id) return jsonResponse(500, { ok: false, error: 'failed to upsert chat' });
 
+    console.log('[omni-webhook] upserted chat', { chat_id: String(chat.id) });
+
     const { error: msgError } = await supabaseAdmin.from('chat_messages').insert([
       {
         chat_id: chat.id,
@@ -302,10 +332,14 @@ serve(async (req) => {
       },
     ] as any);
 
-    if (msgError) return jsonResponse(500, { ok: false, error: msgError.message });
+    if (msgError) {
+      console.error('[omni-webhook] failed to insert message', { error: msgError.message });
+      return jsonResponse(500, { ok: false, error: msgError.message });
+    }
 
     return jsonResponse(200, { ok: true, chat_id: chat.id });
   } catch (e: any) {
+    console.error('[omni-webhook] unhandled error', { error: e?.message ?? String(e) });
     return jsonResponse(500, { ok: false, error: e?.message ?? 'unknown error' });
   }
 });
