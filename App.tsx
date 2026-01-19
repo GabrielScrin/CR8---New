@@ -6,6 +6,7 @@ import { TrafficAnalytics } from './components/TrafficAnalytics';
 import { CRM } from './components/CRM';
 import { LiveChat } from './components/LiveChat';
 import { CompanySetup } from './components/CompanySetup';
+import { ContactsLeads } from './components/ContactsLeads';
 import { Role, User } from './types';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 
@@ -123,7 +124,7 @@ export default function App() {
       case 'livechat':
         return <LiveChat companyId={user.companyId} userId={user.id} />;
       case 'contacts':
-        return <PlaceholderView title="Contatos & Leads" />;
+        return <ContactsLeads companyId={user.companyId} />;
       case 'forms':
         return <PlaceholderView title="Quiz & Formulários" />;
       case 'instagram':
