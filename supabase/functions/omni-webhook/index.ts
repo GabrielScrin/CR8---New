@@ -144,6 +144,25 @@ async function verifyMetaSignature(req: Request, rawBody: string): Promise<boole
   return actualHex === expectedHex;
 }
 
+function extractWhatsAppPhoneNumberId(body: any): string | null {
+  // Full envelope
+  if (Array.isArray(body?.entry)) {
+    for (const entry of body.entry) {
+      const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+      for (const change of changes) {
+        const id = change?.value?.metadata?.phone_number_id;
+        if (id) return String(id);
+      }
+    }
+  }
+
+  // Meta test payloads can send `value` only
+  if (body?.value?.metadata?.phone_number_id) return String(body.value.metadata.phone_number_id);
+  if (body?.metadata?.phone_number_id) return String(body.metadata.phone_number_id);
+
+  return null;
+}
+
 serve(async (req) => {
   try {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -183,10 +202,6 @@ serve(async (req) => {
       }
     }
 
-    const companyId =
-      new URL(req.url).searchParams.get('company_id') ?? req.headers.get('x-company-id') ?? WHATSAPP_COMPANY_ID;
-    if (!companyId) return jsonResponse(400, { ok: false, error: 'missing company_id' });
-
     const rawBody = await req.text().catch(() => '');
     if (!rawBody) return jsonResponse(400, { ok: false, error: 'missing body' });
     if (!(await verifyMetaSignature(req, rawBody))) return jsonResponse(401, { ok: false, error: 'invalid signature' });
@@ -199,6 +214,25 @@ serve(async (req) => {
       }
     })();
     if (!body) return jsonResponse(400, { ok: false, error: 'invalid json' });
+
+    const url = new URL(req.url);
+    const companyIdFromReq = url.searchParams.get('company_id') ?? req.headers.get('x-company-id');
+
+    let companyId = companyIdFromReq ?? null;
+    if (!companyId) {
+      const phoneNumberId = extractWhatsAppPhoneNumberId(body);
+      if (phoneNumberId) {
+        const { data: company, error: companyError } = await supabaseAdmin
+          .from('companies')
+          .select('id')
+          .eq('whatsapp_phone_number_id', phoneNumberId)
+          .maybeSingle();
+        if (companyError) return jsonResponse(500, { ok: false, error: companyError.message });
+        companyId = company?.id ?? null;
+      }
+    }
+    if (!companyId) companyId = WHATSAPP_COMPANY_ID || null;
+    if (!companyId) return jsonResponse(400, { ok: false, error: 'missing company_id' });
 
     const parsed = parseInbound(body);
     // WhatsApp status updates have no messages; ignore them.

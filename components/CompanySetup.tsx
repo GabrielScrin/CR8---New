@@ -15,6 +15,7 @@ const normalizeAdAccountId = (id: string) => {
 export const CompanySetup: React.FC<CompanySetupProps> = ({ onDone }) => {
   const [companyName, setCompanyName] = useState('');
   const [metaAdAccountId, setMetaAdAccountId] = useState('');
+  const [whatsAppPhoneNumberId, setWhatsAppPhoneNumberId] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -29,8 +30,12 @@ export const CompanySetup: React.FC<CompanySetupProps> = ({ onDone }) => {
       if (!companyId) throw new Error('Não foi possível criar a empresa.');
 
       const normalized = normalizeAdAccountId(metaAdAccountId);
-      if (normalized) {
-        const { error: updateError } = await supabase.from('companies').update({ meta_ad_account_id: normalized }).eq('id', companyId);
+      const updatePayload: any = {};
+      if (normalized) updatePayload.meta_ad_account_id = normalized;
+      if (whatsAppPhoneNumberId.trim()) updatePayload.whatsapp_phone_number_id = whatsAppPhoneNumberId.trim();
+
+      if (Object.keys(updatePayload).length > 0) {
+        const { error: updateError } = await supabase.from('companies').update(updatePayload).eq('id', companyId);
         if (updateError) throw updateError;
       }
 
@@ -83,6 +88,19 @@ export const CompanySetup: React.FC<CompanySetupProps> = ({ onDone }) => {
             </p>
           </div>
 
+          <div>
+            <label className="block text-sm font-medium text-gray-700">WhatsApp Phone Number ID (opcional)</label>
+            <input
+              value={whatsAppPhoneNumberId}
+              onChange={(e) => setWhatsAppPhoneNumberId(e.target.value)}
+              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              placeholder="Ex: 123456789012345"
+            />
+            <p className="text-xs text-gray-400 mt-1">
+              Use para vincular webhooks do WhatsApp a esta empresa. Você encontra em WhatsApp Manager (Phone Numbers) ou no payload do webhook (`metadata.phone_number_id`).
+            </p>
+          </div>
+
           <button
             type="submit"
             disabled={loading}
@@ -97,4 +115,3 @@ export const CompanySetup: React.FC<CompanySetupProps> = ({ onDone }) => {
     </div>
   );
 };
-
