@@ -7,6 +7,7 @@ import { CRM } from './components/CRM';
 import { LiveChat } from './components/LiveChat';
 import { CompanySetup } from './components/CompanySetup';
 import { ContactsLeads } from './components/ContactsLeads';
+import { AIAgent } from './components/AIAgent';
 import { Role, User } from './types';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 
@@ -132,7 +133,7 @@ export default function App() {
       case 'whatsapp':
         return <PlaceholderView title="Disparador WhatsApp" />;
       case 'ai':
-        return <PlaceholderView title="Configuração de Agente" />;
+        return <AIAgent companyId={user.companyId} />;
       case 'settings':
         return <PlaceholderView title="Configurações Gerais" />;
       default:

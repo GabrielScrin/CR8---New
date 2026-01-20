@@ -228,6 +228,7 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
   const [loading, setLoading] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [aiSuggesting, setAiSuggesting] = useState(false);
 
   const [chats, setChats] = useState<ChatRow[]>([]);
   const [unreadByChatId, setUnreadByChatId] = useState<Record<string, number>>({});
@@ -465,6 +466,41 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
     }
   }, [activeChatId, messageInput]);
 
+  const suggestSdrReply = useCallback(async () => {
+    if (!activeChatId) return;
+    setError(null);
+    setAiSuggesting(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) {
+        throw new Error('Sessão inválida. Faça logout/login e tente novamente.');
+      }
+
+      const { data, error: fnError } = await supabase.functions.invoke('ai-assistant', {
+        body: { mode: 'sdr_reply', chat_id: activeChatId },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          authorization: `Bearer ${accessToken}`,
+        },
+      });
+      if (fnError) throw fnError;
+
+      const result = (data as any)?.result ?? {};
+      const reply = (result as any)?.reply;
+      if (!reply || typeof reply !== 'string') {
+        throw new Error('A IA não retornou uma sugestão de resposta.');
+      }
+
+      setMessageInput(reply);
+    } catch (e: any) {
+      console.error(e);
+      setError(e?.message ?? 'Falha ao gerar sugestão IA.');
+    } finally {
+      setAiSuggesting(false);
+    }
+  }, [activeChatId]);
+
   const toggleAi = useCallback(async () => {
     if (!activeChat) return;
     try {
@@ -679,6 +715,18 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
                     <Bot className={`w-4 h-4 ${activeChat.ai_active ? 'text-[hsl(var(--primary))]' : 'text-[hsl(var(--muted-foreground))]'}`} />
                     <span className="text-xs font-medium text-[hsl(var(--foreground))]">
                       {activeChat.ai_active ? 'IA ativa' : 'IA off'}
+                    </span>
+                  </button>
+
+                  <button
+                    onClick={() => void suggestSdrReply()}
+                    disabled={aiSuggesting}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] hover:bg-[hsl(var(--secondary)/0.8)] disabled:opacity-50"
+                    title="Gerar sugestão de resposta (SDR IA)"
+                  >
+                    <Bot className="w-4 h-4 text-[hsl(var(--foreground))]" />
+                    <span className="text-xs font-medium text-[hsl(var(--foreground))]">
+                      {aiSuggesting ? 'Gerando...' : 'Sugestão IA'}
                     </span>
                   </button>
                 </div>
