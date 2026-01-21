@@ -40,6 +40,15 @@ export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [loadingSession, setLoadingSession] = useState(true);
 
+  // Keep hooks unconditional: enforce client-portal view restrictions via an effect,
+  // even during the loading/login/setup renders.
+  useEffect(() => {
+    if (!user) return;
+    if (user.role !== 'empresa') return;
+    const allowed = new Set(['dashboard', 'traffic']);
+    if (!allowed.has(currentView)) setCurrentView('dashboard');
+  }, [currentView, user?.role]);
+
   useEffect(() => {
     if (!isSupabaseConfigured()) {
       setLoadingSession(false);
@@ -123,12 +132,6 @@ export default function App() {
     saveSelectedCompanyId(user.id, companyId);
     setUser({ ...user, companyId });
   };
-
-  useEffect(() => {
-    if (user.role !== 'empresa') return;
-    const allowed = new Set(['dashboard', 'traffic']);
-    if (!allowed.has(currentView)) setCurrentView('dashboard');
-  }, [currentView, setCurrentView, user.role]);
 
   const renderView = () => {
     switch (currentView) {
