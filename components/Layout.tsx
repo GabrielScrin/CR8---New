@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { User } from '../types';
 import { Bell, Bot, ChevronDown } from 'lucide-react';
-import { getSupabaseAnonKey, isSupabaseConfigured, supabase } from '../lib/supabase';
+import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { loadLocalAiSettings } from '../lib/aiLocal';
 
 interface LayoutProps {
@@ -71,8 +71,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) throw new Error('Sessão inválida. Faça logout/login e tente novamente.');
 
-      const { data, error } = await supabase.functions.invoke('ai-assistant', {
-        body: {
+      const res = await fetch(`${getSupabaseUrl()}/functions/v1/ai-assistant`, {
+        method: 'POST',
+        headers: {
+          apikey: getSupabaseAnonKey(),
+          Authorization: `Bearer ${accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
           mode: 'helper',
           company_id: user.companyId,
           context_view: currentView,
@@ -81,16 +87,18 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
           api_key: local.apiKey,
           model: local.model,
           access_token: accessToken,
-        },
-        headers: {
-          apikey: getSupabaseAnonKey(),
-          Authorization: `Bearer ${accessToken}`,
-          authorization: `Bearer ${accessToken}`,
-        },
+        }),
       });
-      if (error) throw error;
 
-      const result = (data as any)?.result ?? {};
+      const payloadText = await res.text().catch(() => '');
+      const payload = payloadText ? JSON.parse(payloadText) : {};
+      if (!res.ok) {
+        throw Object.assign(new Error(payload?.error ?? 'Falha ao chamar IA.'), {
+          context: { status: res.status, body: payload },
+        });
+      }
+
+      const result = (payload as any)?.result ?? {};
       const reply =
         typeof result?.reply === 'string'
           ? result.reply

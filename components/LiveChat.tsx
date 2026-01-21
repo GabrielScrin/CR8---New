@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, MessageCircle, Paperclip, Plus, Search, Send, User as UserIcon } from 'lucide-react';
-import { getSupabaseAnonKey, isSupabaseConfigured, supabase } from '../lib/supabase';
+import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { ChatMessage, ChatSession } from '../types';
 import { loadLocalAiSettings } from '../lib/aiLocal';
 
@@ -483,24 +483,32 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
         throw new Error('Sessão inválida. Faça logout/login e tente novamente.');
       }
 
-      const { data, error: fnError } = await supabase.functions.invoke('ai-assistant', {
-        body: {
+      const res = await fetch(`${getSupabaseUrl()}/functions/v1/ai-assistant`, {
+        method: 'POST',
+        headers: {
+          apikey: getSupabaseAnonKey(),
+          Authorization: `Bearer ${accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
           mode: 'sdr_reply',
           chat_id: activeChatId,
           provider: local.provider,
           api_key: local.apiKey,
           model: local.model,
           access_token: accessToken,
-        },
-        headers: {
-          apikey: getSupabaseAnonKey(),
-          Authorization: `Bearer ${accessToken}`,
-          authorization: `Bearer ${accessToken}`,
-        },
+        }),
       });
-      if (fnError) throw fnError;
 
-      const result = (data as any)?.result ?? {};
+      const payloadText = await res.text().catch(() => '');
+      const payload = payloadText ? JSON.parse(payloadText) : {};
+      if (!res.ok) {
+        throw Object.assign(new Error(payload?.error ?? 'Falha ao chamar IA.'), {
+          context: { status: res.status, body: payload },
+        });
+      }
+
+      const result = (payload as any)?.result ?? {};
       const reply = (result as any)?.reply;
       if (!reply || typeof reply !== 'string') {
         throw new Error('A IA não retornou uma sugestão de resposta.');
