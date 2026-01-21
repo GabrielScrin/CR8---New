@@ -16,6 +16,7 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 interface DashboardProps {
   companyId?: string;
+  variant?: 'agency' | 'client';
 }
 
 type Period = '24h' | '7d' | '30d';
@@ -138,7 +139,7 @@ const calcChangePct = (current: number, previous: number) => {
   return ((current - previous) / previous) * 100;
 };
 
-export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
+export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'agency' }) => {
   const backendReady = isSupabaseConfigured();
   const [period, setPeriod] = useState<Period>('7d');
   const [loading, setLoading] = useState(false);
@@ -816,7 +817,8 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
         </motion.div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {variant !== 'client' && (
+        <div className="grid gap-6 lg:grid-cols-2">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -934,55 +936,58 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId }) => {
           )}
         </motion.div>
       </div>
+      )}
 
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.45, delay: 0.35 }}
-        whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
-        layout
-        className="cr8-card p-5"
-      >
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <h3 className="text-lg font-bold text-[hsl(var(--foreground))]">Alertas</h3>
-          {alertCounts.total > 0 && (
-            <span className="h-6 min-w-6 px-2 rounded-full bg-red-500/20 text-red-200 text-xs flex items-center justify-center font-bold">
-              {alertCounts.total}
-            </span>
-          )}
-        </div>
-
-        {loading ? (
-          <div className="space-y-3">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-14 w-full rounded-lg animate-pulse bg-[hsl(var(--muted))]" />
-            ))}
+      {variant !== 'client' && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.35 }}
+          whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
+          layout
+          className="cr8-card p-5"
+        >
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <h3 className="text-lg font-bold text-[hsl(var(--foreground))]">Alertas</h3>
+            {alertCounts.total > 0 && (
+              <span className="h-6 min-w-6 px-2 rounded-full bg-red-500/20 text-red-200 text-xs flex items-center justify-center font-bold">
+                {alertCounts.total}
+              </span>
+            )}
           </div>
-        ) : (
-          <div className="space-y-2">
-            {alerts.map((a) => (
-              <div
-                key={a.id}
-                className={`flex items-start gap-3 p-3 rounded-lg border ${
-                  a.type === 'error'
-                    ? 'bg-red-500/10 border-red-500/20'
-                    : a.type === 'warning'
-                      ? 'bg-yellow-500/10 border-yellow-500/20'
-                      : a.type === 'info'
-                        ? 'bg-blue-500/10 border-blue-500/20'
-                        : 'bg-emerald-500/10 border-emerald-500/20'
-                }`}
-              >
-                <AlertIcon type={a.type} />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-[hsl(var(--foreground))]">{a.title}</p>
-                  <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{a.description}</p>
+
+          {loading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="h-14 w-full rounded-lg animate-pulse bg-[hsl(var(--muted))]" />
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {alerts.map((a) => (
+                <div
+                  key={a.id}
+                  className={`flex items-start gap-3 p-3 rounded-lg border ${
+                    a.type === 'error'
+                      ? 'bg-red-500/10 border-red-500/20'
+                      : a.type === 'warning'
+                        ? 'bg-yellow-500/10 border-yellow-500/20'
+                        : a.type === 'info'
+                          ? 'bg-blue-500/10 border-blue-500/20'
+                          : 'bg-emerald-500/10 border-emerald-500/20'
+                  }`}
+                >
+                  <AlertIcon type={a.type} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-[hsl(var(--foreground))]">{a.title}</p>
+                    <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{a.description}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </motion.div>
+              ))}
+            </div>
+          )}
+        </motion.div>
+      )}
 
       <div className="cr8-card p-4 text-xs text-[hsl(var(--muted-foreground))]">
         <div>CPL = Gasto / Leads do período. “Resultados” (Meta) considera Leads + Conversas como lead.</div>

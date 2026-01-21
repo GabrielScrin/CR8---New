@@ -10,6 +10,7 @@ import { ContactsLeads } from './components/ContactsLeads';
 import { AIAgent } from './components/AIAgent';
 import { Role, User } from './types';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
+import { loadSelectedCompanyId, saveSelectedCompanyId } from './lib/companySelection';
 
 const PlaceholderView = ({ title }: { title: string }) => (
   <div className="flex flex-col items-center justify-center h-full text-[hsl(var(--muted-foreground))]">
@@ -55,17 +56,21 @@ export default function App() {
       };
 
       try {
-        const [{ data: profile }, { data: membership }] = await Promise.all([
+        const [{ data: profile }, { data: memberships }] = await Promise.all([
           supabase.from('users').select('full_name, avatar_url, role').eq('id', sessionUser.id).maybeSingle(),
-          supabase.from('company_members').select('company_id').limit(1).maybeSingle(),
+          supabase.from('company_members').select('company_id,created_at').order('created_at', { ascending: true }),
         ]);
+
+        const membershipIds = (memberships ?? []).map((m: any) => m.company_id).filter(Boolean);
+        const preferred = loadSelectedCompanyId(sessionUser.id);
+        const companyId = preferred && membershipIds.includes(preferred) ? preferred : membershipIds[0] ?? fallback.companyId;
 
         return {
           ...fallback,
           name: profile?.full_name || fallback.name,
           avatar: profile?.avatar_url || fallback.avatar,
           role: (profile?.role as Role) || fallback.role,
-          companyId: membership?.company_id || fallback.companyId,
+          companyId,
         };
       } catch {
         return fallback;
@@ -114,10 +119,21 @@ export default function App() {
     return <CompanySetup onDone={(companyId) => setUser({ ...user, companyId })} />;
   }
 
+  const handleCompanyChange = (companyId: string) => {
+    saveSelectedCompanyId(user.id, companyId);
+    setUser({ ...user, companyId });
+  };
+
+  useEffect(() => {
+    if (user.role !== 'empresa') return;
+    const allowed = new Set(['dashboard', 'traffic']);
+    if (!allowed.has(currentView)) setCurrentView('dashboard');
+  }, [currentView, setCurrentView, user.role]);
+
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard companyId={user.companyId} />;
+        return <Dashboard companyId={user.companyId} variant={user.role === 'empresa' ? 'client' : 'agency'} />;
       case 'traffic':
         return <TrafficAnalytics companyId={user.companyId} />;
       case 'crm':
@@ -142,7 +158,13 @@ export default function App() {
   };
 
   return (
-    <Layout user={user} currentView={currentView} setCurrentView={setCurrentView} onLogout={handleLogout}>
+    <Layout
+      user={user}
+      currentView={currentView}
+      setCurrentView={setCurrentView}
+      onLogout={handleLogout}
+      onCompanyChange={handleCompanyChange}
+    >
       {renderView()}
     </Layout>
   );

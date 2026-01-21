@@ -12,9 +12,12 @@ interface LayoutProps {
   currentView: string;
   setCurrentView: (view: string) => void;
   onLogout: () => void;
+  onCompanyChange: (companyId: string) => void;
 }
 
-export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, setCurrentView, onLogout }) => {
+type CompanyOption = { id: string; name: string; brand_name?: string | null; brand_logo_url?: string | null };
+
+export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, setCurrentView, onLogout, onCompanyChange }) => {
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
   const [aiInput, setAiInput] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
@@ -26,8 +29,50 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
     },
   ]);
   const aiBottomRef = useRef<HTMLDivElement | null>(null);
+  const [companies, setCompanies] = useState<CompanyOption[]>([]);
+  const [companiesError, setCompaniesError] = useState<string | null>(null);
 
   const canUseAi = useMemo(() => isSupabaseConfigured() && Boolean(user.companyId), [user.companyId]);
+  const selectedCompany = useMemo(() => companies.find((c) => c.id === user.companyId) ?? null, [companies, user.companyId]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured()) {
+      setCompanies([]);
+      setCompaniesError(null);
+      return;
+    }
+
+    let alive = true;
+    const fetchCompanies = async () => {
+      try {
+        setCompaniesError(null);
+        const preferredSelect = 'id,name,brand_name,brand_logo_url';
+        let { data, error } = await supabase.from('companies').select(preferredSelect).order('created_at', { ascending: true });
+        if (error && String(error.message || '').toLowerCase().includes('does not exist')) {
+          ({ data, error } = await supabase.from('companies').select('id,name').order('created_at', { ascending: true }));
+        }
+        if (error) throw error;
+        if (!alive) return;
+        const rows = (data ?? []).map((d: any) => ({
+          id: d.id,
+          name: d.name ?? 'Empresa',
+          brand_name: d.brand_name ?? null,
+          brand_logo_url: d.brand_logo_url ?? null,
+        }));
+        setCompanies(rows);
+      } catch (e: any) {
+        if (!alive) return;
+        setCompanies([]);
+        setCompaniesError(e?.message ?? 'Erro ao carregar empresas.');
+      }
+    };
+
+    void fetchCompanies();
+
+    return () => {
+      alive = false;
+    };
+  }, [user.id]);
 
   useEffect(() => {
     if (!isAiPanelOpen) return;
@@ -135,15 +180,44 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
         currentView={currentView} 
         setCurrentView={setCurrentView} 
         role={user.role} 
+        companyName={selectedCompany?.brand_name ?? selectedCompany?.name ?? null}
+        companyLogoUrl={selectedCompany?.brand_logo_url ?? null}
         onLogout={onLogout}
       />
 
       <main className="flex-1 ml-64 flex flex-col min-w-0">
         {/* Top Header */}
         <header className="h-16 bg-[hsl(var(--card))] border-b border-[hsl(var(--border))] flex items-center justify-between px-8 sticky top-0 z-40">
-            <h1 className="text-xl font-bold text-[hsl(var(--foreground))] capitalize">
+            <div className="flex items-center gap-4 min-w-0">
+              <h1 className="text-xl font-bold text-[hsl(var(--foreground))] capitalize truncate">
                 {currentView === 'ai' ? 'Agente IA' : currentView.replace('-', ' ')}
-            </h1>
+              </h1>
+
+              {isSupabaseConfigured() && user.companyId && (
+                <div className="hidden lg:flex items-center gap-2 min-w-0">
+                  <span className="text-xs text-[hsl(var(--muted-foreground))]">Empresa:</span>
+                  {companies.length > 1 ? (
+                    <select
+                      value={user.companyId}
+                      onChange={(e) => onCompanyChange(e.target.value)}
+                      className="max-w-[320px] truncate rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                    >
+                      {companies.map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.brand_name ?? c.name}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span className="text-sm font-semibold text-[hsl(var(--foreground))] truncate max-w-[320px]">
+                      {(selectedCompany?.brand_name ?? selectedCompany?.name) || 'Empresa'}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {companiesError && <span className="text-xs text-[hsl(var(--destructive))]">{companiesError}</span>}
+            </div>
 
             <div className="flex items-center space-x-6">
                 <button 

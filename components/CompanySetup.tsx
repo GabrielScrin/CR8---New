@@ -14,6 +14,8 @@ const normalizeAdAccountId = (id: string) => {
 
 export const CompanySetup: React.FC<CompanySetupProps> = ({ onDone }) => {
   const [companyName, setCompanyName] = useState('');
+  const [brandName, setBrandName] = useState('');
+  const [brandLogoUrl, setBrandLogoUrl] = useState('');
   const [metaAdAccountId, setMetaAdAccountId] = useState('');
   const [whatsAppPhoneNumberId, setWhatsAppPhoneNumberId] = useState('');
   const [loading, setLoading] = useState(false);
@@ -33,10 +35,15 @@ export const CompanySetup: React.FC<CompanySetupProps> = ({ onDone }) => {
       const updatePayload: any = {};
       if (normalized) updatePayload.meta_ad_account_id = normalized;
       if (whatsAppPhoneNumberId.trim()) updatePayload.whatsapp_phone_number_id = whatsAppPhoneNumberId.trim();
+      if (brandName.trim()) updatePayload.brand_name = brandName.trim();
+      if (brandLogoUrl.trim()) updatePayload.brand_logo_url = brandLogoUrl.trim();
 
       if (Object.keys(updatePayload).length > 0) {
         const { error: updateError } = await supabase.from('companies').update(updatePayload).eq('id', companyId);
-        if (updateError) throw updateError;
+        if (updateError) {
+          const msg = String((updateError as any)?.message ?? updateError);
+          if (!msg.toLowerCase().includes('does not exist')) throw updateError;
+        }
       }
 
       onDone(companyId);
@@ -99,6 +106,25 @@ export const CompanySetup: React.FC<CompanySetupProps> = ({ onDone }) => {
             <p className="text-xs text-gray-400 mt-1">
               Use para vincular webhooks do WhatsApp a esta empresa. Você encontra em WhatsApp Manager (Phone Numbers) ou no payload do webhook (`metadata.phone_number_id`).
             </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700">White Label (opcional)</label>
+            <div className="mt-2 space-y-2">
+              <input
+                value={brandName}
+                onChange={(e) => setBrandName(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="Nome de marca (ex: Bioclin Vacinas)"
+              />
+              <input
+                value={brandLogoUrl}
+                onChange={(e) => setBrandLogoUrl(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                placeholder="URL do logo (https://...)"
+              />
+            </div>
+            <p className="text-xs text-gray-400 mt-1">Personaliza a navegaÇùÇœo para o cliente (fase 5).</p>
           </div>
 
           <button

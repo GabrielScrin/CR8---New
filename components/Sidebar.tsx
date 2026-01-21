@@ -17,10 +17,12 @@ interface SidebarProps {
   currentView: string;
   setCurrentView: (view: string) => void;
   role: Role;
+  companyName?: string | null;
+  companyLogoUrl?: string | null;
   onLogout: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, role, onLogout }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, role, companyName, companyLogoUrl, onLogout }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard Geral', icon: LayoutDashboard },
     { id: 'crm', label: 'CRM & Vendas', icon: Users },
@@ -34,17 +36,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, r
     { id: 'settings', label: 'Configurações', icon: Settings },
   ];
 
+  const filteredMenuItems =
+    role === 'empresa' ? menuItems.filter((item) => item.id === 'dashboard' || item.id === 'traffic') : menuItems;
+
   return (
     <div className="h-screen w-64 bg-[hsl(var(--sidebar-background))] text-[hsl(var(--foreground))] flex flex-col fixed left-0 top-0 shadow-xl z-50 border-r border-[hsl(var(--sidebar-border))]">
       <div className="p-6 flex items-center space-x-3 border-b border-[hsl(var(--sidebar-border))]">
         <div className="w-8 h-8 rounded-lg bg-transparent flex items-center justify-center overflow-hidden ring-1 ring-[hsl(var(--sidebar-border))]">
-          <img src="/cr8-logo.svg" alt="CR8" className="w-8 h-8 object-contain" />
+          <img src={companyLogoUrl || '/cr8-logo.svg'} alt="CR8" className="w-8 h-8 object-contain" />
         </div>
-        <span className="text-xl font-bold tracking-tight">CR8</span>
+        <div className="min-w-0">
+          <div className="text-xl font-bold tracking-tight leading-tight">CR8</div>
+          {companyName && <div className="text-xs text-[hsl(var(--sidebar-foreground))] opacity-80 truncate">{companyName}</div>}
+        </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4 space-y-1">
-        {menuItems.map((item) => (
+        {filteredMenuItems.map((item) => (
           <button
             key={item.id}
             onClick={() => setCurrentView(item.id)}
