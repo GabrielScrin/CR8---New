@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Bot, MessageCircle, Paperclip, Plus, Search, Send, User as UserIcon } from 'lucide-react';
-import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { getSupabaseAnonKey, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { ChatMessage, ChatSession } from '../types';
 import { loadLocalAiSettings } from '../lib/aiLocal';
 
@@ -493,6 +493,7 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
           access_token: accessToken,
         },
         headers: {
+          apikey: getSupabaseAnonKey(),
           Authorization: `Bearer ${accessToken}`,
           authorization: `Bearer ${accessToken}`,
         },

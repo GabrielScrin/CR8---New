@@ -3,7 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { User } from '../types';
 import { Bell, Bot, ChevronDown } from 'lucide-react';
-import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { getSupabaseAnonKey, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { loadLocalAiSettings } from '../lib/aiLocal';
 
 interface LayoutProps {
@@ -83,6 +83,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
           access_token: accessToken,
         },
         headers: {
+          apikey: getSupabaseAnonKey(),
           Authorization: `Bearer ${accessToken}`,
           authorization: `Bearer ${accessToken}`,
         },

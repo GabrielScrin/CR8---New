@@ -30,6 +30,9 @@ const finalKey = SUPABASE_ANON_KEY ? SUPABASE_ANON_KEY : 'placeholder';
 
 export const supabase = createClient(finalUrl, finalKey);
 
+export const getSupabaseUrl = () => finalUrl;
+export const getSupabaseAnonKey = () => finalKey;
+
 export const isSupabaseConfigured = () => {
   return finalUrl !== 'https://placeholder.supabase.co' && finalKey !== 'placeholder';
 };
