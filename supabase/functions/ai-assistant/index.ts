@@ -60,6 +60,26 @@ type Body = {
 
 type ChatMsg = { role: 'system' | 'user' | 'assistant'; content: any };
 
+function safeJsonParse(text: string): any {
+  const trimmed = (text ?? '').trim();
+  if (!trimmed) return {};
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const start = trimmed.indexOf('{');
+    const end = trimmed.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      const slice = trimmed.slice(start, end + 1);
+      try {
+        return JSON.parse(slice);
+      } catch {
+        // ignore
+      }
+    }
+    return { reply: trimmed };
+  }
+}
+
 async function openaiCompatibleChat(args: {
   apiKey: string;
   baseUrl: string;
@@ -93,13 +113,12 @@ async function geminiChat(args: {
   model: string;
   messages: ChatMsg[];
 }): Promise<{ text: string; raw: any }> {
-  // Gemini expects "contents" with role user/model, and parts.
-  const contents = args.messages
-    .filter((m) => m.role !== 'assistant') // we send system+user only in this function usage
-    .map((m) => ({
-      role: m.role === 'system' ? 'user' : 'user',
-      parts: [{ text: typeof m.content === 'string' ? m.content : JSON.stringify(m.content) }],
-    }));
+  // Gemini expects "contents" with role user/model and parts.
+  // We merge system + user prompts into a single user message to keep it simple/consistent.
+  const system = args.messages.find((m) => m.role === 'system')?.content ?? '';
+  const user = args.messages.find((m) => m.role === 'user')?.content ?? '';
+  const merged = [system, typeof user === 'string' ? user : JSON.stringify(user)].filter(Boolean).join('\n\n');
+  const contents = [{ role: 'user', parts: [{ text: merged }] }];
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(args.model)}:generateContent?key=${encodeURIComponent(
     args.apiKey
@@ -110,7 +129,7 @@ async function geminiChat(args: {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
       contents,
-      generationConfig: { temperature: 0.4 },
+      generationConfig: { temperature: 0.4, response_mime_type: 'application/json' },
     }),
   });
 
@@ -308,13 +327,13 @@ serve(async (req) => {
       const model =
         body.model ??
         (provider === 'google'
-          ? 'gemini-1.5-flash'
+          ? 'gemini-2.5-flash'
           : provider === 'anthropic'
             ? 'claude-3-5-sonnet-20241022'
             : 'gpt-4o-mini');
       const { text, raw } = await llmChat(provider, apiKey, model, messages, false);
       rawProvider = raw;
-      resultJson = JSON.parse(text);
+      resultJson = safeJsonParse(text);
     } else if (body.mode === 'sdr_reply') {
       if (!body.chat_id) return jsonResponse(400, { ok: false, error: 'missing chat_id' });
       const history = await loadChatHistory(body.chat_id, 25);
@@ -332,13 +351,13 @@ serve(async (req) => {
       const model =
         body.model ??
         (provider === 'google'
-          ? 'gemini-1.5-flash'
+          ? 'gemini-2.5-flash'
           : provider === 'anthropic'
             ? 'claude-3-5-sonnet-20241022'
             : 'gpt-4o-mini');
       const { text, raw } = await llmChat(provider, apiKey, model, messages, false);
       rawProvider = raw;
-      resultJson = JSON.parse(text);
+      resultJson = safeJsonParse(text);
     } else if (body.mode === 'creative_analysis') {
       if (!body.image_url) return jsonResponse(400, { ok: false, error: 'missing image_url' });
       const messages: ChatMsg[] = [
@@ -354,7 +373,7 @@ serve(async (req) => {
       const model = body.model ?? 'gpt-4o-mini';
       const { text, raw } = await llmChat(provider, apiKey, model, messages, true);
       rawProvider = raw;
-      resultJson = JSON.parse(text);
+      resultJson = safeJsonParse(text);
     } else if (body.mode === 'weekly_report') {
       const messages: ChatMsg[] = [
         { role: 'system', content: baseSystemPrompt() + '\nRetorne JSON no formato {"summary":"...","highlights":["..."],"risks":["..."],"next_week":["..."]}' },
@@ -363,13 +382,13 @@ serve(async (req) => {
       const model =
         body.model ??
         (provider === 'google'
-          ? 'gemini-1.5-flash'
+          ? 'gemini-2.5-flash'
           : provider === 'anthropic'
             ? 'claude-3-5-sonnet-20241022'
             : 'gpt-4o-mini');
       const { text, raw } = await llmChat(provider, apiKey, model, messages, false);
       rawProvider = raw;
-      resultJson = JSON.parse(text);
+      resultJson = safeJsonParse(text);
     }
 
     const event = {

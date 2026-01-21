@@ -106,7 +106,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
 
       setAiMessages((prev) => [...prev, { role: 'assistant', content: reply, bullets }]);
     } catch (e: any) {
-      setAiError(e?.message ?? 'Falha ao chamar IA.');
+      const baseMsg = String(e?.message ?? 'Falha ao chamar IA.');
+      const status = e?.context?.status;
+      const body = e?.context?.body;
+      const details =
+        typeof status === 'number'
+          ? ` (HTTP ${status}${body ? `: ${typeof body === 'string' ? body : JSON.stringify(body)}` : ''})`
+          : '';
+      setAiError(`${baseMsg}${details}`);
     } finally {
       setAiBusy(false);
     }

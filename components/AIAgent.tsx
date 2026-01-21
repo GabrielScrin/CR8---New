@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
-import { clearLocalAiSettings, loadLocalAiSettings, saveLocalAiSettings, type LlmProvider } from '../lib/aiLocal';
+import { clearLocalAiSettings, defaultModelByProvider, loadLocalAiSettings, saveLocalAiSettings, type LlmProvider } from '../lib/aiLocal';
 
 interface AIAgentProps {
   companyId?: string;
@@ -12,13 +12,6 @@ const providerLabel: Record<LlmProvider, string> = {
   google: 'Google (Gemini)',
   anthropic: 'Anthropic (Claude)',
   deepseek: 'DeepSeek',
-};
-
-const defaultModelByProvider: Record<LlmProvider, string> = {
-  openai: 'gpt-4o-mini',
-  google: 'gemini-1.5-flash',
-  anthropic: 'claude-3-5-sonnet-20241022',
-  deepseek: 'deepseek-chat',
 };
 
 export const AIAgent: React.FC<AIAgentProps> = ({ companyId, userId }) => {

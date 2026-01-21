@@ -6,6 +6,13 @@ export type LocalAiSettings = {
   model?: string;
 };
 
+export const defaultModelByProvider: Record<LlmProvider, string> = {
+  openai: 'gpt-4o-mini',
+  google: 'gemini-2.5-flash',
+  anthropic: 'claude-3-5-sonnet-20241022',
+  deepseek: 'deepseek-chat',
+};
+
 const storageKey = (userId: string) => `cr8.ai.settings.v1:${userId}`;
 
 export const loadLocalAiSettings = (userId?: string): LocalAiSettings | null => {
@@ -32,4 +39,3 @@ export const saveLocalAiSettings = (userId: string, settings: LocalAiSettings) =
 export const clearLocalAiSettings = (userId: string) => {
   localStorage.removeItem(storageKey(userId));
 };
-
