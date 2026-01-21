@@ -484,7 +484,14 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
       }
 
       const { data, error: fnError } = await supabase.functions.invoke('ai-assistant', {
-        body: { mode: 'sdr_reply', chat_id: activeChatId, provider: local.provider, api_key: local.apiKey, model: local.model },
+        body: {
+          mode: 'sdr_reply',
+          chat_id: activeChatId,
+          provider: local.provider,
+          api_key: local.apiKey,
+          model: local.model,
+          access_token: accessToken,
+        },
         headers: {
           Authorization: `Bearer ${accessToken}`,
           authorization: `Bearer ${accessToken}`,

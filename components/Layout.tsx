@@ -80,6 +80,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
           provider: local.provider,
           api_key: local.apiKey,
           model: local.model,
+          access_token: accessToken,
         },
         headers: {
           Authorization: `Bearer ${accessToken}`,

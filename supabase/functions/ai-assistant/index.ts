@@ -56,6 +56,7 @@ type Body = {
   provider?: Provider;
   api_key?: string;
   model?: string;
+  access_token?: string;
 };
 
 type ChatMsg = { role: 'system' | 'user' | 'assistant'; content: any };
@@ -295,16 +296,19 @@ serve(async (req) => {
       return jsonResponse(500, { ok: false, error: 'missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY' });
     }
 
-    const token = extractBearerToken(req.headers.get('authorization')) ?? extractBearerToken(req.headers.get('Authorization'));
+    const body = (await req.json().catch(() => null)) as Body | null;
+    if (!body?.mode) return jsonResponse(400, { ok: false, error: 'missing mode' });
+
+    const token =
+      extractBearerToken(req.headers.get('authorization')) ??
+      extractBearerToken(req.headers.get('Authorization')) ??
+      (body.access_token ? String(body.access_token) : null);
     if (!token) return jsonResponse(401, { ok: false, error: 'missing authorization' });
 
     const { data: authData, error: authError } = await supabaseAdmin.auth.getUser(token);
     if (authError) return jsonResponse(401, { ok: false, error: authError.message });
     const userId = authData?.user?.id;
     if (!userId) return jsonResponse(401, { ok: false, error: 'invalid session' });
-
-    const body = (await req.json().catch(() => null)) as Body | null;
-    if (!body?.mode) return jsonResponse(400, { ok: false, error: 'missing mode' });
     const provider = body.provider ?? 'openai';
     const apiKey = body.api_key ?? '';
 
