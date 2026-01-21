@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar';
 import { User } from '../types';
 import { Bell, Bot, ChevronDown } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { loadLocalAiSettings } from '../lib/aiLocal';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -46,8 +47,19 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
         ...prev,
         {
           role: 'assistant',
-          content:
-            'IA não configurada: defina o Supabase no app e configure a secret OPENAI_API_KEY em Supabase → Edge Functions → Secrets.',
+          content: 'IA indisponível: configure o Supabase/empresa e salve sua API Key em Agente IA.',
+        },
+      ]);
+      return;
+    }
+
+    const local = loadLocalAiSettings(user.id);
+    if (!local?.apiKey) {
+      setAiMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: 'Falta sua API Key. Vá em Agente IA e salve a chave do provedor (fica só no seu navegador).',
         },
       ]);
       return;
@@ -65,6 +77,9 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
           company_id: user.companyId,
           context_view: currentView,
           user_message: text,
+          provider: local.provider,
+          api_key: local.apiKey,
+          model: local.model,
         },
         headers: {
           Authorization: `Bearer ${accessToken}`,

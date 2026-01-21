@@ -1,11 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { clearLocalAiSettings, loadLocalAiSettings, saveLocalAiSettings, type LlmProvider } from '../lib/aiLocal';
 
 interface AIAgentProps {
   companyId?: string;
+  userId?: string;
 }
 
-export const AIAgent: React.FC<AIAgentProps> = ({ companyId }) => {
+const providerLabel: Record<LlmProvider, string> = {
+  openai: 'OpenAI',
+  google: 'Google (Gemini)',
+  anthropic: 'Anthropic (Claude)',
+  deepseek: 'DeepSeek',
+};
+
+const defaultModelByProvider: Record<LlmProvider, string> = {
+  openai: 'gpt-4o-mini',
+  google: 'gemini-1.5-flash',
+  anthropic: 'claude-3-5-sonnet-20241022',
+  deepseek: 'deepseek-chat',
+};
+
+export const AIAgent: React.FC<AIAgentProps> = ({ companyId, userId }) => {
   const readOnlyMode = !isSupabaseConfigured();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -15,7 +31,13 @@ export const AIAgent: React.FC<AIAgentProps> = ({ companyId }) => {
   const [helperPrompt, setHelperPrompt] = useState('');
   const [sdrPrompt, setSdrPrompt] = useState('');
 
+  // Local (per device) LLM settings
+  const [provider, setProvider] = useState<LlmProvider>('openai');
+  const [apiKey, setApiKey] = useState('');
+  const [model, setModel] = useState(defaultModelByProvider.openai);
+
   const canEdit = useMemo(() => Boolean(companyId && !readOnlyMode), [companyId, readOnlyMode]);
+  const canEditLocal = useMemo(() => Boolean(userId), [userId]);
 
   useEffect(() => {
     if (!canEdit) return;
@@ -43,6 +65,20 @@ export const AIAgent: React.FC<AIAgentProps> = ({ companyId }) => {
     };
   }, [canEdit, companyId]);
 
+  useEffect(() => {
+    if (!userId) return;
+    const local = loadLocalAiSettings(userId);
+    if (local) {
+      setProvider(local.provider);
+      setApiKey(local.apiKey);
+      setModel(local.model ?? defaultModelByProvider[local.provider]);
+      return;
+    }
+    setProvider('openai');
+    setApiKey('');
+    setModel(defaultModelByProvider.openai);
+  }, [userId]);
+
   const save = async () => {
     if (!companyId) return;
     setSaving(true);
@@ -65,6 +101,29 @@ export const AIAgent: React.FC<AIAgentProps> = ({ companyId }) => {
     }
   };
 
+  const saveLocal = () => {
+    if (!userId) return;
+    setOkMsg(null);
+    setError(null);
+
+    if (!apiKey.trim()) {
+      setError('Cole uma API Key para salvar.');
+      return;
+    }
+
+    saveLocalAiSettings(userId, { provider, apiKey: apiKey.trim(), model: model.trim() || undefined });
+    setOkMsg('Configurações locais salvas (somente neste navegador).');
+  };
+
+  const clearLocal = () => {
+    if (!userId) return;
+    clearLocalAiSettings(userId);
+    setProvider('openai');
+    setApiKey('');
+    setModel(defaultModelByProvider.openai);
+    setOkMsg('Configurações locais removidas.');
+  };
+
   if (readOnlyMode) {
     return (
       <div className="cr8-card h-[calc(100vh-8rem)] flex items-center justify-center">
@@ -81,8 +140,84 @@ export const AIAgent: React.FC<AIAgentProps> = ({ companyId }) => {
       <div>
         <h1 className="text-3xl font-bold text-[hsl(var(--foreground))]">Agente IA</h1>
         <p className="text-[hsl(var(--muted-foreground))] mt-1 text-sm">
-          Ajuste os prompts do Assistente e do SDR IA por empresa. A chave da IA deve ficar nas Secrets do Supabase.
+          Ajuste os prompts por empresa e escolha o provedor de IA por usuário. A chave fica salva apenas no seu navegador.
         </p>
+      </div>
+
+      <div className="cr8-card p-6 space-y-4">
+        <div>
+          <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Provedor de IA (por usuário)</h2>
+          <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+            Esta API Key não é enviada/armazenada no banco. Ela fica apenas no <span className="font-mono">localStorage</span> do seu navegador
+            e é enviada junto das chamadas da IA.
+          </p>
+        </div>
+
+        {!canEditLocal ? (
+          <div className="text-sm text-[hsl(var(--muted-foreground))]">Faça login novamente para habilitar as configurações locais.</div>
+        ) : (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Provedor</label>
+                <select
+                  value={provider}
+                  onChange={(e) => {
+                    const next = e.target.value as LlmProvider;
+                    setProvider(next);
+                    setModel(defaultModelByProvider[next]);
+                  }}
+                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                >
+                  {Object.keys(providerLabel).map((p) => (
+                    <option key={p} value={p}>
+                      {providerLabel[p as LlmProvider]}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">API Key</label>
+                <input
+                  type="password"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder={`Cole sua chave da ${providerLabel[provider]} aqui`}
+                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Model (opcional)</label>
+              <input
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder={defaultModelByProvider[provider]}
+                className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+              />
+              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                Padrão: <span className="font-mono">{defaultModelByProvider[provider]}</span>
+              </p>
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={clearLocal}
+                className="px-4 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))] hover:opacity-90"
+              >
+                Remover local
+              </button>
+              <button
+                onClick={saveLocal}
+                className="px-4 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90"
+              >
+                Salvar local
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       <div className="cr8-card p-6 space-y-4">
@@ -130,4 +265,3 @@ export const AIAgent: React.FC<AIAgentProps> = ({ companyId }) => {
     </div>
   );
 };
-

@@ -133,7 +133,7 @@ export default function App() {
       case 'whatsapp':
         return <PlaceholderView title="Disparador WhatsApp" />;
       case 'ai':
-        return <AIAgent companyId={user.companyId} />;
+        return <AIAgent companyId={user.companyId} userId={user.id} />;
       case 'settings':
         return <PlaceholderView title="Configurações Gerais" />;
       default:

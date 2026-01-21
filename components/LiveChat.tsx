@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Bot, MessageCircle, Paperclip, Plus, Search, Send, User as UserIcon } from 'lucide-react';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { ChatMessage, ChatSession } from '../types';
+import { loadLocalAiSettings } from '../lib/aiLocal';
 
 type ChatPlatform = 'whatsapp' | 'instagram' | 'web' | 'meta';
 
@@ -471,6 +472,11 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
     setError(null);
     setAiSuggesting(true);
     try {
+      const local = loadLocalAiSettings(userId ?? undefined);
+      if (!local?.apiKey) {
+        throw new Error('Falta sua API Key. Vá em Agente IA e salve a chave do provedor.');
+      }
+
       const { data: sessionData } = await supabase.auth.getSession();
       const accessToken = sessionData.session?.access_token;
       if (!accessToken) {
@@ -478,7 +484,7 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
       }
 
       const { data, error: fnError } = await supabase.functions.invoke('ai-assistant', {
-        body: { mode: 'sdr_reply', chat_id: activeChatId },
+        body: { mode: 'sdr_reply', chat_id: activeChatId, provider: local.provider, api_key: local.apiKey, model: local.model },
         headers: {
           Authorization: `Bearer ${accessToken}`,
           authorization: `Bearer ${accessToken}`,
