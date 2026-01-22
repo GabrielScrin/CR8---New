@@ -120,7 +120,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
         method: 'POST',
         headers: {
           apikey: getSupabaseAnonKey(),
-          Authorization: `Bearer ${accessToken}`,
+          authorization: `Bearer ${accessToken}`,
           'content-type': 'application/json',
         },
         body: JSON.stringify({

@@ -12,6 +12,7 @@
 // - The client sends the API key per request and we do NOT persist it.
 
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts';
+import { encodeBase64 } from 'https://deno.land/std@0.224.0/encoding/base64.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
 
 const corsHeaders: Record<string, string> = {
@@ -82,6 +83,13 @@ function safeJsonParse(text: string): any {
     return { reply: trimmed };
   }
 }
+
+const defaultModelForProvider = (provider: Provider): string => {
+  if (provider === 'google') return 'gemini-2.5-flash';
+  if (provider === 'anthropic') return 'claude-3-5-sonnet-20241022';
+  if (provider === 'deepseek') return 'deepseek-chat';
+  return 'gpt-4o-mini';
+};
 
 async function openaiCompatibleChat(args: {
   apiKey: string;
@@ -182,6 +190,94 @@ async function anthropicChat(args: {
   return { text: String(out), raw: payload };
 }
 
+const guessMimeType = (url: string, contentTypeHeader: string | null): string => {
+  const header = (contentTypeHeader ?? '').split(';')[0].trim().toLowerCase();
+  if (header.startsWith('image/')) return header;
+
+  const lower = url.toLowerCase();
+  if (lower.includes('.png')) return 'image/png';
+  if (lower.includes('.webp')) return 'image/webp';
+  if (lower.includes('.gif')) return 'image/gif';
+  if (lower.includes('.bmp')) return 'image/bmp';
+  if (lower.includes('.svg')) return 'image/svg+xml';
+  if (lower.includes('.jpg') || lower.includes('.jpeg')) return 'image/jpeg';
+  return 'image/jpeg';
+};
+
+const extractImageUrlFromMessages = (messages: ChatMsg[]): string | null => {
+  const user = messages.find((m) => m.role === 'user')?.content;
+  if (!Array.isArray(user)) return null;
+  for (const part of user) {
+    const url = part?.image_url?.url;
+    if (typeof url === 'string' && url.trim()) return url.trim();
+  }
+  return null;
+};
+
+const extractTextFromMessages = (messages: ChatMsg[]): { system: string; user: string } => {
+  const system = messages.find((m) => m.role === 'system')?.content;
+  const user = messages.find((m) => m.role === 'user')?.content;
+
+  const systemText = typeof system === 'string' ? system : JSON.stringify(system ?? '');
+  if (typeof user === 'string') return { system: systemText, user };
+  if (Array.isArray(user)) {
+    const texts = user
+      .map((p) => p?.text)
+      .filter((t) => typeof t === 'string' && t.trim())
+      .map((t) => t.trim());
+    return { system: systemText, user: texts.join('\n\n') };
+  }
+  return { system: systemText, user: JSON.stringify(user ?? '') };
+};
+
+async function geminiVisionChat(args: {
+  apiKey: string;
+  model: string;
+  messages: ChatMsg[];
+}): Promise<{ text: string; raw: any }> {
+  const imageUrl = extractImageUrlFromMessages(args.messages);
+  if (!imageUrl) throw new Error('missing image_url for google vision');
+
+  const { system, user } = extractTextFromMessages(args.messages);
+  const merged = [system, user].filter(Boolean).join('\n\n');
+
+  const imgRes = await fetch(imageUrl);
+  if (!imgRes.ok) throw new Error(`image_fetch_failed_${imgRes.status}`);
+  const buf = new Uint8Array(await imgRes.arrayBuffer());
+  const mimeType = guessMimeType(imageUrl, imgRes.headers.get('content-type'));
+  const base64 = encodeBase64(buf);
+
+  const contents = [
+    {
+      role: 'user',
+      parts: [
+        { text: merged },
+        { inline_data: { mime_type: mimeType, data: base64 } },
+      ],
+    },
+  ];
+
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(args.model)}:generateContent?key=${encodeURIComponent(
+    args.apiKey
+  )}`;
+
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      contents,
+      generationConfig: { temperature: 0.4, response_mime_type: 'application/json' },
+    }),
+  });
+
+  const text = await res.text().catch(() => '');
+  if (!res.ok) throw new Error(`llm_error_${res.status}: ${text}`);
+
+  const payload = JSON.parse(text);
+  const out = payload?.candidates?.[0]?.content?.parts?.map((p: any) => p?.text).filter(Boolean).join('') ?? '';
+  return { text: String(out), raw: payload };
+}
+
 async function llmChat(provider: Provider, apiKey: string, model: string, messages: ChatMsg[], isVision: boolean) {
   if (!apiKey) throw new Error('missing api_key');
 
@@ -191,17 +287,18 @@ async function llmChat(provider: Provider, apiKey: string, model: string, messag
   }
 
   if (provider === 'deepseek') {
-    // DeepSeek is OpenAI-compatible.
+    if (isVision) throw new Error('vision_not_supported_for_provider_deepseek');
+    // DeepSeek is OpenAI-compatible (text only here).
     return openaiCompatibleChat({ apiKey, baseUrl: 'https://api.deepseek.com/v1', model, messages });
   }
 
   if (provider === 'google') {
-    if (isVision) throw new Error('google_vision_not_implemented');
+    if (isVision) return geminiVisionChat({ apiKey, model, messages });
     return geminiChat({ apiKey, model, messages });
   }
 
   if (provider === 'anthropic') {
-    if (isVision) throw new Error('anthropic_vision_not_implemented');
+    if (isVision) throw new Error('vision_not_supported_for_provider_anthropic');
     return anthropicChat({ apiKey, model, messages });
   }
 
@@ -330,13 +427,7 @@ serve(async (req) => {
         { role: 'system', content: helperPrompt(body.context_view ?? null, prompts.helper) },
         { role: 'user', content: body.user_message ?? '' },
       ];
-      const model =
-        body.model ??
-        (provider === 'google'
-          ? 'gemini-2.5-flash'
-          : provider === 'anthropic'
-            ? 'claude-3-5-sonnet-20241022'
-            : 'gpt-4o-mini');
+      const model = body.model ?? defaultModelForProvider(provider);
       const { text, raw } = await llmChat(provider, apiKey, model, messages, false);
       rawProvider = raw;
       resultJson = safeJsonParse(text);
@@ -354,13 +445,7 @@ serve(async (req) => {
               .join('\n'),
         },
       ];
-      const model =
-        body.model ??
-        (provider === 'google'
-          ? 'gemini-2.5-flash'
-          : provider === 'anthropic'
-            ? 'claude-3-5-sonnet-20241022'
-            : 'gpt-4o-mini');
+      const model = body.model ?? defaultModelForProvider(provider);
       const { text, raw } = await llmChat(provider, apiKey, model, messages, false);
       rawProvider = raw;
       resultJson = safeJsonParse(text);
@@ -376,7 +461,7 @@ serve(async (req) => {
           ],
         },
       ];
-      const model = body.model ?? 'gpt-4o-mini';
+      const model = body.model ?? defaultModelForProvider(provider);
       const { text, raw } = await llmChat(provider, apiKey, model, messages, true);
       rawProvider = raw;
       resultJson = safeJsonParse(text);
@@ -385,13 +470,7 @@ serve(async (req) => {
         { role: 'system', content: baseSystemPrompt() + '\nRetorne JSON no formato {"summary":"...","highlights":["..."],"risks":["..."],"next_week":["..."]}' },
         { role: 'user', content: JSON.stringify({ company_id: companyId, metrics: body.metrics ?? {} }) },
       ];
-      const model =
-        body.model ??
-        (provider === 'google'
-          ? 'gemini-2.5-flash'
-          : provider === 'anthropic'
-            ? 'claude-3-5-sonnet-20241022'
-            : 'gpt-4o-mini');
+      const model = body.model ?? defaultModelForProvider(provider);
       const { text, raw } = await llmChat(provider, apiKey, model, messages, false);
       rawProvider = raw;
       resultJson = safeJsonParse(text);

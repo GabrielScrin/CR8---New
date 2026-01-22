@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ArrowDown, ArrowUp, Download, ExternalLink, Filter, RefreshCw, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, ExternalLink, Filter, RefreshCw, Sparkles, X } from 'lucide-react';
 import { AdMetric } from '../types';
-import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { loadLocalAiSettings } from '../lib/aiLocal';
+import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
 
 interface TrafficAnalyticsProps {
   companyId?: string;
@@ -417,7 +418,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   };
 
   const fetchAdThumbnails = async (providerToken: string, adIds: string[]) => {
-    if (adIds.length === 0) return new Map<string, string>();
+    if (adIds.length === 0) return new Map<string, { thumbnail: string; imageUrl?: string }>();
     const ids = Array.from(new Set(adIds)).slice(0, 50);
 
     const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/`);
@@ -427,13 +428,14 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
     const res = await fetch(url.toString());
     const json = await res.json();
-    if (!res.ok || json?.error) return new Map<string, string>();
+    if (!res.ok || json?.error) return new Map<string, { thumbnail: string; imageUrl?: string }>();
 
-    const out = new Map<string, string>();
+    const out = new Map<string, { thumbnail: string; imageUrl?: string }>();
     for (const id of ids) {
       const node = json?.[id];
-      const thumb: string | undefined = node?.creative?.thumbnail_url || node?.creative?.image_url;
-      if (thumb) out.set(id, thumb);
+      const imageUrl: string | undefined = node?.creative?.image_url;
+      const thumb: string | undefined = node?.creative?.thumbnail_url || imageUrl;
+      if (thumb) out.set(id, { thumbnail: thumb, imageUrl });
     }
     return out;
   };
@@ -886,8 +888,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         const adIds = mapped.map((r) => r.adId);
         const thumbs = await fetchAdThumbnails(providerToken, adIds);
         for (const row of mapped) {
-          const thumb = thumbs.get(row.adId);
-          if (thumb) row.thumbnail = thumb;
+          const info = thumbs.get(row.adId);
+          if (info?.thumbnail) row.thumbnail = info.thumbnail;
+          if (info?.imageUrl) row.imageUrl = info.imageUrl;
         }
       }
 
@@ -1184,6 +1187,118 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     a.download = `cr8_traffic_${selectedLevel}_${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
+  };
+
+  const [creativeModalOpen, setCreativeModalOpen] = useState(false);
+  const [creativeRow, setCreativeRow] = useState<AdMetric | null>(null);
+  const [creativeBusy, setCreativeBusy] = useState(false);
+  const [creativeError, setCreativeError] = useState<string | null>(null);
+  const [creativeResult, setCreativeResult] = useState<any | null>(null);
+
+  const closeCreativeModal = () => {
+    setCreativeModalOpen(false);
+    setCreativeRow(null);
+    setCreativeBusy(false);
+    setCreativeError(null);
+    setCreativeResult(null);
+  };
+
+  const analyzeCreative = async (row: AdMetric) => {
+    setCreativeModalOpen(true);
+    setCreativeRow(row);
+    setCreativeError(null);
+    setCreativeResult(null);
+
+    if (demoMode) {
+      setCreativeError('Análise de criativos com IA está disponível apenas no modo real.');
+      return;
+    }
+
+    if (!companyId || !isSupabaseConfigured()) {
+      setCreativeError('IA indisponível: configure Supabase e selecione uma empresa.');
+      return;
+    }
+
+    if (!userId) {
+      setCreativeError('Faça login para usar a análise de criativos.');
+      return;
+    }
+
+    const local = loadLocalAiSettings(userId);
+    if (!local?.apiKey) {
+      setCreativeError('Falta sua API Key. Vá em Agente IA e salve a chave do provedor (fica só no seu navegador).');
+      return;
+    }
+
+    const imageUrl = row.imageUrl ?? '';
+    if (!/^https?:\/\//i.test(imageUrl)) {
+      setCreativeError('Esse item não tem imagem disponível para análise (thumbnail).');
+      return;
+    }
+
+    setCreativeBusy(true);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('Sessão inválida. Faça logout/login e tente novamente.');
+
+      const metrics = {
+        level: selectedLevel,
+        status: row.status,
+        spend: row.spend,
+        impressions: row.impressions,
+        reach: row.reach,
+        clicks: row.clicks,
+        inlineLinkClicks: row.inlineLinkClicks,
+        ctr: row.ctr,
+        cpc: row.cpc,
+        cpm: row.cpm,
+        frequency: row.frequency,
+        results: row.results,
+        resultLabel: row.resultLabel,
+        costPerResult: row.costPerResult,
+        roas: row.roas,
+        leads: row.leads,
+        cpa: row.cpa,
+        hookRate: row.hookRate,
+        holdRate: row.holdRate,
+        idc: row.idc,
+        classification: row.classification,
+        tags: row.tags ?? [],
+      };
+
+      const res = await fetch(`${getSupabaseUrl()}/functions/v1/ai-assistant`, {
+        method: 'POST',
+        headers: {
+          apikey: getSupabaseAnonKey(),
+          authorization: `Bearer ${accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          mode: 'creative_analysis',
+          company_id: companyId,
+          image_url: imageUrl,
+          metrics,
+          provider: local.provider,
+          api_key: local.apiKey,
+          model: local.model,
+          access_token: accessToken,
+        }),
+      });
+
+      const payloadText = await res.text().catch(() => '');
+      const payload = payloadText ? JSON.parse(payloadText) : {};
+      if (!res.ok) {
+        throw new Error(payload?.error ?? `Falha ao chamar IA (HTTP ${res.status}).`);
+      }
+
+      setCreativeResult((payload as any)?.result ?? payload);
+    } catch (e: any) {
+      console.error(e);
+      setCreativeError(String(e?.message ?? 'Falha ao analisar criativo.'));
+    } finally {
+      setCreativeBusy(false);
+    }
   };
 
   return (
@@ -1559,6 +1674,17 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                             >
                               <ExternalLink className="w-3 h-3" />
                             </button>
+                            {selectedLevel === 'ad' && !demoMode && row.imageUrl ? (
+                              <button
+                                type="button"
+                                className="ml-2 inline-flex items-center text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))]"
+                                title="Analisar criativo com IA"
+                                disabled={creativeBusy && creativeRow?.id === row.id}
+                                onClick={() => void analyzeCreative(row)}
+                              >
+                                <Sparkles className={`w-3 h-3 ${creativeBusy && creativeRow?.id === row.id ? 'animate-pulse' : ''}`} />
+                              </button>
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -1779,6 +1905,106 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                   {selectedPresetId === DEFAULT_PRESET_ID ? 'Salvar' : 'Salvar como nova'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {creativeModalOpen && creativeRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-2xl bg-[hsl(var(--card))] rounded-xl border border-[hsl(var(--border))] shadow-xl overflow-hidden">
+            <div className="flex items-center justify-between p-4 border-b border-[hsl(var(--border))]">
+              <div className="min-w-0">
+                <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Análise de Criativo (IA)</div>
+                <div className="text-xs text-[hsl(var(--muted-foreground))] truncate">{creativeRow.adName}</div>
+              </div>
+              <button
+                type="button"
+                className="p-2 rounded hover:bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))]"
+                onClick={closeCreativeModal}
+                title="Fechar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4 max-h-[70vh] overflow-auto">
+              <div className="flex items-start gap-4">
+                <img
+                  src={creativeRow.thumbnail}
+                  alt=""
+                  className="w-20 h-20 rounded object-cover border border-[hsl(var(--border))]"
+                />
+                <div className="flex-1">
+                  <div className="text-xs text-[hsl(var(--muted-foreground))]">Resultado: {creativeRow.resultLabel ?? '-'}</div>
+                  <div className="text-xs text-[hsl(var(--muted-foreground))]">Investido: R$ {creativeRow.spend.toFixed(2)}</div>
+                  {creativeRow.ctr != null && (
+                    <div className="text-xs text-[hsl(var(--muted-foreground))]">CTR: {creativeRow.ctr.toFixed(2)}%</div>
+                  )}
+                </div>
+              </div>
+
+              {creativeBusy && <div className="text-sm text-[hsl(var(--muted-foreground))]">Analisando…</div>}
+              {creativeError && <div className="text-sm text-red-500">{creativeError}</div>}
+
+              {creativeResult && (
+                <div className="space-y-3">
+                  {typeof creativeResult?.summary === 'string' && (
+                    <div>
+                      <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Resumo</div>
+                      <div className="mt-1 text-sm text-[hsl(var(--foreground))] whitespace-pre-wrap">{creativeResult.summary}</div>
+                    </div>
+                  )}
+
+                  {Array.isArray(creativeResult?.hypotheses) && creativeResult.hypotheses.length > 0 && (
+                    <div>
+                      <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Hipóteses</div>
+                      <ul className="mt-1 list-disc pl-5 text-sm text-[hsl(var(--foreground))] space-y-1">
+                        {creativeResult.hypotheses.map((h: any, idx: number) => (
+                          <li key={idx}>{String(h)}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {Array.isArray(creativeResult?.recommendations) && creativeResult.recommendations.length > 0 && (
+                    <div>
+                      <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Recomendações</div>
+                      <ul className="mt-1 list-disc pl-5 text-sm text-[hsl(var(--foreground))] space-y-1">
+                        {creativeResult.recommendations.map((r: any, idx: number) => (
+                          <li key={idx}>{String(r)}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {typeof creativeResult?.classification === 'string' && (
+                    <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                      Classificação (IA): <span className="text-[hsl(var(--foreground))]">{creativeResult.classification}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <div className="p-4 border-t border-[hsl(var(--border))] flex justify-end gap-2">
+              {selectedLevel === 'ad' && !demoMode && creativeRow.imageUrl ? (
+                <button
+                  type="button"
+                  className="px-3 py-2 text-sm bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))] border border-[hsl(var(--border))] rounded-md hover:bg-[hsl(var(--secondary))/0.8]"
+                  onClick={() => void analyzeCreative(creativeRow)}
+                  disabled={creativeBusy}
+                >
+                  {creativeBusy ? 'Analisando…' : 'Reanalisar'}
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="px-3 py-2 text-sm bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
+                onClick={closeCreativeModal}
+              >
+                Fechar
+              </button>
             </div>
           </div>
         </div>

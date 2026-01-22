@@ -497,7 +497,7 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
         method: 'POST',
         headers: {
           apikey: getSupabaseAnonKey(),
-          Authorization: `Bearer ${accessToken}`,
+          authorization: `Bearer ${accessToken}`,
           'content-type': 'application/json',
         },
         body: JSON.stringify({

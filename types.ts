@@ -14,6 +14,7 @@ export interface AdMetric {
   adName: string;
   adId: string;
   thumbnail: string;
+  imageUrl?: string;
   subtitle?: string;
   campaignId?: string;
   campaignName?: string;
