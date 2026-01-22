@@ -68,7 +68,11 @@ export default function App() {
       try {
         const [{ data: profile }, { data: memberships }] = await Promise.all([
           supabase.from('users').select('full_name, avatar_url, role').eq('id', sessionUser.id).maybeSingle(),
-          supabase.from('company_members').select('company_id,created_at').order('created_at', { ascending: true }),
+          supabase
+            .from('company_members')
+            .select('company_id,created_at')
+            .eq('user_id', sessionUser.id)
+            .order('created_at', { ascending: true }),
         ]);
 
         const membershipIds = (memberships ?? []).map((m: any) => m.company_id).filter(Boolean);

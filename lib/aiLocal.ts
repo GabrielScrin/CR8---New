@@ -22,10 +22,16 @@ export const loadLocalAiSettings = (userId?: string): LocalAiSettings | null => 
     if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<LocalAiSettings>;
     if (!parsed.provider || !parsed.apiKey) return null;
+
+    // Migration: older builds used gemini-1.5-flash as default. Keep the saved value only if the user explicitly changed it.
+    const provider = parsed.provider as LlmProvider;
+    const modelRaw = parsed.model ? String(parsed.model) : undefined;
+    const model =
+      provider === 'google' && modelRaw === 'gemini-1.5-flash' ? undefined : modelRaw;
     return {
-      provider: parsed.provider as LlmProvider,
+      provider,
       apiKey: String(parsed.apiKey),
-      model: parsed.model ? String(parsed.model) : undefined,
+      model,
     };
   } catch {
     return null;

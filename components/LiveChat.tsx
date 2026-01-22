@@ -438,12 +438,26 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
         throw new Error('Sessão inválida. Faça logout/login e tente novamente.');
       }
 
-      const { data, error: fnError } = await supabase.functions.invoke('omni-send', {
-        body: { chat_id: activeChatId, content, access_token: accessToken },
+      // Use fetch direto para evitar inconsistências de header auth no invoke (401 com body vazio).
+      const res = await fetch(`${getSupabaseUrl()}/functions/v1/omni-send`, {
+        method: 'POST',
+        headers: {
+          apikey: getSupabaseAnonKey(),
+          authorization: `Bearer ${accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ chat_id: activeChatId, content, access_token: accessToken }),
       });
-      if (fnError) throw fnError;
 
-      const provider = (data as any)?.provider;
+      const payloadText = await res.text().catch(() => '');
+      const payload = payloadText ? JSON.parse(payloadText) : {};
+      if (!res.ok) {
+        throw Object.assign(new Error((payload as any)?.error ?? 'Falha ao enviar mensagem.'), {
+          context: { status: res.status, body: payload },
+        });
+      }
+
+      const provider = (payload as any)?.provider;
       if (provider && provider.ok === false && provider.skipped !== true) {
         const status = provider.status ? `HTTP ${provider.status}` : 'erro';
         setError(`Mensagem salva, mas o provedor recusou o envio (${status}).`);
