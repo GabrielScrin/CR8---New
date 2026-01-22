@@ -8,6 +8,7 @@ import { LiveChat } from './components/LiveChat';
 import { CompanySetup } from './components/CompanySetup';
 import { ContactsLeads } from './components/ContactsLeads';
 import { AIAgent } from './components/AIAgent';
+import { SettingsView } from './components/SettingsView';
 import { Role, User } from './types';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { loadSelectedCompanyId, saveSelectedCompanyId } from './lib/companySelection';
@@ -154,7 +155,7 @@ export default function App() {
       case 'ai':
         return <AIAgent companyId={user.companyId} userId={user.id} />;
       case 'settings':
-        return <PlaceholderView title="Configurações Gerais" />;
+        return <SettingsView companyId={user.companyId} role={user.role} />;
       default:
         return <Dashboard />;
     }
