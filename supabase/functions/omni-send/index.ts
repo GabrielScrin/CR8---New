@@ -52,7 +52,9 @@ const extractBearerToken = (authorizationHeader: string | null): string | null =
   if (!authorizationHeader) return null;
   const match = authorizationHeader.match(/^Bearer\s+(.+)$/i);
   if (!match) return null;
-  const token = match[1]?.trim();
+  const token = match[1]
+    ?.split(',')[0]
+    ?.trim();
   return token ? token : null;
 };
 
