@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { motion } from 'framer-motion';
 import { Building2, KeyRound } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -55,89 +56,109 @@ export const CompanySetup: React.FC<CompanySetupProps> = ({ onDone }) => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100 px-4">
-      <div className="bg-white p-8 rounded-2xl shadow-md w-full max-w-lg space-y-6 border border-gray-100">
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-2xl font-bold text-gray-900">Primeiro Setup</h2>
-            <p className="text-sm text-gray-500 mt-1">Crie uma empresa/cliente para começar a ver dados reais.</p>
+    <div className="min-h-screen flex items-center justify-center bg-[hsl(var(--background))] px-4 py-10">
+      <motion.div
+        initial={{ opacity: 0, y: 10, scale: 0.99 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.35, ease: 'easeOut' }}
+        className="w-full max-w-xl rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] shadow-2xl"
+      >
+        <div className="p-8">
+          <div className="flex items-start justify-between gap-6">
+            <div className="flex items-start gap-4">
+              <div className="h-12 w-12 rounded-xl bg-transparent flex items-center justify-center overflow-hidden ring-1 ring-[hsl(var(--border))]">
+                <img src="/cr8-logo.svg" alt="CR8" className="h-12 w-12 object-contain" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-extrabold">Primeiro Setup</h2>
+                <p className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
+                  Crie uma empresa/cliente para começar a ver dados reais.
+                </p>
+              </div>
+            </div>
+
+            <div className="h-12 w-12 rounded-xl bg-[hsl(var(--secondary))] border border-[hsl(var(--border))] flex items-center justify-center">
+              <Building2 className="h-6 w-6 text-[hsl(var(--primary))]" />
+            </div>
           </div>
-          <Building2 className="w-10 h-10 text-indigo-600" />
+
+          {errorMsg && (
+            <div className="mt-6 text-sm text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg p-3">{errorMsg}</div>
+          )}
+
+          <form onSubmit={handleCreate} className="mt-6 space-y-5">
+            <div>
+              <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Nome da empresa/cliente</label>
+              <input
+                value={companyName}
+                onChange={(e) => setCompanyName(e.target.value)}
+                required
+                className="mt-1 w-full border border-[hsl(var(--border))] rounded-lg px-3 py-2 bg-[hsl(var(--input))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                placeholder="Ex: Cliente X"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Meta Ad Account ID (opcional)</label>
+              <div className="mt-1 flex items-center border border-[hsl(var(--border))] rounded-lg px-3 py-2 bg-[hsl(var(--input))] focus-within:ring-2 focus-within:ring-[hsl(var(--ring))]">
+                <KeyRound className="w-4 h-4 text-[hsl(var(--muted-foreground))] mr-2" />
+                <input
+                  value={metaAdAccountId}
+                  onChange={(e) => setMetaAdAccountId(e.target.value)}
+                  className="w-full outline-none bg-transparent text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]"
+                  placeholder="act_1234567890"
+                />
+              </div>
+              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                Isso é usado no módulo de Tráfego (Meta Insights). Você também pode definir depois em `companies.meta_ad_account_id`.
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[hsl(var(--foreground))]">WhatsApp Phone Number ID (opcional)</label>
+              <input
+                value={whatsAppPhoneNumberId}
+                onChange={(e) => setWhatsAppPhoneNumberId(e.target.value)}
+                className="mt-1 w-full border border-[hsl(var(--border))] rounded-lg px-3 py-2 bg-[hsl(var(--input))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                placeholder="Ex: 123456789012345"
+              />
+              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                Use para vincular webhooks do WhatsApp a esta empresa. Você encontra em WhatsApp Manager (Phone Numbers) ou no payload do webhook (`metadata.phone_number_id`).
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-[hsl(var(--foreground))]">White Label (opcional)</label>
+              <div className="mt-2 space-y-2">
+                <input
+                  value={brandName}
+                  onChange={(e) => setBrandName(e.target.value)}
+                  className="w-full border border-[hsl(var(--border))] rounded-lg px-3 py-2 bg-[hsl(var(--input))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                  placeholder="Nome de marca (ex: Bioclin Vacinas)"
+                />
+                <input
+                  value={brandLogoUrl}
+                  onChange={(e) => setBrandLogoUrl(e.target.value)}
+                  className="w-full border border-[hsl(var(--border))] rounded-lg px-3 py-2 bg-[hsl(var(--input))] text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                  placeholder="URL do logo (https://...)"
+                />
+              </div>
+              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">Personaliza a navegação para o cliente (fase 5).</p>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className={`w-full flex items-center justify-center px-5 py-3 text-base font-medium text-white rounded-lg transition-colors ${
+                loading ? 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] cursor-not-allowed' : 'bg-[hsl(var(--primary))] hover:opacity-90'
+              }`}
+            >
+              {loading ? 'Criando…' : 'Criar empresa'}
+            </button>
+          </form>
         </div>
-
-        {errorMsg && <div className="text-sm text-red-600 bg-red-50 border border-red-100 rounded-lg p-3">{errorMsg}</div>}
-
-        <form onSubmit={handleCreate} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Nome da empresa/cliente</label>
-            <input
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              required
-              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Ex: Cliente X"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Meta Ad Account ID (opcional)</label>
-            <div className="mt-1 flex items-center border border-gray-300 rounded-lg px-3 py-2 focus-within:ring-2 focus-within:ring-indigo-500">
-              <KeyRound className="w-4 h-4 text-gray-400 mr-2" />
-              <input
-                value={metaAdAccountId}
-                onChange={(e) => setMetaAdAccountId(e.target.value)}
-                className="w-full outline-none"
-                placeholder="act_1234567890"
-              />
-            </div>
-            <p className="text-xs text-gray-400 mt-1">
-              Isso é usado no módulo de Tráfego (Meta Insights). Você também pode definir depois em `companies.meta_ad_account_id`.
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">WhatsApp Phone Number ID (opcional)</label>
-            <input
-              value={whatsAppPhoneNumberId}
-              onChange={(e) => setWhatsAppPhoneNumberId(e.target.value)}
-              className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              placeholder="Ex: 123456789012345"
-            />
-            <p className="text-xs text-gray-400 mt-1">
-              Use para vincular webhooks do WhatsApp a esta empresa. Você encontra em WhatsApp Manager (Phone Numbers) ou no payload do webhook (`metadata.phone_number_id`).
-            </p>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">White Label (opcional)</label>
-            <div className="mt-2 space-y-2">
-              <input
-                value={brandName}
-                onChange={(e) => setBrandName(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="Nome de marca (ex: Bioclin Vacinas)"
-              />
-              <input
-                value={brandLogoUrl}
-                onChange={(e) => setBrandLogoUrl(e.target.value)}
-                className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                placeholder="URL do logo (https://...)"
-              />
-            </div>
-            <p className="text-xs text-gray-400 mt-1">Personaliza a navegaÇùÇœo para o cliente (fase 5).</p>
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className={`w-full px-4 py-2 rounded-lg text-white font-medium ${
-              loading ? 'bg-gray-400' : 'bg-indigo-600 hover:bg-indigo-700'
-            }`}
-          >
-            {loading ? 'Criando...' : 'Criar empresa'}
-          </button>
-        </form>
-      </div>
+      </motion.div>
     </div>
   );
 };
+
