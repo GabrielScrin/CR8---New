@@ -15,7 +15,84 @@ interface LayoutProps {
   onCompanyChange: (companyId: string) => void;
 }
 
-type CompanyOption = { id: string; name: string; brand_name?: string | null; brand_logo_url?: string | null };
+type CompanyOption = {
+  id: string;
+  name: string;
+  brand_name?: string | null;
+  brand_logo_url?: string | null;
+  brand_primary_color?: string | null;
+};
+
+const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+
+const hexToHsl = (hex: string): { h: number; s: number; l: number } | null => {
+  const raw = hex.trim();
+  if (!raw) return null;
+
+  const v = raw.startsWith('#') ? raw.slice(1) : raw;
+  const isShort = v.length === 3;
+  const isLong = v.length === 6;
+  if (!isShort && !isLong) return null;
+
+  const full = isShort ? v.split('').map((c) => c + c).join('') : v;
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  if (![r, g, b].every((n) => Number.isFinite(n))) return null;
+
+  const rn = r / 255;
+  const gn = g / 255;
+  const bn = b / 255;
+
+  const max = Math.max(rn, gn, bn);
+  const min = Math.min(rn, gn, bn);
+  const d = max - min;
+
+  let h = 0;
+  if (d !== 0) {
+    if (max === rn) h = ((gn - bn) / d) % 6;
+    else if (max === gn) h = (bn - rn) / d + 2;
+    else h = (rn - gn) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+
+  const l = (max + min) / 2;
+  const s = d === 0 ? 0 : d / (1 - Math.abs(2 * l - 1));
+
+  return {
+    h: Math.round(h),
+    s: Math.round(clamp01(s) * 100),
+    l: Math.round(clamp01(l) * 100),
+  };
+};
+
+const applyBrandPrimaryColor = (hex: string | null | undefined) => {
+  const root = document.documentElement;
+  const style = root.style;
+
+  if (!hex) {
+    style.removeProperty('--primary');
+    style.removeProperty('--ring');
+    style.removeProperty('--sidebar-primary');
+    style.removeProperty('--gradient-primary');
+    style.removeProperty('--shadow-glow');
+    return;
+  }
+
+  const hsl = hexToHsl(hex);
+  if (!hsl) return;
+
+  const primary = `${hsl.h} ${hsl.s}% ${hsl.l}%`;
+  style.setProperty('--primary', primary);
+  style.setProperty('--ring', primary);
+  style.setProperty('--sidebar-primary', primary);
+
+  const h2 = (hsl.h + 20) % 360;
+  const l2 = Math.max(18, Math.min(72, hsl.l + 8));
+  style.setProperty('--gradient-primary', `linear-gradient(135deg, hsl(${primary}) 0%, hsl(${h2} ${hsl.s}% ${l2}%) 100%)`);
+  style.setProperty('--shadow-glow', `0 0 20px -5px hsl(${primary} / 0.35)`);
+};
 
 export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, setCurrentView, onLogout, onCompanyChange }) => {
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
@@ -46,7 +123,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
     const fetchCompanies = async () => {
       try {
         setCompaniesError(null);
-        const preferredSelect = 'id,name,brand_name,brand_logo_url';
+        const preferredSelect = 'id,name,brand_name,brand_logo_url,brand_primary_color';
         let { data, error } = await supabase.from('companies').select(preferredSelect).order('created_at', { ascending: true });
         if (error && String(error.message || '').toLowerCase().includes('does not exist')) {
           ({ data, error } = await supabase.from('companies').select('id,name').order('created_at', { ascending: true }));
@@ -58,6 +135,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
           name: d.name ?? 'Empresa',
           brand_name: d.brand_name ?? null,
           brand_logo_url: d.brand_logo_url ?? null,
+          brand_primary_color: d.brand_primary_color ?? null,
         }));
         setCompanies(rows);
       } catch (e: any) {
@@ -73,6 +151,12 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
       alive = false;
     };
   }, [user.id]);
+
+  useEffect(() => {
+    // White label primary color per selected company
+    if (!isSupabaseConfigured()) return;
+    applyBrandPrimaryColor(selectedCompany?.brand_primary_color ?? null);
+  }, [selectedCompany?.brand_primary_color]);
 
   useEffect(() => {
     if (!isAiPanelOpen) return;

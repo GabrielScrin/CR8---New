@@ -66,11 +66,15 @@ export default function App() {
       };
 
       try {
+        // If Phase 5 invites exist, accept any pending invites for this user (idempotent).
+        // Ignore failures when the migration isn't applied yet.
+        await supabase.rpc('accept_company_invites_for_current_user').catch(() => null);
+
         const [{ data: profile }, { data: memberships }] = await Promise.all([
           supabase.from('users').select('full_name, avatar_url, role').eq('id', sessionUser.id).maybeSingle(),
           supabase
             .from('company_members')
-            .select('company_id,created_at')
+            .select('company_id,created_at,member_role')
             .eq('user_id', sessionUser.id)
             .order('created_at', { ascending: true }),
         ]);
@@ -78,12 +82,15 @@ export default function App() {
         const membershipIds = (memberships ?? []).map((m: any) => m.company_id).filter(Boolean);
         const preferred = loadSelectedCompanyId(sessionUser.id);
         const companyId = preferred && membershipIds.includes(preferred) ? preferred : membershipIds[0] ?? fallback.companyId;
+        const membershipForSelectedCompany = (memberships ?? []).find((m: any) => m.company_id === companyId);
+        const companyRole = (membershipForSelectedCompany?.member_role as Role | undefined) ?? null;
 
         return {
           ...fallback,
           name: profile?.full_name || fallback.name,
           avatar: profile?.avatar_url || fallback.avatar,
-          role: (profile?.role as Role) || fallback.role,
+          // Role should be per-company (company_members.member_role), falling back to profile role for legacy paths.
+          role: companyRole || ((profile?.role as Role) || fallback.role),
           companyId,
         };
       } catch {
@@ -130,12 +137,48 @@ export default function App() {
   }
 
   if (isSupabaseConfigured() && !user.companyId) {
-    return <CompanySetup onDone={(companyId) => setUser({ ...user, companyId })} />;
+    return (
+      <CompanySetup
+        onDone={(companyId) => {
+          saveSelectedCompanyId(user.id, companyId);
+
+          void (async () => {
+            let nextRole: Role = user.role;
+
+            const { data: membership } = await supabase
+              .from('company_members')
+              .select('member_role')
+              .eq('user_id', user.id)
+              .eq('company_id', companyId)
+              .maybeSingle();
+
+            if (membership?.member_role) nextRole = membership.member_role as Role;
+
+            setUser({ ...user, companyId, role: nextRole });
+          })();
+        }}
+      />
+    );
   }
 
   const handleCompanyChange = (companyId: string) => {
     saveSelectedCompanyId(user.id, companyId);
-    setUser({ ...user, companyId });
+
+    void (async () => {
+      let nextRole: Role = user.role;
+      if (isSupabaseConfigured()) {
+        const { data: membership } = await supabase
+          .from('company_members')
+          .select('member_role')
+          .eq('user_id', user.id)
+          .eq('company_id', companyId)
+          .maybeSingle();
+
+        if (membership?.member_role) nextRole = membership.member_role as Role;
+      }
+
+      setUser({ ...user, companyId, role: nextRole });
+    })();
   };
 
   const renderView = () => {

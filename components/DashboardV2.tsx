@@ -72,9 +72,14 @@ const asNumber = (v: unknown) => {
   return NaN;
 };
 
-const formatCurrency = (value: number | null) => {
+const formatCurrency = (value: number | null, currency: string = 'BRL') => {
   if (value == null || !Number.isFinite(value)) return '-';
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  const c = (currency || 'BRL').toUpperCase();
+  try {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: c }).format(value);
+  } catch {
+    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
+  }
 };
 
 const formatNumber = (value: number | null) => {
@@ -147,6 +152,10 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
 
   const [companyName, setCompanyName] = useState<string | null>(null);
   const [metaAdAccountId, setMetaAdAccountId] = useState<string | null>(null);
+  const [companyCurrency, setCompanyCurrency] = useState<string>('BRL');
+  const [companyMediaBalance, setCompanyMediaBalance] = useState<number | null>(null);
+  const [companyFeePercent, setCompanyFeePercent] = useState<number | null>(null);
+  const [companyFeeFixed, setCompanyFeeFixed] = useState<number | null>(null);
 
   const [totalLeads, setTotalLeads] = useState<number | null>(null);
   const [totalLeadsChange, setTotalLeadsChange] = useState<number | null>(null);
@@ -315,6 +324,10 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
       setErrorMsg('Supabase não está configurado (faltando VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY).');
       setCompanyName(null);
       setMetaAdAccountId(null);
+      setCompanyCurrency('BRL');
+      setCompanyMediaBalance(null);
+      setCompanyFeePercent(null);
+      setCompanyFeeFixed(null);
       setTotalLeads(null);
       setWonLeads(null);
       setRevenue(null);
@@ -332,7 +345,11 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
     setLoading(true);
     try {
       const [{ data: company }, { data: leadsRange, error: leadsError }, { data: recent }] = await Promise.all([
-        supabase.from('companies').select('name,meta_ad_account_id').eq('id', companyId).maybeSingle(),
+        supabase
+          .from('companies')
+          .select('name,brand_name,meta_ad_account_id,currency,media_balance,agency_fee_percent,agency_fee_fixed')
+          .eq('id', companyId)
+          .maybeSingle(),
         supabase
           .from('leads')
           .select('id,name,source,status,value,created_at,last_interaction_at')
@@ -350,8 +367,16 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
 
       if (leadsError) throw leadsError;
 
-      setCompanyName(company?.name ?? null);
+      setCompanyName((company as any)?.brand_name ?? company?.name ?? null);
       setMetaAdAccountId(company?.meta_ad_account_id ?? null);
+      setCompanyCurrency((company as any)?.currency ?? 'BRL');
+      setCompanyMediaBalance(
+        (company as any)?.media_balance != null ? (Number((company as any).media_balance) || 0) : null,
+      );
+      setCompanyFeePercent(
+        (company as any)?.agency_fee_percent != null ? Number((company as any).agency_fee_percent) : null,
+      );
+      setCompanyFeeFixed((company as any)?.agency_fee_fixed != null ? Number((company as any).agency_fee_fixed) : null);
 
       const rows: LeadRow[] = (leadsRange ?? []) as any;
       const currentRows = rows.filter((r) => new Date(r.created_at).getTime() >= range.startCurrent.getTime());
@@ -533,6 +558,24 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
     return { error, warning, total: error + warning };
   }, [alerts]);
 
+  const feeEstimate = useMemo(() => {
+    const pct = companyFeePercent != null && Number.isFinite(companyFeePercent) ? companyFeePercent : null;
+    const fixed = companyFeeFixed != null && Number.isFinite(companyFeeFixed) ? companyFeeFixed : null;
+    const spendN = spend != null && Number.isFinite(spend) ? spend : null;
+
+    const fromPct = pct != null && spendN != null ? (spendN * pct) / 100 : null;
+    const total = (fromPct ?? 0) + (fixed ?? 0);
+
+    if ((pct == null || spendN == null) && fixed == null) return null;
+    return { fromPct, fixed, total };
+  }, [companyFeeFixed, companyFeePercent, spend]);
+
+  const mediaBalanceAfter = useMemo(() => {
+    if (companyMediaBalance == null || !Number.isFinite(companyMediaBalance)) return null;
+    if (spend == null || !Number.isFinite(spend)) return null;
+    return companyMediaBalance - spend;
+  }, [companyMediaBalance, spend]);
+
   const sourceUi: Record<string, { label: string; color: string; icon: React.ReactNode }> = {
     whatsapp: { label: 'WhatsApp', color: 'bg-green-500/20 text-green-400', icon: <Users className="h-4 w-4" /> },
     instagram_dm: { label: 'Instagram', color: 'bg-pink-500/20 text-pink-400', icon: <Users className="h-4 w-4" /> },
@@ -598,7 +641,7 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
         {[
           {
             title: `Gasto (${PERIOD_LABEL[period]})`,
-            value: loading ? '...' : formatCurrency(spend),
+            value: loading ? '...' : formatCurrency(spend, companyCurrency),
             change: spendChange,
             icon: <DollarSign className="h-5 w-5 text-white" />,
             iconBg: 'bg-[hsl(var(--primary))]',
@@ -612,7 +655,7 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
           },
           {
             title: `CPL médio (${PERIOD_LABEL[period]})`,
-            value: loading ? '...' : formatCurrency(cpl),
+            value: loading ? '...' : formatCurrency(cpl, companyCurrency),
             change: null,
             icon: <Activity className="h-5 w-5 text-white" />,
             iconBg: 'bg-purple-600',
@@ -710,7 +753,7 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
                     fontSize={12}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(v: any) => formatCurrency(Number(v) || 0)}
+                    tickFormatter={(v: any) => formatCurrency(Number(v) || 0, companyCurrency)}
                   />
                   <YAxis
                     yAxisId="right"
@@ -732,7 +775,7 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
                     labelStyle={{ color: 'hsl(var(--popover-foreground))' }}
                     formatter={(value: any, name: string) => {
                       const n = Number(value) || 0;
-                      if (name === 'spend') return [formatCurrency(n), 'Gasto'];
+                      if (name === 'spend') return [formatCurrency(n, companyCurrency), 'Gasto'];
                       if (name === 'leads') return [formatNumber(n), 'Leads'];
                       return [n, name];
                     }}
@@ -808,7 +851,7 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
                     </p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-bold text-[hsl(var(--foreground))]">{formatCurrency(c.spend)}</p>
+                    <p className="text-sm font-bold text-[hsl(var(--foreground))]">{formatCurrency(c.spend, companyCurrency)}</p>
                   </div>
                 </motion.div>
               ))}
@@ -816,6 +859,54 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
           )}
         </motion.div>
       </div>
+
+      {variant !== 'client' && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.22 }}
+          whileHover={{ scale: 1.01, transition: { duration: 0.2 } }}
+          layout
+          className="cr8-card p-5"
+        >
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div>
+              <h3 className="text-lg font-bold text-[hsl(var(--foreground))]">Financeiro</h3>
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">Saldo de mídia e fee (por empresa)</p>
+            </div>
+            <span className="text-xs text-[hsl(var(--muted-foreground))]">Moeda: {companyCurrency || 'BRL'}</span>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-3">
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-4">
+              <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Saldo de mídia</div>
+              <div className="mt-2 text-2xl font-extrabold text-[hsl(var(--foreground))]">
+                {loading ? '...' : formatCurrency(companyMediaBalance, companyCurrency)}
+              </div>
+              <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">Defina em Configurações → Financeiro.</div>
+            </div>
+
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-4">
+              <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Fee (estimado)</div>
+              <div className="mt-2 text-2xl font-extrabold text-[hsl(var(--foreground))]">
+                {loading ? '...' : feeEstimate ? formatCurrency(feeEstimate.total, companyCurrency) : '-'}
+              </div>
+              <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">
+                {companyFeePercent != null && Number.isFinite(companyFeePercent) ? `${companyFeePercent}%` : '—'}
+                {companyFeeFixed != null && Number.isFinite(companyFeeFixed) ? ` + ${formatCurrency(companyFeeFixed, companyCurrency)}` : ''}
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-4">
+              <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Saldo pós-gasto</div>
+              <div className="mt-2 text-2xl font-extrabold text-[hsl(var(--foreground))]">
+                {loading ? '...' : formatCurrency(mediaBalanceAfter, companyCurrency)}
+              </div>
+              <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">Saldo de mídia − gasto do período.</div>
+            </div>
+          </div>
+        </motion.div>
+      )}
 
       {variant !== 'client' && (
         <div className="grid gap-6 lg:grid-cols-2">
@@ -992,7 +1083,7 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
       <div className="cr8-card p-4 text-xs text-[hsl(var(--muted-foreground))]">
         <div>CPL = Gasto / Leads do período. “Resultados” (Meta) considera Leads + Conversas como lead.</div>
         <div className="mt-1">
-          Receita (won): <span className="text-[hsl(var(--foreground))] font-semibold">{formatCurrency(revenue)}</span>
+          Receita (won): <span className="text-[hsl(var(--foreground))] font-semibold">{formatCurrency(revenue, companyCurrency)}</span>
           {revenueChange != null && Number.isFinite(revenueChange) ? (
             <span className="ml-2">({formatPct(revenueChange)} vs período anterior)</span>
           ) : null}
