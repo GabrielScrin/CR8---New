@@ -81,7 +81,15 @@ export default function App() {
 
         const membershipIds = (memberships ?? []).map((m: any) => m.company_id).filter(Boolean);
         const preferred = loadSelectedCompanyId(sessionUser.id);
-        const companyId = preferred && membershipIds.includes(preferred) ? preferred : membershipIds[0] ?? fallback.companyId;
+
+        // Prefer last selected company (localStorage) even if the membership list fails to load for some reason.
+        // If the user isn't a member, subsequent queries will naturally be blocked by RLS.
+        const companyId =
+          (preferred && membershipIds.includes(preferred) ? preferred : undefined) ??
+          preferred ??
+          membershipIds[0] ??
+          fallback.companyId;
+
         const membershipForSelectedCompany = (memberships ?? []).find((m: any) => m.company_id === companyId);
         const companyRole = (membershipForSelectedCompany?.member_role as Role | undefined) ?? null;
 
@@ -94,7 +102,10 @@ export default function App() {
           companyId,
         };
       } catch {
-        return fallback;
+        // As a last resort, try to keep the user's last selected company so they don't get stuck in "Primeiro Setup"
+        // on refresh/tab switch.
+        const preferred = loadSelectedCompanyId(sessionUser.id);
+        return preferred ? { ...fallback, companyId: preferred } : fallback;
       }
     };
 
@@ -141,6 +152,8 @@ export default function App() {
       <CompanySetup
         onDone={(companyId) => {
           saveSelectedCompanyId(user.id, companyId);
+          // Set immediately so refreshes / tab switches don't bounce back to setup.
+          setUser({ ...user, companyId });
 
           void (async () => {
             let nextRole: Role = user.role;
@@ -163,6 +176,8 @@ export default function App() {
 
   const handleCompanyChange = (companyId: string) => {
     saveSelectedCompanyId(user.id, companyId);
+    // Optimistic update: keep the selected company immediately.
+    setUser({ ...user, companyId });
 
     void (async () => {
       let nextRole: Role = user.role;
