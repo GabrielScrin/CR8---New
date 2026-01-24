@@ -252,6 +252,7 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
     whatsapp_phone_number_id: string | null;
     whatsapp_waba_id: string | null;
   } | null>(null);
+  const reloadActiveChatTimerRef = useRef<number | null>(null);
 
   const activeChat = useMemo(() => chats.find((c) => c.id === activeChatId) ?? null, [chats, activeChatId]);
   const sessions: ChatSession[] = useMemo(() => chats.map((c) => toChatSession(c, unreadByChatId[c.id] ?? 0)), [chats, unreadByChatId]);
@@ -405,13 +406,28 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'chats', filter: `company_id=eq.${companyId}` },
-        () => void loadChats()
+        (payload) => {
+          void loadChats();
+
+          // Fallback: if realtime INSERT on chat_messages is missed (or the user had the tab unfocused),
+          // refresh the active chat messages when the active chat row changes.
+          const changedChatId = String((payload as any)?.new?.id ?? (payload as any)?.old?.id ?? '');
+          if (!changedChatId || !activeChatId) return;
+          if (changedChatId !== activeChatId) return;
+
+          if (reloadActiveChatTimerRef.current) window.clearTimeout(reloadActiveChatTimerRef.current);
+          reloadActiveChatTimerRef.current = window.setTimeout(() => {
+            void loadMessages(activeChatId);
+          }, 350);
+        }
       )
       .subscribe();
     return () => {
+      if (reloadActiveChatTimerRef.current) window.clearTimeout(reloadActiveChatTimerRef.current);
+      reloadActiveChatTimerRef.current = null;
       void supabase.removeChannel(channel);
     };
-  }, [companyId, loadChats, readOnlyMode]);
+  }, [activeChatId, companyId, loadChats, loadMessages, readOnlyMode]);
 
   // Realtime: active chat messages
   useEffect(() => {
@@ -433,6 +449,18 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
       void supabase.removeChannel(channel);
     };
   }, [activeChatId, markRead, readOnlyMode]);
+
+  // Fallback: when the tab becomes visible again, refresh list + active messages.
+  useEffect(() => {
+    if (readOnlyMode) return;
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      void loadChats();
+      if (activeChatId) void loadMessages(activeChatId);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [activeChatId, loadChats, loadMessages, readOnlyMode]);
 
   const sendMessage = useCallback(async () => {
     if (!activeChatId) return;
