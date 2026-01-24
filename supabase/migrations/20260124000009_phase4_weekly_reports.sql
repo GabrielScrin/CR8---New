@@ -450,10 +450,9 @@ begin
       perform cron.schedule(
         'cr8_weekly_reports',
         '0 12 * * 1',
-        $$select public.generate_weekly_reports_for_all();$$
+        $cron$select public.generate_weekly_reports_for_all();$cron$
       );
     end if;
   end if;
 end
 $$;
-
