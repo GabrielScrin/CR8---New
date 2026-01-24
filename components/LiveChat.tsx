@@ -241,6 +241,7 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
   const [loadingMessages, setLoadingMessages] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aiSuggesting, setAiSuggesting] = useState(false);
+  const [aiAutoReplying, setAiAutoReplying] = useState(false);
 
   const [chats, setChats] = useState<ChatRow[]>([]);
   const [unreadByChatId, setUnreadByChatId] = useState<Record<string, number>>({});
@@ -253,9 +254,21 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
     whatsapp_waba_id: string | null;
   } | null>(null);
   const reloadActiveChatTimerRef = useRef<number | null>(null);
+  const processedInboundMessageIdsRef = useRef<Set<string>>(new Set());
+  const aiAutoReplyQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const activeChatRef = useRef<ChatRow | null>(null);
+  const messageInputRef = useRef<string>('');
 
   const activeChat = useMemo(() => chats.find((c) => c.id === activeChatId) ?? null, [chats, activeChatId]);
   const sessions: ChatSession[] = useMemo(() => chats.map((c) => toChatSession(c, unreadByChatId[c.id] ?? 0)), [chats, unreadByChatId]);
+
+  useEffect(() => {
+    activeChatRef.current = activeChat;
+  }, [activeChat]);
+
+  useEffect(() => {
+    messageInputRef.current = messageInput;
+  }, [messageInput]);
 
   const filteredSessions = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -442,13 +455,14 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
           if (!row?.id) return;
           setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
           void markRead(activeChatId);
+          void maybeAutoSdrReply(row as MessageRow);
         }
       )
       .subscribe();
     return () => {
       void supabase.removeChannel(channel);
     };
-  }, [activeChatId, markRead, readOnlyMode]);
+  }, [activeChatId, markRead, maybeAutoSdrReply, readOnlyMode]);
 
   // Fallback: when the tab becomes visible again, refresh list + active messages.
   useEffect(() => {
@@ -462,6 +476,46 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
     return () => document.removeEventListener('visibilitychange', onVisibility);
   }, [activeChatId, loadChats, loadMessages, readOnlyMode]);
 
+  const safeJson = (text: string): any => {
+    const raw = String(text ?? '').trim();
+    if (!raw) return {};
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return { raw };
+    }
+  };
+
+  const sendOutboundMessage = useCallback(async (chatId: string, content: string) => {
+    // Garanta que o JWT vá no body como fallback (evita 401 em alguns ambientes).
+    const { data: sessionData } = await supabase.auth.getSession();
+    const accessToken = sessionData.session?.access_token;
+    if (!accessToken) {
+      throw new Error('Sessão inválida. Faça logout/login e tente novamente.');
+    }
+
+    // Use fetch direto para evitar inconsistências de header auth no invoke (401 com body vazio).
+    const res = await fetch(`${getSupabaseUrl()}/functions/v1/omni-send`, {
+      method: 'POST',
+      headers: {
+        apikey: getSupabaseAnonKey(),
+        authorization: `Bearer ${accessToken}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ chat_id: chatId, content, access_token: accessToken }),
+    });
+
+    const payloadText = await res.text().catch(() => '');
+    const payload = safeJson(payloadText);
+    if (!res.ok) {
+      throw Object.assign(new Error((payload as any)?.error ?? 'Falha ao enviar mensagem.'), {
+        context: { status: res.status, body: payload },
+      });
+    }
+
+    return payload;
+  }, []);
+
   const sendMessage = useCallback(async () => {
     if (!activeChatId) return;
     const content = messageInput.trim();
@@ -470,32 +524,7 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
     setError(null);
 
     try {
-      // Garanta que o JWT vá no body como fallback (evita 401 em alguns ambientes).
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) {
-        throw new Error('Sessão inválida. Faça logout/login e tente novamente.');
-      }
-
-      // Use fetch direto para evitar inconsistências de header auth no invoke (401 com body vazio).
-      const res = await fetch(`${getSupabaseUrl()}/functions/v1/omni-send`, {
-        method: 'POST',
-        headers: {
-          apikey: getSupabaseAnonKey(),
-          authorization: `Bearer ${accessToken}`,
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({ chat_id: activeChatId, content, access_token: accessToken }),
-      });
-
-      const payloadText = await res.text().catch(() => '');
-      const payload = payloadText ? JSON.parse(payloadText) : {};
-      if (!res.ok) {
-        throw Object.assign(new Error((payload as any)?.error ?? 'Falha ao enviar mensagem.'), {
-          context: { status: res.status, body: payload },
-        });
-      }
-
+      const payload = await sendOutboundMessage(activeChatId, content);
       const provider = (payload as any)?.provider;
       if (provider && provider.ok === false && provider.skipped !== true) {
         const status = provider.status ? `HTTP ${provider.status}` : 'erro';
@@ -514,7 +543,185 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
 
       setError(`${baseMsg}${details}`);
     }
-  }, [activeChatId, messageInput]);
+  }, [activeChatId, messageInput, sendOutboundMessage]);
+
+  const upsertLeadFromChat = useCallback(
+    async (chat: ChatRow, qualification: any | null) => {
+      if (readOnlyMode || !companyId || !userId) return;
+      if (chat.platform !== 'whatsapp') return;
+      if (!chat.external_thread_id) return;
+
+      const externalId = `wa:${chat.external_thread_id}`;
+      const phone = chat.external_thread_id;
+      const name = chat?.raw?.contact_name ? String(chat.raw.contact_name) : null;
+      const nowIso = new Date().toISOString();
+
+      const mergedRaw: any = {
+        ...(chat.raw ?? {}),
+        sdr: {
+          ...((chat.raw ?? {})?.sdr ?? {}),
+          qualification: qualification ?? null,
+          last_qualified_at: nowIso,
+        },
+      };
+
+      const { data: leadRow, error: leadErr } = await supabase
+        .from('leads')
+        .upsert(
+          [
+            {
+              company_id: companyId,
+              external_id: externalId,
+              phone,
+              name,
+              source: 'WhatsApp',
+              status: 'new',
+              assigned_to: chat.taken_by ?? userId,
+              last_interaction_at: nowIso,
+              raw: mergedRaw,
+            },
+          ] as any,
+          { onConflict: 'company_id,external_id' }
+        )
+        .select('id')
+        .maybeSingle();
+
+      if (leadErr) throw leadErr;
+      if (leadRow?.id) {
+        await supabase.from('chats').update({ lead_id: String((leadRow as any).id) }).eq('id', chat.id);
+      }
+    },
+    [companyId, readOnlyMode, userId]
+  );
+
+  const persistChatSdrData = useCallback(
+    async (chat: ChatRow, sdrResult: any) => {
+      if (readOnlyMode) return;
+      const nowIso = new Date().toISOString();
+      const qualification = sdrResult?.qualification ?? null;
+      const handoffReady = Boolean(sdrResult?.handoff_ready);
+      const handoffReason = sdrResult?.handoff_reason ?? null;
+
+      try {
+        const nextRaw = {
+          ...(chat.raw ?? {}),
+          sdr: {
+            ...((chat.raw ?? {})?.sdr ?? {}),
+            qualification,
+            handoff_ready: handoffReady,
+            handoff_reason: handoffReason,
+            last_qualified_at: nowIso,
+          },
+        };
+
+        const { error: updErr } = await supabase.from('chats').update({ raw: nextRaw } as any).eq('id', chat.id);
+        if (updErr) {
+          const msg = String(updErr.message ?? '');
+          const isRawCacheError =
+            msg.toLowerCase().includes('raw') &&
+            (msg.toLowerCase().includes('schema cache') || msg.toLowerCase().includes('could not find'));
+          if (!isRawCacheError) throw updErr;
+        }
+      } finally {
+        try {
+          await upsertLeadFromChat(chat, qualification);
+        } catch (e) {
+          console.warn('[livechat] lead upsert failed', e);
+        }
+      }
+    },
+    [readOnlyMode, upsertLeadFromChat]
+  );
+
+  const maybeAutoSdrReply = useCallback(
+    async (incoming: MessageRow) => {
+      if (!activeChatId) return;
+      const chat = activeChatRef.current;
+      if (!chat) return;
+      if (incoming.chat_id !== activeChatId) return;
+      if (incoming.sender !== 'user') return;
+      if (!incoming.content?.trim()) return;
+      if (!userId) return;
+
+      // If the agent is typing, avoid "fighting" the human.
+      if (messageInputRef.current.trim()) return;
+
+      // Safety: only auto-reply when the chat is assumed by this user (avoids double replies across devices/users).
+      if (!chat.ai_active) return;
+      if (chat.taken_by !== userId) return;
+
+      if (processedInboundMessageIdsRef.current.size > 2000) processedInboundMessageIdsRef.current.clear();
+      if (processedInboundMessageIdsRef.current.has(incoming.id)) return;
+      processedInboundMessageIdsRef.current.add(incoming.id);
+
+      const local = loadLocalAiSettings(userId);
+      if (!local?.apiKey) {
+        setError('IA ativa, mas falta sua API Key. Vá em Agente IA e salve a chave do provedor.');
+        return;
+      }
+
+      aiAutoReplyQueueRef.current = aiAutoReplyQueueRef.current
+        .then(async () => {
+          setAiAutoReplying(true);
+          try {
+            const { data: sessionData } = await supabase.auth.getSession();
+            const accessToken = sessionData.session?.access_token;
+            if (!accessToken) {
+              throw new Error('Sessão inválida. Faça logout/login e tente novamente.');
+            }
+
+            const aiRes = await fetch(`${getSupabaseUrl()}/functions/v1/ai-assistant`, {
+              method: 'POST',
+              headers: {
+                apikey: getSupabaseAnonKey(),
+                authorization: `Bearer ${accessToken}`,
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify({
+                mode: 'sdr_reply',
+                chat_id: activeChatId,
+                provider: local.provider,
+                api_key: local.apiKey,
+                model: local.model,
+                access_token: accessToken,
+              }),
+            });
+
+            const aiText = await aiRes.text().catch(() => '');
+            const aiPayload = safeJson(aiText);
+            if (!aiRes.ok) {
+              throw new Error((aiPayload as any)?.error ?? 'Falha ao chamar IA.');
+            }
+
+            const result = (aiPayload as any)?.result ?? {};
+            const reply = (result as any)?.reply;
+            if (!reply || typeof reply !== 'string') {
+              throw new Error('A IA não retornou uma sugestão de resposta.');
+            }
+
+            await persistChatSdrData(chat, result);
+
+            const outPayload = await sendOutboundMessage(activeChatId, reply);
+            const provider = (outPayload as any)?.provider;
+            if (provider && provider.ok === false && provider.skipped !== true) {
+              const status = provider.status ? `HTTP ${provider.status}` : 'erro';
+              setError(`Resposta da IA salva, mas o provedor recusou o envio (${status}).`);
+            }
+
+            if ((result as any)?.handoff_ready) {
+              await supabase.from('chats').update({ ai_active: false } as any).eq('id', activeChatId);
+            }
+          } catch (e: any) {
+            console.error(e);
+            setError(e?.message ?? 'Falha no auto atendimento IA.');
+          } finally {
+            setAiAutoReplying(false);
+          }
+        })
+        .catch((e) => console.error('[livechat] aiAutoReplyQueue error', e));
+    },
+    [activeChatId, persistChatSdrData, sendOutboundMessage, userId]
+  );
 
   const suggestSdrReply = useCallback(async () => {
     if (!activeChatId) return;
@@ -575,6 +782,16 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
   const toggleAi = useCallback(async () => {
     if (!activeChat) return;
     try {
+      if (!activeChat.ai_active) {
+        if (!userId) throw new Error('Sessão inválida. Faça login novamente.');
+        if (activeChat.taken_by !== userId) {
+          throw new Error('Para ativar IA, primeiro assuma a conversa.');
+        }
+        const local = loadLocalAiSettings(userId);
+        if (!local?.apiKey) {
+          throw new Error('Falta sua API Key. Vá em Agente IA e salve a chave do provedor.');
+        }
+      }
       const { error: updError } = await supabase
         .from('chats')
         .update({ ai_active: !activeChat.ai_active })
@@ -583,7 +800,7 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
     } catch (e: any) {
       setError(e?.message ?? 'Falha ao atualizar modo IA.');
     }
-  }, [activeChat]);
+  }, [activeChat, userId]);
 
   const takeChat = useCallback(async () => {
     if (!activeChat || !userId) return;
@@ -806,6 +1023,28 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 {error && <div className="text-sm text-[hsl(var(--destructive))]">{error}</div>}
                 {loadingMessages && <div className="text-sm text-[hsl(var(--muted-foreground))]">Carregando mensagens...</div>}
+                {aiAutoReplying && (
+                  <div className="text-xs text-[hsl(var(--muted-foreground))] flex items-center gap-2">
+                    <span className="inline-block w-2 h-2 rounded-full bg-[hsl(var(--primary))] animate-pulse" />
+                    IA respondendo...
+                  </div>
+                )}
+                {activeChat?.raw?.sdr?.qualification && typeof activeChat.raw.sdr.qualification === 'object' && (
+                  <div className="cr8-card p-4 border border-[hsl(var(--border))] bg-[hsl(var(--card))]">
+                    <div className="text-xs font-semibold text-[hsl(var(--foreground))] mb-2">Qualificação (IA)</div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {Object.entries(activeChat.raw.sdr.qualification as any).map(([k, v]) => (
+                        <div key={k} className="flex items-center justify-between gap-2">
+                          <span className="font-medium text-[hsl(var(--muted-foreground))]">{k}</span>
+                          <span className="text-[hsl(var(--foreground))] truncate">{v ? String(v) : '-'}</span>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-2 text-[10px] text-[hsl(var(--muted-foreground))]">
+                      SDR IA: sugestões e qualificação são geradas localmente (API Key no navegador).
+                    </div>
+                  </div>
+                )}
 
                 {messages.map((msg) => {
                   const uiMsg = toChatMessage(msg, activeChat.platform);
