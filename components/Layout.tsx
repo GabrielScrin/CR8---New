@@ -110,6 +110,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
   const [companiesError, setCompaniesError] = useState<string | null>(null);
 
   const canUseAi = useMemo(() => isSupabaseConfigured() && Boolean(user.companyId), [user.companyId]);
+  const isClientPortal = useMemo(() => user.role === 'empresa', [user.role]);
   const selectedCompany = useMemo(() => companies.find((c) => c.id === user.companyId) ?? null, [companies, user.companyId]);
 
   useEffect(() => {
@@ -173,6 +174,10 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
     if (!isAiPanelOpen) return;
     aiBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [aiMessages.length, isAiPanelOpen]);
+
+  useEffect(() => {
+    if (isClientPortal) setIsAiPanelOpen(false);
+  }, [isClientPortal]);
 
   const sendAi = async () => {
     const text = aiInput.trim();
@@ -290,23 +295,31 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
 
               {isSupabaseConfigured() && user.companyId && (
                 <div className="hidden lg:flex items-center gap-2 min-w-0">
-                  <span className="text-xs text-[hsl(var(--muted-foreground))]">Empresa:</span>
-                  {companies.length > 1 ? (
-                    <select
-                      value={user.companyId}
-                      onChange={(e) => onCompanyChange(e.target.value)}
-                      className="max-w-[320px] truncate rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
-                    >
-                      {companies.map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.brand_name ?? c.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
+                  {isClientPortal ? (
                     <span className="text-sm font-semibold text-[hsl(var(--foreground))] truncate max-w-[320px]">
                       {(selectedCompany?.brand_name ?? selectedCompany?.name) || 'Empresa'}
                     </span>
+                  ) : (
+                    <>
+                      <span className="text-xs text-[hsl(var(--muted-foreground))]">Empresa:</span>
+                      {companies.length > 1 ? (
+                        <select
+                          value={user.companyId}
+                          onChange={(e) => onCompanyChange(e.target.value)}
+                          className="max-w-[320px] truncate rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                        >
+                          {companies.map((c) => (
+                            <option key={c.id} value={c.id}>
+                              {c.brand_name ?? c.name}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="text-sm font-semibold text-[hsl(var(--foreground))] truncate max-w-[320px]">
+                          {(selectedCompany?.brand_name ?? selectedCompany?.name) || 'Empresa'}
+                        </span>
+                      )}
+                    </>
                   )}
                 </div>
               )}
@@ -315,20 +328,24 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
             </div>
 
             <div className="flex items-center space-x-6">
-                <button 
+                {!isClientPortal && (
+                  <button
                     onClick={() => setIsAiPanelOpen(!isAiPanelOpen)}
                     className={`flex items-center space-x-2 px-3 py-1.5 rounded-full transition-colors ${isAiPanelOpen ? 'bg-[hsl(var(--primary))] text-white ring-2 ring-[hsl(var(--ring))]' : 'bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted))]'}`}
-                >
+                  >
                     <Bot className="w-4 h-4" />
                     <span className="text-sm font-medium">IA Helper</span>
-                </button>
+                  </button>
+                )}
 
-                <div className="relative">
+                {!isClientPortal && (
+                  <div className="relative">
                     <div className="relative cursor-pointer">
-                        <Bell className="w-5 h-5 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]" />
-                        <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[hsl(var(--card))]"></span>
+                      <Bell className="w-5 h-5 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]" />
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-[hsl(var(--card))]"></span>
                     </div>
-                </div>
+                  </div>
+                )}
 
                 <div className="flex items-center space-x-3 pl-6 border-l border-[hsl(var(--border))]">
                     <img src={user.avatar || 'https://via.placeholder.com/40'} alt={user.name} className="w-8 h-8 rounded-full bg-[hsl(var(--muted))]" />
@@ -336,7 +353,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
                         <p className="text-sm font-medium text-[hsl(var(--foreground))] leading-tight">{user.name}</p>
                         <p className="text-xs text-[hsl(var(--muted-foreground))] leading-tight capitalize">{user.role}</p>
                     </div>
-                    <ChevronDown className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />
+                    {!isClientPortal && <ChevronDown className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />}
                 </div>
             </div>
         </header>
@@ -356,7 +373,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
             </AnimatePresence>
             
             {/* AI Floating Panel */}
-             {isAiPanelOpen && (
+             {isAiPanelOpen && !isClientPortal && (
                  <div className="absolute top-4 right-8 w-80 bg-[hsl(var(--card))] rounded-xl shadow-2xl border border-[hsl(var(--border))] overflow-hidden z-50 flex flex-col max-h-[600px] animate-in slide-in-from-right-10 duration-200">
                      <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-4 text-white flex justify-between items-center">
                          <div className="flex items-center space-x-2">

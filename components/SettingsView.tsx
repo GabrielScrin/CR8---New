@@ -49,6 +49,19 @@ type WeeklyReportRow = {
   updated_at: string;
 };
 
+type FinanceTransactionKind = 'media_credit' | 'media_spend' | 'agency_fee' | 'adjustment';
+
+type FinanceTransactionRow = {
+  id: string;
+  company_id: string;
+  kind: FinanceTransactionKind;
+  amount: number;
+  currency: string;
+  note: string | null;
+  created_by: string | null;
+  created_at: string;
+};
+
 export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ companyId, role }) => {
   const readOnlyMode = !isSupabaseConfigured();
   const canEditCompany = useMemo(() => role === 'admin' || role === 'gestor', [role]);
@@ -84,6 +97,15 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
   const [weeklyReports, setWeeklyReports] = useState<WeeklyReportRow[]>([]);
   const [weeklyGenerating, setWeeklyGenerating] = useState(false);
 
+  const [financeLedgerAvailable, setFinanceLedgerAvailable] = useState(false);
+  const [financeLoading, setFinanceLoading] = useState(false);
+  const [financeError, setFinanceError] = useState<string | null>(null);
+  const [financeTxns, setFinanceTxns] = useState<FinanceTransactionRow[]>([]);
+  const [txnKind, setTxnKind] = useState<FinanceTransactionKind>('media_credit');
+  const [txnAmount, setTxnAmount] = useState('');
+  const [txnNote, setTxnNote] = useState('');
+  const [txnSaving, setTxnSaving] = useState(false);
+
   const webhookUrl = useMemo(() => `${getSupabaseUrl()}/functions/v1/omni-webhook`, []);
 
   const formatDatePt = (isoDate: string) => {
@@ -96,6 +118,30 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
     end.setUTCDate(end.getUTCDate() - 1);
     const endStr = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(end);
     return `${formatDatePt(start)} \u2192 ${endStr}`;
+  };
+
+  const formatMoney = (amount: number, cur: string) => {
+    const code = (cur || 'BRL').toUpperCase();
+    try {
+      return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: code, maximumFractionDigits: 2 }).format(amount);
+    } catch {
+      return `${amount.toFixed(2)} ${code}`;
+    }
+  };
+
+  const labelTxnKind = (k: FinanceTransactionKind) => {
+    switch (k) {
+      case 'media_credit':
+        return 'Cr\u00e9dito de m\u00eddia';
+      case 'media_spend':
+        return 'Gasto de m\u00eddia';
+      case 'agency_fee':
+        return 'Fee da ag\u00eancia';
+      case 'adjustment':
+        return 'Ajuste';
+      default:
+        return k;
+    }
   };
 
   useEffect(() => {
@@ -144,6 +190,110 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
       cancelled = true;
     };
   }, [companyId, readOnlyMode]);
+
+  const refreshFinanceTransactions = async () => {
+    if (readOnlyMode || !companyId) return;
+    setFinanceLoading(true);
+    setFinanceError(null);
+
+    try {
+      const { data, error } = await supabase
+        .from('finance_transactions')
+        .select('id,company_id,kind,amount,currency,note,created_by,created_at')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false })
+        .limit(50);
+
+      if (error) {
+        const msg = String(error.message || '').toLowerCase();
+        if (msg.includes('does not exist')) {
+          setFinanceLedgerAvailable(false);
+          setFinanceTxns([]);
+          return;
+        }
+        throw error;
+      }
+
+      setFinanceLedgerAvailable(true);
+      setFinanceTxns(
+        ((data ?? []) as any[]).map((r) => ({
+          id: String(r.id),
+          company_id: String(r.company_id),
+          kind: r.kind as FinanceTransactionKind,
+          amount: Number(r.amount),
+          currency: String(r.currency ?? 'BRL'),
+          note: r.note ?? null,
+          created_by: r.created_by ?? null,
+          created_at: String(r.created_at),
+        }))
+      );
+    } catch (e: any) {
+      setFinanceLedgerAvailable(true);
+      setFinanceTxns([]);
+      setFinanceError(e?.message ?? 'Erro ao carregar transações.');
+    } finally {
+      setFinanceLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshFinanceTransactions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, readOnlyMode]);
+
+  const applyTransaction = async () => {
+    if (readOnlyMode || !companyId) return;
+    if (!canEditCompany) return;
+
+    const rawAmount = txnAmount.replace(',', '.').trim();
+    const parsed = rawAmount ? Number(rawAmount) : NaN;
+    if (!Number.isFinite(parsed) || parsed === 0) {
+      setFinanceError('Informe um valor válido.');
+      return;
+    }
+
+    const abs = Math.abs(parsed);
+    const signed = txnKind === 'media_spend' ? -abs : abs;
+
+    setTxnSaving(true);
+    setFinanceError(null);
+    try {
+      const { data, error } = await supabase.rpc('apply_finance_transaction', {
+        p_company_id: companyId,
+        p_kind: txnKind,
+        p_amount: signed,
+        p_note: txnNote.trim() || null,
+      });
+
+      if (error) throw error;
+      if (!data) throw new Error('Falha ao registrar transação.');
+
+      setTxnAmount('');
+      setTxnNote('');
+      await refreshFinanceTransactions();
+
+      // Refresh cached company values (media_balance might be updated by the RPC)
+      try {
+        const { data: updated } = await supabase
+          .from('companies')
+          .select('media_balance,agency_fee_percent,agency_fee_fixed,currency')
+          .eq('id', companyId)
+          .maybeSingle();
+        if (updated) {
+          setMediaBalance(updated.media_balance != null ? String(updated.media_balance) : '');
+          setFeePercent(updated.agency_fee_percent != null ? String(updated.agency_fee_percent) : '');
+          setFeeFixed(updated.agency_fee_fixed != null ? String(updated.agency_fee_fixed) : '');
+          setCurrency(updated.currency ?? 'BRL');
+        }
+      } catch {
+        // ignore
+      }
+    } catch (e: any) {
+      setFinanceError(e?.message ?? 'Erro ao registrar transação.');
+    } finally {
+      setTxnSaving(false);
+    }
+  };
 
   const refreshMembersAndInvites = async () => {
     if (readOnlyMode || !companyId || !canEditCompany) {
@@ -576,6 +726,124 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
             />
           </div>
         </div>
+
+        {financeLedgerAvailable ? (
+          <div className="pt-4 border-t border-[hsl(var(--border))] space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-sm font-semibold text-[hsl(var(--foreground))]">Movimentos</h3>
+                <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+                  Registre crÃ©ditos e gastos (atualiza o saldo de mÃ­dia) e fees/ajustes (histÃ³rico).
+                </p>
+              </div>
+              <button
+                onClick={() => void refreshFinanceTransactions()}
+                disabled={financeLoading || readOnlyMode || !companyId}
+                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] disabled:opacity-60"
+                title="Atualizar"
+              >
+                <RefreshCw className="h-4 w-4" />
+                Atualizar
+              </button>
+            </div>
+
+            {financeError ? <div className="text-sm text-red-400">{financeError}</div> : null}
+
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-[hsl(var(--muted-foreground))]">Tipo</label>
+                <select
+                  value={txnKind}
+                  onChange={(e) => setTxnKind(e.target.value as FinanceTransactionKind)}
+                  disabled={readOnlyMode || !canEditCompany}
+                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                >
+                  <option value="media_credit">CrÃ©dito de mÃ­dia</option>
+                  <option value="media_spend">Gasto de mÃ­dia</option>
+                  <option value="adjustment">Ajuste</option>
+                  <option value="agency_fee">Fee da agÃªncia</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-[hsl(var(--muted-foreground))]">Valor</label>
+                <input
+                  value={txnAmount}
+                  onChange={(e) => setTxnAmount(e.target.value)}
+                  disabled={readOnlyMode || !canEditCompany}
+                  placeholder="Ex: 100,00"
+                  inputMode="decimal"
+                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <label className="block text-xs font-medium text-[hsl(var(--muted-foreground))]">Obs (opcional)</label>
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={txnNote}
+                    onChange={(e) => setTxnNote(e.target.value)}
+                    disabled={readOnlyMode || !canEditCompany}
+                    placeholder="Ex: Recarga inicial / Ajuste"
+                    className="w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                  />
+                  <button
+                    onClick={() => void applyTransaction()}
+                    disabled={txnSaving || readOnlyMode || !canEditCompany}
+                    className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+                    title="Registrar"
+                  >
+                    <Save className="h-4 w-4" />
+                    {txnSaving ? 'Salvando...' : 'Registrar'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-[hsl(var(--border))] overflow-auto max-h-80">
+              <table className="min-w-full text-sm">
+                <thead className="bg-[hsl(var(--card))] sticky top-0">
+                  <tr className="text-left text-[hsl(var(--muted-foreground))]">
+                    <th className="px-3 py-2 font-medium">Quando</th>
+                    <th className="px-3 py-2 font-medium">Tipo</th>
+                    <th className="px-3 py-2 font-medium">Valor</th>
+                    <th className="px-3 py-2 font-medium">Obs</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {financeTxns.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} className="px-3 py-4 text-center text-[hsl(var(--muted-foreground))]">
+                        Sem movimentos ainda.
+                      </td>
+                    </tr>
+                  ) : (
+                    financeTxns.map((t) => (
+                      <tr key={t.id} className="border-t border-[hsl(var(--border))]">
+                        <td className="px-3 py-2 whitespace-nowrap text-[hsl(var(--foreground))]">
+                          {new Date(t.created_at).toLocaleString('pt-BR')}
+                        </td>
+                        <td className="px-3 py-2 whitespace-nowrap text-[hsl(var(--foreground))]">{labelTxnKind(t.kind)}</td>
+                        <td
+                          className={`px-3 py-2 whitespace-nowrap font-medium ${
+                            t.amount < 0 ? 'text-red-400' : 'text-emerald-400'
+                          }`}
+                        >
+                          {formatMoney(t.amount, t.currency || currency)}
+                        </td>
+                        <td className="px-3 py-2 text-[hsl(var(--muted-foreground))]">{t.note || '—'}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : (
+          <p className="text-xs text-[hsl(var(--muted-foreground))]">
+            HistÃ³rico de transaÃ§Ãµes ainda nÃ£o estÃ¡ habilitado neste banco (migration: phase5_finance_ledger).
+          </p>
+        )}
       </div>
 
       <div className="cr8-card p-6 space-y-4">
