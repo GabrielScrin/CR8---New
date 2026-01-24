@@ -62,6 +62,17 @@ type FinanceTransactionRow = {
   created_at: string;
 };
 
+type AuditEventRow = {
+  id: string;
+  company_id: string;
+  action: string;
+  entity_type: string | null;
+  entity_id: string | null;
+  actor_user_id: string | null;
+  metadata: any;
+  created_at: string;
+};
+
 export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ companyId, role }) => {
   const readOnlyMode = !isSupabaseConfigured();
   const canEditCompany = useMemo(() => role === 'admin' || role === 'gestor', [role]);
@@ -106,6 +117,11 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
   const [txnNote, setTxnNote] = useState('');
   const [txnSaving, setTxnSaving] = useState(false);
 
+  const [auditAvailable, setAuditAvailable] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditEvents, setAuditEvents] = useState<AuditEventRow[]>([]);
+
   const webhookUrl = useMemo(() => `${getSupabaseUrl()}/functions/v1/omni-webhook`, []);
 
   const formatDatePt = (isoDate: string) => {
@@ -141,6 +157,27 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
         return 'Ajuste';
       default:
         return k;
+    }
+  };
+
+  const labelAuditAction = (a: string) => {
+    switch (a) {
+      case 'company_invite.created':
+        return 'Convite criado';
+      case 'company_invite.accepted':
+        return 'Convite aceito';
+      case 'company_invite.revoked':
+        return 'Convite revogado';
+      case 'company_member.added':
+        return 'Membro adicionado';
+      case 'company_member.role_changed':
+        return 'PermissÃ£o alterada';
+      case 'company_member.removed':
+        return 'Membro removido';
+      case 'finance_transaction.created':
+        return 'Movimento financeiro';
+      default:
+        return a;
     }
   };
 
@@ -238,6 +275,55 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
 
   useEffect(() => {
     void refreshFinanceTransactions();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, readOnlyMode]);
+
+  const refreshAuditEvents = async () => {
+    if (readOnlyMode || !companyId) return;
+    setAuditLoading(true);
+    setAuditError(null);
+    try {
+      const { data, error } = await supabase
+        .from('audit_events')
+        .select('id,company_id,action,entity_type,entity_id,actor_user_id,metadata,created_at')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (error) {
+        const msg = String(error.message || '').toLowerCase();
+        if (msg.includes('does not exist')) {
+          setAuditAvailable(false);
+          setAuditEvents([]);
+          return;
+        }
+        throw error;
+      }
+
+      setAuditAvailable(true);
+      setAuditEvents(
+        ((data ?? []) as any[]).map((r) => ({
+          id: String(r.id),
+          company_id: String(r.company_id),
+          action: String(r.action),
+          entity_type: r.entity_type ?? null,
+          entity_id: r.entity_id ?? null,
+          actor_user_id: r.actor_user_id ?? null,
+          metadata: r.metadata ?? null,
+          created_at: String(r.created_at),
+        }))
+      );
+    } catch (e: any) {
+      setAuditAvailable(true);
+      setAuditEvents([]);
+      setAuditError(e?.message ?? 'Erro ao carregar auditoria.');
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshAuditEvents();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, readOnlyMode]);
 
@@ -843,6 +929,74 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
           <p className="text-xs text-[hsl(var(--muted-foreground))]">
             HistÃ³rico de transaÃ§Ãµes ainda nÃ£o estÃ¡ habilitado neste banco (migration: phase5_finance_ledger).
           </p>
+        )}
+      </div>
+
+      <div className="cr8-card p-6 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Auditoria</h2>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+              Registra eventos importantes (membros, convites e financeiro) para rastreabilidade.
+            </p>
+          </div>
+          <button
+            onClick={() => void refreshAuditEvents()}
+            disabled={auditLoading || readOnlyMode || !companyId}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] disabled:opacity-60"
+            title="Atualizar"
+          >
+            <RefreshCw className="h-4 w-4" />
+            Atualizar
+          </button>
+        </div>
+
+        {auditError && <div className="text-sm text-[hsl(var(--destructive))]">{auditError}</div>}
+
+        {auditLoading ? (
+          <div className="text-sm text-[hsl(var(--muted-foreground))]">Carregando eventos...</div>
+        ) : !auditAvailable ? (
+          <p className="text-xs text-[hsl(var(--muted-foreground))]">
+            Auditoria ainda não está habilitada neste banco (migration: phase6_1_audit_logs).
+          </p>
+        ) : auditEvents.length === 0 ? (
+          <div className="text-sm text-[hsl(var(--muted-foreground))]">Nenhum evento ainda.</div>
+        ) : (
+          <div className="overflow-auto rounded-lg border border-[hsl(var(--border))] max-h-[360px]">
+            <table className="w-full text-sm">
+              <thead className="bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))]">
+                <tr>
+                  <th className="px-3 py-2 text-left font-medium">Quando</th>
+                  <th className="px-3 py-2 text-left font-medium">Evento</th>
+                  <th className="px-3 py-2 text-left font-medium">Por</th>
+                  <th className="px-3 py-2 text-left font-medium">Alvo</th>
+                  <th className="px-3 py-2 text-left font-medium">Detalhes</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditEvents.map((ev) => {
+                  const metaStr = JSON.stringify(ev.metadata ?? {});
+                  const actorShort = ev.actor_user_id ? String(ev.actor_user_id).slice(0, 8) : null;
+                  const entityLabel = [ev.entity_type, ev.entity_id].filter(Boolean).join(':');
+                  return (
+                    <tr key={ev.id} className="border-t border-[hsl(var(--border))]">
+                      <td className="px-3 py-2 whitespace-nowrap text-[hsl(var(--foreground))]">
+                        {new Date(ev.created_at).toLocaleString('pt-BR')}
+                      </td>
+                      <td className="px-3 py-2 text-[hsl(var(--foreground))]">{labelAuditAction(ev.action)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap text-[hsl(var(--muted-foreground))] font-mono">
+                        {actorShort ?? '—'}
+                      </td>
+                      <td className="px-3 py-2 text-[hsl(var(--muted-foreground))]">{entityLabel || '—'}</td>
+                      <td className="px-3 py-2 text-[hsl(var(--muted-foreground))]">
+                        <span className="font-mono text-xs">{metaStr.length > 160 ? `${metaStr.slice(0, 160)}…` : metaStr}</span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
