@@ -442,28 +442,6 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
     };
   }, [activeChatId, companyId, loadChats, loadMessages, readOnlyMode]);
 
-  // Realtime: active chat messages
-  useEffect(() => {
-    if (readOnlyMode || !activeChatId) return;
-    const channel = supabase
-      .channel(`realtime:chat_messages:${activeChatId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `chat_id=eq.${activeChatId}` },
-        (payload) => {
-          const row = payload.new as any;
-          if (!row?.id) return;
-          setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
-          void markRead(activeChatId);
-          void maybeAutoSdrReply(row as MessageRow);
-        }
-      )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [activeChatId, markRead, maybeAutoSdrReply, readOnlyMode]);
-
   // Fallback: when the tab becomes visible again, refresh list + active messages.
   useEffect(() => {
     if (readOnlyMode) return;
@@ -722,6 +700,29 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
     },
     [activeChatId, persistChatSdrData, sendOutboundMessage, userId]
   );
+
+  // Realtime: active chat messages
+  // NOTE: must be declared after `maybeAutoSdrReply` to avoid TDZ ("Cannot access 'x' before initialization").
+  useEffect(() => {
+    if (readOnlyMode || !activeChatId) return;
+    const channel = supabase
+      .channel(`realtime:chat_messages:${activeChatId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'chat_messages', filter: `chat_id=eq.${activeChatId}` },
+        (payload) => {
+          const row = payload.new as any;
+          if (!row?.id) return;
+          setMessages((prev) => (prev.some((m) => m.id === row.id) ? prev : [...prev, row]));
+          void markRead(activeChatId);
+          void maybeAutoSdrReply(row as MessageRow);
+        }
+      )
+      .subscribe();
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [activeChatId, markRead, maybeAutoSdrReply, readOnlyMode]);
 
   const suggestSdrReply = useCallback(async () => {
     if (!activeChatId) return;
