@@ -97,6 +97,18 @@ async function sendViaWhatsAppCloud(phoneNumberId: string, to: string, text: str
   return { ok: true, body: payloadText };
 }
 
+const extractWhatsAppMessageId = (providerBodyText: string): string | null => {
+  const raw = String(providerBodyText || '').trim();
+  if (!raw) return null;
+  try {
+    const json = JSON.parse(raw);
+    const id = json?.messages?.[0]?.id;
+    return typeof id === 'string' && id.trim() ? id.trim() : null;
+  } catch {
+    return null;
+  }
+};
+
 serve(async (req) => {
   try {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -144,15 +156,20 @@ serve(async (req) => {
 
     const nowIso = new Date().toISOString();
 
-    const { error: msgError } = await supabaseAdmin.from('chat_messages').insert([
-      {
-        chat_id: chat.id,
-        sender: 'agent',
-        content: body.content,
-        raw: { outbound: true, user_id: userId },
-        created_at: nowIso,
-      },
-    ] as any);
+    const { data: insertedMsg, error: msgError } = await supabaseAdmin
+      .from('chat_messages')
+      .insert([
+        {
+          chat_id: chat.id,
+          sender: 'agent',
+          content: body.content,
+          delivery_status: 'pending',
+          raw: { outbound: true, user_id: userId },
+          created_at: nowIso,
+        },
+      ] as any)
+      .select('id')
+      .maybeSingle();
     if (msgError) return jsonResponse(500, { ok: false, error: msgError.message });
 
     const { error: updError } = await supabaseAdmin
@@ -176,6 +193,31 @@ serve(async (req) => {
       } else {
         provider = await sendViaWhatsAppCloud(String(phoneNumberId), chat.external_thread_id, body.content);
       }
+    }
+
+    // Update the just-created message with provider metadata (best-effort).
+    if (insertedMsg?.id) {
+      const patch: Record<string, any> = {
+        raw: { outbound: true, user_id: userId, provider },
+      };
+
+      if (provider?.ok === true) {
+        patch.delivery_status = 'sent';
+        patch.delivered_at = null;
+        patch.failed_at = null;
+        patch.failure_reason = null;
+        const waId = extractWhatsAppMessageId(provider?.body ?? '');
+        if (waId) patch.external_message_id = waId;
+      } else if (provider?.ok === false && provider?.skipped !== true) {
+        patch.delivery_status = 'failed';
+        patch.failed_at = nowIso;
+        patch.failure_reason = provider?.status ? `HTTP ${provider.status}` : 'provider_failed';
+      } else {
+        patch.delivery_status = provider?.skipped === true ? 'delivered' : 'pending';
+      }
+
+      const { error: patchErr } = await supabaseAdmin.from('chat_messages').update(patch).eq('id', insertedMsg.id);
+      if (patchErr) console.warn('[omni-send] failed to patch message metadata', { error: patchErr.message });
     }
 
     return jsonResponse(200, { ok: true, provider });

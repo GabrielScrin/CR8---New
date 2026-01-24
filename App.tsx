@@ -68,7 +68,11 @@ export default function App() {
       try {
         // If Phase 5 invites exist, accept any pending invites for this user (idempotent).
         // Ignore failures when the migration isn't applied yet.
-        await supabase.rpc('accept_company_invites_for_current_user').catch(() => null);
+        try {
+          await supabase.rpc('accept_company_invites_for_current_user');
+        } catch {
+          // ignore
+        }
 
         const [{ data: profile }, { data: memberships }] = await Promise.all([
           supabase.from('users').select('full_name, avatar_url, role').eq('id', sessionUser.id).maybeSingle(),

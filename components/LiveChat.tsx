@@ -112,13 +112,24 @@ const CreateChatModal: React.FC<{
 
     setLoading(true);
     try {
+      const normalizedThreadId =
+        platform === 'whatsapp'
+          ? threadId.trim().replace(/\\D/g, '')
+          : threadId.trim();
+
+      if (!normalizedThreadId) {
+        setError('Informe um destino válido.');
+        setLoading(false);
+        return;
+      }
+
       const payloadWithRaw: any = {
         company_id: companyId,
         platform,
-        external_thread_id: threadId.trim(),
+        external_thread_id: normalizedThreadId,
         last_message: null,
         last_message_at: null,
-        raw: { contact_name: contactName.trim() || null, from: threadId.trim() },
+        raw: { contact_name: contactName.trim() || null, from: normalizedThreadId },
       };
 
       let { data, error: insError } = await supabase.from('chats').insert([payloadWithRaw]).select('id').maybeSingle();

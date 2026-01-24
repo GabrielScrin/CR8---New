@@ -124,10 +124,21 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
       try {
         setCompaniesError(null);
         const preferredSelect = 'id,name,brand_name,brand_logo_url,brand_primary_color';
-        let { data, error } = await supabase.from('companies').select(preferredSelect).order('created_at', { ascending: true });
-        if (error && String(error.message || '').toLowerCase().includes('does not exist')) {
-          ({ data, error } = await supabase.from('companies').select('id,name').order('created_at', { ascending: true }));
+        let data: any[] | null = null;
+        let error: any = null;
+
+        {
+          const res = await supabase.from('companies').select(preferredSelect).order('created_at', { ascending: true });
+          data = (res.data as any[] | null) ?? null;
+          error = res.error;
         }
+
+        if (error && String(error.message || '').toLowerCase().includes('does not exist')) {
+          const res = await supabase.from('companies').select('id,name').order('created_at', { ascending: true });
+          data = (res.data as any[] | null) ?? null;
+          error = res.error;
+        }
+
         if (error) throw error;
         if (!alive) return;
         const rows = (data ?? []).map((d: any) => ({

@@ -43,6 +43,7 @@ const supabaseAdmin = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 type ParsedInbound = {
   platform: 'whatsapp' | 'instagram' | 'web' | 'meta';
   threadId: string; // external_thread_id
+  externalMessageId?: string | null;
   contactName?: string | null;
   from?: string | null; // phone/user id
   text: string;
@@ -59,13 +60,14 @@ function parseInbound(body: any): ParsedInbound | null {
   if (!body || typeof body !== 'object') return null;
 
   // Generic format (recommended)
-  // { platform, thread_id, from, contact_name, text, timestamp }
+  // { platform, thread_id, from, contact_name, text, timestamp, message_id? }
   if (typeof body.text === 'string' && (body.thread_id || body.threadId)) {
     const platform = String(body.platform ?? 'whatsapp') as any;
     const threadId = String(body.thread_id ?? body.threadId);
     return {
       platform: platform === 'instagram' ? 'instagram' : platform === 'web' ? 'web' : platform === 'meta' ? 'meta' : 'whatsapp',
       threadId,
+      externalMessageId: body.message_id ?? body.messageId ?? body.external_message_id ?? body.externalMessageId ?? null,
       contactName: body.contact_name ?? body.contactName ?? null,
       from: body.from ?? null,
       text: body.text,
@@ -87,6 +89,7 @@ function parseInbound(body: any): ParsedInbound | null {
 
     const msg = messages[0];
     const from = msg?.from ? String(msg.from) : null;
+    const externalMessageId = msg?.id ? String(msg.id) : null;
     const tsSec = msg?.timestamp ? Number(msg.timestamp) : null;
     const timestamp = tsSec ? new Date(tsSec * 1000).toISOString() : new Date().toISOString();
 
@@ -97,7 +100,19 @@ function parseInbound(body: any): ParsedInbound | null {
     else text = '[mensagem]';
 
     if (!from || !text) return null;
-    return { platform: 'whatsapp', threadId: from, contactName, from, text, timestamp };
+
+    // Standardize thread ids for WhatsApp as digits-only (same style we send to).
+    const normalizeWhatsAppThread = (v: string) => String(v || '').replace(/\D/g, '');
+
+    return {
+      platform: 'whatsapp',
+      threadId: normalizeWhatsAppThread(from),
+      externalMessageId,
+      contactName,
+      from: normalizeWhatsAppThread(from),
+      text,
+      timestamp,
+    };
   };
 
   // Full envelope
@@ -118,6 +133,50 @@ function parseInbound(body: any): ParsedInbound | null {
   if (parsedNested) return parsedNested;
 
   return null;
+}
+
+type WhatsAppStatusUpdate = {
+  recipientId: string;
+  messageId: string;
+  status: 'sent' | 'delivered' | 'read' | 'failed' | string;
+  timestamp: string;
+  errors?: any[];
+};
+
+function parseWhatsAppStatusUpdates(body: any): WhatsAppStatusUpdate[] {
+  const out: WhatsAppStatusUpdate[] = [];
+  const normalize = (v: string) => String(v || '').replace(/\D/g, '');
+
+  const tryValue = (value: any) => {
+    const statuses = Array.isArray(value?.statuses) ? value.statuses : [];
+    for (const s of statuses) {
+      const id = s?.id ? String(s.id) : '';
+      const recipient = s?.recipient_id ? String(s.recipient_id) : '';
+      if (!id || !recipient) continue;
+      const tsSec = s?.timestamp ? Number(s.timestamp) : null;
+      const ts = tsSec ? new Date(tsSec * 1000).toISOString() : new Date().toISOString();
+      out.push({
+        recipientId: normalize(recipient),
+        messageId: id,
+        status: (s?.status ? String(s.status) : 'sent') as any,
+        timestamp: ts,
+        errors: Array.isArray(s?.errors) ? s.errors : undefined,
+      });
+    }
+  };
+
+  if (Array.isArray(body?.entry)) {
+    for (const entry of body.entry) {
+      const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+      for (const change of changes) tryValue(change?.value ?? {});
+    }
+  }
+
+  // Direct test payloads
+  tryValue(body);
+  tryValue(body?.value);
+
+  return out;
 }
 
 const toHex = (buffer: ArrayBuffer) =>
@@ -283,10 +342,47 @@ serve(async (req) => {
     console.log('[omni-webhook] resolved company', { companyId: String(companyId).slice(0, 8) });
 
     const parsed = parseInbound(body);
-    // WhatsApp status updates have no messages; ignore them.
+
+    // WhatsApp status updates have no messages; process them best-effort.
     if (!parsed) {
-      console.log('[omni-webhook] no message payload (ignored)');
-      return jsonResponse(200, { ok: true, inserted: 0 });
+      const statusUpdates = parseWhatsAppStatusUpdates(body);
+      if (statusUpdates.length === 0) {
+        console.log('[omni-webhook] no message payload (ignored)');
+        return jsonResponse(200, { ok: true, inserted: 0 });
+      }
+
+      let updated = 0;
+      for (const s of statusUpdates) {
+        const { data: chat, error: chatErr } = await supabaseAdmin
+          .from('chats')
+          .select('id')
+          .eq('company_id', companyId)
+          .eq('platform', 'whatsapp')
+          .eq('external_thread_id', s.recipientId)
+          .maybeSingle();
+        if (chatErr) return jsonResponse(500, { ok: false, error: chatErr.message });
+        if (!chat?.id) continue;
+
+        const updates: Record<string, any> = { delivery_status: s.status };
+        if (s.status === 'delivered') updates.delivered_at = s.timestamp;
+        if (s.status === 'read') updates.read_at = s.timestamp;
+        if (s.status === 'failed') {
+          updates.failed_at = s.timestamp;
+          const e0 = s.errors?.[0];
+          if (e0?.code || e0?.title) updates.failure_reason = `[${e0?.code ?? 'err'}] ${e0?.title ?? 'failed'}`;
+        }
+
+        const { data: updRows, error: updErr } = await supabaseAdmin
+          .from('chat_messages')
+          .update(updates)
+          .eq('chat_id', chat.id)
+          .eq('external_message_id', s.messageId)
+          .select('id');
+        if (updErr) return jsonResponse(500, { ok: false, error: updErr.message });
+        updated += Array.isArray(updRows) ? updRows.length : 0;
+      }
+
+      return jsonResponse(200, { ok: true, updated });
     }
 
     console.log('[omni-webhook] parsed', { platform: parsed.platform, threadId: parsed.threadId, timestamp: parsed.timestamp ?? null });
@@ -322,15 +418,21 @@ serve(async (req) => {
 
     console.log('[omni-webhook] upserted chat', { chat_id: String(chat.id) });
 
-    const { error: msgError } = await supabaseAdmin.from('chat_messages').insert([
-      {
-        chat_id: chat.id,
-        sender: 'user',
-        content: parsed.text,
-        raw: { payload: body, contact_name: parsed.contactName ?? null, from: parsed.from ?? null },
-        created_at: lastMessageAt,
-      },
-    ] as any);
+    const { error: msgError } = await supabaseAdmin.from('chat_messages').upsert(
+      [
+        {
+          chat_id: chat.id,
+          sender: 'user',
+          content: parsed.text,
+          external_message_id: parsed.externalMessageId ?? null,
+          delivery_status: 'delivered',
+          delivered_at: lastMessageAt,
+          raw: { payload: body, contact_name: parsed.contactName ?? null, from: parsed.from ?? null },
+          created_at: lastMessageAt,
+        },
+      ] as any,
+      { onConflict: 'chat_id,external_message_id', ignoreDuplicates: true }
+    );
 
     if (msgError) {
       console.error('[omni-webhook] failed to insert message', { error: msgError.message });
