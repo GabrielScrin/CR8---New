@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Save, Trash2, UserPlus } from 'lucide-react';
+import { CalendarClock, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react';
 import { getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { Role } from '../types';
 
@@ -35,6 +35,20 @@ type CompanyInviteRow = {
   accepted_at: string | null;
 };
 
+type WeeklyReportRow = {
+  id: string;
+  company_id: string;
+  period_start: string; // date
+  period_end: string; // date (exclusive)
+  summary: string | null;
+  highlights: string[] | null;
+  risks: string[] | null;
+  next_week: string[] | null;
+  metrics: any;
+  created_at: string;
+  updated_at: string;
+};
+
 export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ companyId, role }) => {
   const readOnlyMode = !isSupabaseConfigured();
   const canEditCompany = useMemo(() => role === 'admin' || role === 'gestor', [role]);
@@ -65,7 +79,24 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<Role>('empresa');
 
+  const [weeklyLoading, setWeeklyLoading] = useState(false);
+  const [weeklyError, setWeeklyError] = useState<string | null>(null);
+  const [weeklyReports, setWeeklyReports] = useState<WeeklyReportRow[]>([]);
+  const [weeklyGenerating, setWeeklyGenerating] = useState(false);
+
   const webhookUrl = useMemo(() => `${getSupabaseUrl()}/functions/v1/omni-webhook`, []);
+
+  const formatDatePt = (isoDate: string) => {
+    const d = new Date(`${isoDate}T00:00:00Z`);
+    return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+  };
+
+  const formatPeriodPt = (start: string, endExclusive: string) => {
+    const end = new Date(`${endExclusive}T00:00:00Z`);
+    end.setUTCDate(end.getUTCDate() - 1);
+    const endStr = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(end);
+    return `${formatDatePt(start)} \u2192 ${endStr}`;
+  };
 
   useEffect(() => {
     if (readOnlyMode || !companyId) return;
@@ -160,6 +191,60 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
     void refreshMembersAndInvites();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [companyId, readOnlyMode, canEditCompany]);
+
+  const refreshWeeklyReports = async () => {
+    if (readOnlyMode || !companyId) {
+      setWeeklyReports([]);
+      setWeeklyError(null);
+      return;
+    }
+
+    setWeeklyLoading(true);
+    setWeeklyError(null);
+    try {
+      const { data, error: repErr } = await supabase
+        .from('weekly_reports')
+        .select('id,company_id,period_start,period_end,summary,highlights,risks,next_week,metrics,created_at,updated_at')
+        .eq('company_id', companyId)
+        .order('period_start', { ascending: false })
+        .limit(12);
+
+      const msg = String(repErr?.message ?? '').toLowerCase();
+      const missing = msg.includes('does not exist') || msg.includes('relation');
+      if (missing) throw new Error('Migrations de relatório semanal não aplicadas ainda. Rode `supabase db push` e recarregue.');
+      if (repErr) throw repErr;
+
+      setWeeklyReports(((data ?? []) as any) as WeeklyReportRow[]);
+    } catch (e: any) {
+      setWeeklyReports([]);
+      setWeeklyError(e?.message ?? 'Erro ao carregar relatórios.');
+    } finally {
+      setWeeklyLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshWeeklyReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [companyId, readOnlyMode]);
+
+  const generateWeeklyNow = async () => {
+    if (readOnlyMode || !companyId) return;
+    setWeeklyGenerating(true);
+    setWeeklyError(null);
+    setError(null);
+    setOk(null);
+    try {
+      const { error: rpcErr } = await supabase.rpc('request_weekly_report', { p_company_id: companyId });
+      if (rpcErr) throw rpcErr;
+      await refreshWeeklyReports();
+      setOk('Relatório semanal gerado.');
+    } catch (e: any) {
+      setWeeklyError(e?.message ?? 'Falha ao gerar relatório.');
+    } finally {
+      setWeeklyGenerating(false);
+    }
+  };
 
   const save = async () => {
     if (!companyId) return;
@@ -491,6 +576,124 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
             />
           </div>
         </div>
+      </div>
+
+      <div className="cr8-card p-6 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Relatório semanal</h2>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+              Gerado automaticamente toda segunda-feira (12:00 UTC ≈ 09:00 São Paulo). Baseado em Leads/CRM e atividade do Live Chat.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void refreshWeeklyReports()}
+              disabled={weeklyLoading || readOnlyMode || !companyId}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] disabled:opacity-60"
+              title="Atualizar"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Atualizar
+            </button>
+            <button
+              onClick={() => void generateWeeklyNow()}
+              disabled={weeklyGenerating || readOnlyMode || !companyId || !canEditCompany}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+              title="Gera para a última semana completa (Seg-Dom)."
+            >
+              <CalendarClock className="h-4 w-4" />
+              {weeklyGenerating ? 'Gerando...' : 'Gerar agora'}
+            </button>
+          </div>
+        </div>
+
+        {weeklyError && <div className="text-sm text-[hsl(var(--destructive))]">{weeklyError}</div>}
+
+        {weeklyLoading ? (
+          <div className="text-sm text-[hsl(var(--muted-foreground))]">Carregando relatórios...</div>
+        ) : weeklyReports.length === 0 ? (
+          <div className="text-sm text-[hsl(var(--muted-foreground))]">
+            Nenhum relatório ainda. Clique em <span className="font-semibold">Gerar agora</span> para criar o primeiro.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {weeklyReports.map((r) => {
+              const created = Number(r?.metrics?.leads?.created ?? 0) || 0;
+              const won = Number(r?.metrics?.leads?.won ?? 0) || 0;
+              const inbound = Number(r?.metrics?.messages?.inbound ?? 0) || 0;
+              const outbound = Number(r?.metrics?.messages?.outbound ?? 0) || 0;
+
+              return (
+                <details
+                  key={r.id}
+                  className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-4"
+                >
+                  <summary className="cursor-pointer select-none">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <div className="text-sm font-semibold text-[hsl(var(--foreground))]">
+                          {formatPeriodPt(r.period_start, r.period_end)}
+                        </div>
+                        <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))] truncate">{r.summary ?? ''}</div>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs text-[hsl(var(--muted-foreground))]">
+                        <span className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 py-1">
+                          Leads: <span className="text-[hsl(var(--foreground))] font-semibold">{created}</span>
+                        </span>
+                        <span className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 py-1">
+                          Won: <span className="text-[hsl(var(--foreground))] font-semibold">{won}</span>
+                        </span>
+                        <span className="rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-2 py-1">
+                          Msg:{' '}
+                          <span className="text-[hsl(var(--foreground))] font-semibold">{inbound}</span>/
+                          <span className="text-[hsl(var(--foreground))] font-semibold">{outbound}</span>
+                        </span>
+                      </div>
+                    </div>
+                  </summary>
+
+                  <div className="mt-3 space-y-3 text-sm">
+                    {r.summary && <div className="text-[hsl(var(--foreground))]">{r.summary}</div>}
+
+                    {Array.isArray(r.highlights) && r.highlights.length > 0 && (
+                      <div>
+                        <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))] mb-1">Destaques</div>
+                        <ul className="list-disc pl-5 space-y-1 text-[hsl(var(--foreground))]">
+                          {r.highlights.map((h, i) => (
+                            <li key={i}>{h}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {Array.isArray(r.risks) && r.risks.length > 0 && (
+                      <div>
+                        <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))] mb-1">Riscos</div>
+                        <ul className="list-disc pl-5 space-y-1 text-[hsl(var(--foreground))]">
+                          {r.risks.map((h, i) => (
+                            <li key={i}>{h}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {Array.isArray(r.next_week) && r.next_week.length > 0 && (
+                      <div>
+                        <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))] mb-1">Próximos passos</div>
+                        <ul className="list-disc pl-5 space-y-1 text-[hsl(var(--foreground))]">
+                          {r.next_week.map((h, i) => (
+                            <li key={i}>{h}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {canEditCompany && (
