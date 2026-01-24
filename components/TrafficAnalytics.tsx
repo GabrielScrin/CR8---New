@@ -53,6 +53,22 @@ type MetaAdAccount = {
   name?: string;
 };
 
+type CreativeAnalysisRow = {
+  id: string;
+  company_id: string;
+  created_by: string | null;
+  platform: string;
+  level: string;
+  entity_id: string;
+  entity_name: string | null;
+  thumbnail_url: string | null;
+  period_start: string | null; // date
+  period_end: string | null; // date
+  metrics: any;
+  result: any;
+  created_at: string;
+};
+
 const DEFAULT_PRESET_ID = '__default__';
 const DEFAULT_PRESET_NAME = 'Padrão';
 
@@ -1194,6 +1210,11 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   const [creativeBusy, setCreativeBusy] = useState(false);
   const [creativeError, setCreativeError] = useState<string | null>(null);
   const [creativeResult, setCreativeResult] = useState<any | null>(null);
+  const [creativeMetrics, setCreativeMetrics] = useState<any | null>(null);
+  const [creativeHistoryLoading, setCreativeHistoryLoading] = useState(false);
+  const [creativeHistory, setCreativeHistory] = useState<CreativeAnalysisRow[]>([]);
+  const [creativeSaving, setCreativeSaving] = useState(false);
+  const [creativeSaveOk, setCreativeSaveOk] = useState<string | null>(null);
 
   const closeCreativeModal = () => {
     setCreativeModalOpen(false);
@@ -1201,6 +1222,123 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     setCreativeBusy(false);
     setCreativeError(null);
     setCreativeResult(null);
+    setCreativeMetrics(null);
+    setCreativeHistoryLoading(false);
+    setCreativeHistory([]);
+    setCreativeSaving(false);
+    setCreativeSaveOk(null);
+  };
+
+  const currentAnalysisPeriod = (): { start?: string; end?: string } => {
+    const now = new Date();
+    const y = now.getUTCFullYear();
+    const m = now.getUTCMonth(); // 0-based
+    const d = now.getUTCDate();
+    const today = new Date(Date.UTC(y, m, d));
+    const iso = (dt: Date) => dt.toISOString().slice(0, 10);
+
+    if (datePreset === 'custom' && dateSince && dateUntil) return { start: dateSince, end: dateUntil };
+
+    if (datePreset === 'last_7d') {
+      const start = new Date(today);
+      start.setUTCDate(start.getUTCDate() - 6);
+      return { start: iso(start), end: iso(today) };
+    }
+
+    if (datePreset === 'last_30d') {
+      const start = new Date(today);
+      start.setUTCDate(start.getUTCDate() - 29);
+      return { start: iso(start), end: iso(today) };
+    }
+
+    if (datePreset === 'this_month') {
+      const start = new Date(Date.UTC(y, m, 1));
+      return { start: iso(start), end: iso(today) };
+    }
+
+    if (datePreset === 'last_month') {
+      const start = new Date(Date.UTC(y, m - 1, 1));
+      const end = new Date(Date.UTC(y, m, 0)); // last day of previous month
+      return { start: iso(start), end: iso(end) };
+    }
+
+    // Fallback
+    const start = new Date(today);
+    start.setUTCDate(start.getUTCDate() - 6);
+    return { start: iso(start), end: iso(today) };
+  };
+
+  const refreshCreativeHistory = async (row: AdMetric) => {
+    if (demoMode || !companyId || !isSupabaseConfigured()) return;
+
+    setCreativeHistoryLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('creative_analyses')
+        .select('id,company_id,created_by,platform,level,entity_id,entity_name,thumbnail_url,period_start,period_end,metrics,result,created_at')
+        .eq('company_id', companyId)
+        .eq('level', selectedLevel)
+        .eq('entity_id', String(row.adId))
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      const msg = String((error as any)?.message ?? '').toLowerCase();
+      const missingTable = msg.includes('does not exist') || msg.includes('relation');
+      if (missingTable) {
+        setCreativeHistory([]);
+        return;
+      }
+      if (error) throw error;
+
+      setCreativeHistory(((data ?? []) as any) as CreativeAnalysisRow[]);
+    } catch {
+      setCreativeHistory([]);
+    } finally {
+      setCreativeHistoryLoading(false);
+    }
+  };
+
+  const saveCreativeAnalysis = async () => {
+    if (demoMode) return;
+    if (!companyId || !isSupabaseConfigured()) return;
+    if (!userId) return;
+    if (!creativeRow || !creativeResult) return;
+
+    setCreativeSaving(true);
+    setCreativeSaveOk(null);
+    setCreativeError(null);
+    try {
+      const { start, end } = currentAnalysisPeriod();
+
+      const payload: any = {
+        company_id: companyId,
+        created_by: userId,
+        platform: 'meta',
+        level: selectedLevel,
+        entity_id: String(creativeRow.adId),
+        entity_name: creativeRow.adName ?? null,
+        thumbnail_url: creativeRow.imageUrl ?? creativeRow.thumbnail ?? null,
+        period_start: start ?? null,
+        period_end: end ?? null,
+        metrics: creativeMetrics ?? {},
+        result: creativeResult ?? {},
+      };
+
+      const { error } = await supabase.from('creative_analyses').insert([payload]);
+      const msg = String((error as any)?.message ?? '').toLowerCase();
+      const missingTable = msg.includes('does not exist') || msg.includes('relation');
+      if (missingTable) {
+        throw new Error('Tabela de análises não existe ainda. Rode `supabase db push` para aplicar as migrations.');
+      }
+      if (error) throw error;
+
+      setCreativeSaveOk('Análise salva.');
+      await refreshCreativeHistory(creativeRow);
+    } catch (e: any) {
+      setCreativeError(String(e?.message ?? 'Falha ao salvar análise.'));
+    } finally {
+      setCreativeSaving(false);
+    }
   };
 
   const analyzeCreative = async (row: AdMetric) => {
@@ -1208,6 +1346,10 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     setCreativeRow(row);
     setCreativeError(null);
     setCreativeResult(null);
+    setCreativeMetrics(null);
+    setCreativeSaveOk(null);
+
+    void refreshCreativeHistory(row);
 
     if (demoMode) {
       setCreativeError('Análise de criativos com IA está disponível apenas no modo real.');
@@ -1266,6 +1408,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         classification: row.classification,
         tags: row.tags ?? [],
       };
+
+      setCreativeMetrics(metrics);
 
       const res = await fetch(`${getSupabaseUrl()}/functions/v1/ai-assistant`, {
         method: 'POST',
@@ -1946,6 +2090,46 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
               {creativeBusy && <div className="text-sm text-[hsl(var(--muted-foreground))]">Analisando…</div>}
               {creativeError && <div className="text-sm text-red-500">{creativeError}</div>}
+              {creativeSaveOk && <div className="text-sm text-emerald-400">{creativeSaveOk}</div>}
+
+              {!demoMode && creativeHistoryLoading ? (
+                <div className="text-sm text-[hsl(var(--muted-foreground))]">Carregando histórico…</div>
+              ) : !demoMode && creativeHistory.length > 0 ? (
+                <div className="space-y-2">
+                  <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">
+                    Histórico (últimas {creativeHistory.length})
+                  </div>
+                  <div className="space-y-2">
+                    {creativeHistory.map((h) => (
+                      <button
+                        key={h.id}
+                        type="button"
+                        className="w-full text-left rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-2 hover:bg-[hsl(var(--secondary))]"
+                        onClick={() => {
+                          setCreativeResult(h.result ?? null);
+                          setCreativeError(null);
+                          setCreativeSaveOk(null);
+                        }}
+                        title="Abrir esta análise"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                            {new Intl.DateTimeFormat('pt-BR', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(h.created_at))}
+                          </div>
+                          {h.period_start && h.period_end ? (
+                            <div className="text-[10px] text-[hsl(var(--muted-foreground))]">
+                              {h.period_start} → {h.period_end}
+                            </div>
+                          ) : null}
+                        </div>
+                        {typeof h?.result?.summary === 'string' ? (
+                          <div className="mt-1 text-xs text-[hsl(var(--foreground))] break-words">{h.result.summary}</div>
+                        ) : null}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               {creativeResult && (
                 <div className="space-y-3">
@@ -1988,6 +2172,17 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
             </div>
 
             <div className="p-4 border-t border-[hsl(var(--border))] flex justify-end gap-2">
+              {creativeResult && !demoMode ? (
+                <button
+                  type="button"
+                  className="px-3 py-2 text-sm bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))] border border-[hsl(var(--border))] rounded-md hover:bg-[hsl(var(--secondary))/0.8]"
+                  onClick={() => void saveCreativeAnalysis()}
+                  disabled={creativeSaving || !companyId || !userId}
+                  title="Salva a análise no Supabase (sem salvar API keys)."
+                >
+                  {creativeSaving ? 'Salvando…' : 'Salvar análise'}
+                </button>
+              ) : null}
               {selectedLevel === 'ad' && !demoMode && creativeRow.imageUrl ? (
                 <button
                   type="button"
