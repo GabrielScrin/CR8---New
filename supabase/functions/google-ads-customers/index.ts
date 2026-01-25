@@ -231,4 +231,3 @@ serve(async (req) => {
     return jsonResponse(500, { ok: false, error: e?.message ?? 'unknown error' });
   }
 });
-
