@@ -42,7 +42,18 @@ type SubmitPayload = {
   public_id: string;
   contact?: { name?: string; email?: string; phone?: string };
   utm_source?: string;
+  utm_medium?: string;
   utm_campaign?: string;
+  utm_content?: string;
+  utm_term?: string;
+  landing_page_url?: string;
+  referrer_url?: string;
+  gclid?: string;
+  gbraid?: string;
+  wbraid?: string;
+  fbclid?: string;
+  fbc?: string;
+  fbp?: string;
   answers?: Array<{ question_id: string; answer: any }>;
   raw?: any;
 };
@@ -155,6 +166,21 @@ serve(async (req) => {
           status: 'new',
           raw: {
             ...submissionRaw,
+            attribution: {
+              utm_source: body.utm_source ?? null,
+              utm_medium: body.utm_medium ?? null,
+              utm_campaign: body.utm_campaign ?? null,
+              utm_content: body.utm_content ?? null,
+              utm_term: body.utm_term ?? null,
+              landing_page_url: body.landing_page_url ?? null,
+              referrer_url: body.referrer_url ?? null,
+              gclid: body.gclid ?? null,
+              gbraid: body.gbraid ?? null,
+              wbraid: body.wbraid ?? null,
+              fbclid: body.fbclid ?? null,
+              fbc: body.fbc ?? null,
+              fbp: body.fbp ?? null,
+            },
             quiz: { public_id: (quiz as any).public_id, title: (quiz as any).title },
           },
         },
@@ -181,7 +207,21 @@ serve(async (req) => {
     }
 
     // Create/Upsert lead (so CRM receives it)
-    const leadExternalId = `quiz:${(quiz as any).public_id}:${submissionId}`;
+    const leadExternalId = (() => {
+      if (contactPhone) return `phone:${contactPhone}`;
+      if (contactEmail) return `email:${String(contactEmail).toLowerCase()}`;
+      return `quiz:${(quiz as any).public_id}:${submissionId}`;
+    })();
+
+    const { data: existingLead } = await supabaseAdmin
+      .from('leads')
+      .select('id, source')
+      .eq('company_id', (quiz as any).company_id)
+      .eq('external_id', leadExternalId)
+      .maybeSingle();
+
+    const leadSource = (existingLead as any)?.source ? String((existingLead as any).source) : 'Quiz';
+
     const leadRaw = {
       type: 'quiz_submission',
       quiz_public_id: (quiz as any).public_id,
@@ -202,9 +242,20 @@ serve(async (req) => {
             email: contactEmail,
             phone: contactPhone,
             status: 'new',
-            source: 'Quiz',
+            source: leadSource,
             utm_source: body.utm_source ?? null,
+            utm_medium: body.utm_medium ?? null,
             utm_campaign: body.utm_campaign ?? null,
+            utm_content: body.utm_content ?? null,
+            utm_term: body.utm_term ?? null,
+            landing_page_url: body.landing_page_url ?? null,
+            referrer_url: body.referrer_url ?? null,
+            gclid: body.gclid ?? null,
+            gbraid: body.gbraid ?? null,
+            wbraid: body.wbraid ?? null,
+            fbclid: body.fbclid ?? null,
+            fbc: body.fbc ?? null,
+            fbp: body.fbp ?? null,
             external_id: leadExternalId,
             last_interaction_at: nowIso,
             raw: leadRaw,
@@ -220,6 +271,37 @@ serve(async (req) => {
     const leadId = leadRow?.id ? String((leadRow as any).id) : null;
     if (leadId) {
       await supabaseAdmin.from('quiz_submissions').update({ lead_id: leadId }).eq('id', submissionId);
+
+      // Best-effort: timeline event (requires Phase contacts timeline migration)
+      try {
+        const { data: existingEvent } = await supabaseAdmin
+          .from('lead_events')
+          .select('id')
+          .eq('company_id', (quiz as any).company_id)
+          .eq('lead_id', leadId)
+          .eq('type', 'form_submission')
+          .contains('raw', { submission_id: submissionId } as any)
+          .maybeSingle();
+
+        if (!existingEvent?.id) {
+          await supabaseAdmin.from('lead_events').insert([
+            {
+              company_id: (quiz as any).company_id,
+              lead_id: leadId,
+              type: 'form_submission',
+              channel: 'form',
+              summary: 'Resposta de quiz',
+              raw: {
+                quiz_public_id: (quiz as any).public_id,
+                submission_id: submissionId,
+              },
+              occurred_at: nowIso,
+            },
+          ] as any);
+        }
+      } catch {
+        // ignore if not available yet
+      }
     }
 
     return jsonResponse(200, { ok: true, submission_id: submissionId, lead_id: leadId });

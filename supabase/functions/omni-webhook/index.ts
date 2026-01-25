@@ -409,6 +409,80 @@ serve(async (req) => {
 
     const lastMessageAt = parsed.timestamp ? new Date(parsed.timestamp).toISOString() : new Date().toISOString();
 
+    // Upsert / update lead (Contacts = leads)
+    const platformChannel = parsed.platform === 'whatsapp' ? 'whatsapp' : parsed.platform === 'instagram' ? 'instagram' : parsed.platform === 'web' ? 'web' : 'meta';
+    const leadExternalId =
+      parsed.platform === 'whatsapp'
+        ? `phone:${String(parsed.threadId || '').replace(/\D/g, '')}`
+        : `thread:${parsed.platform}:${parsed.threadId}`;
+
+    const leadPhone =
+      parsed.platform === 'whatsapp' ? String(parsed.threadId || '').replace(/\D/g, '') : null;
+
+    let leadId: string | null = null;
+    try {
+      const { data: existingLead, error: leadLookupErr } = await supabaseAdmin
+        .from('leads')
+        .select('id, source, name, phone')
+        .eq('company_id', companyId)
+        .eq('external_id', leadExternalId)
+        .maybeSingle();
+      if (leadLookupErr) return jsonResponse(500, { ok: false, error: leadLookupErr.message });
+
+      const desiredSource =
+        parsed.platform === 'whatsapp'
+          ? 'WhatsApp'
+          : parsed.platform === 'instagram'
+            ? 'Instagram'
+            : parsed.platform === 'web'
+              ? 'Web Chat'
+              : 'Meta';
+
+      if (!existingLead?.id) {
+        const { data: insertedLead, error: leadInsertErr } = await supabaseAdmin
+          .from('leads')
+          .insert([
+            {
+              company_id: companyId,
+              external_id: leadExternalId,
+              name: parsed.contactName ?? null,
+              phone: leadPhone,
+              status: 'new',
+              source: desiredSource,
+              last_interaction_at: lastMessageAt,
+              last_touch_at: lastMessageAt,
+              last_touch_channel: platformChannel,
+              raw: {
+                created_from: 'omni-webhook',
+                platform: parsed.platform,
+                thread_id: parsed.threadId,
+              },
+            },
+          ] as any)
+          .select('id')
+          .maybeSingle();
+        if (leadInsertErr) return jsonResponse(500, { ok: false, error: leadInsertErr.message });
+        leadId = insertedLead?.id ?? null;
+      } else {
+        leadId = existingLead.id;
+        const patch: Record<string, any> = {
+          last_interaction_at: lastMessageAt,
+          last_touch_at: lastMessageAt,
+          last_touch_channel: platformChannel,
+        };
+
+        if (!existingLead.source) patch.source = desiredSource;
+        if (!existingLead.name && parsed.contactName) patch.name = parsed.contactName;
+        if (!existingLead.phone && leadPhone) patch.phone = leadPhone;
+
+        const { error: leadUpdErr } = await supabaseAdmin.from('leads').update(patch).eq('id', leadId);
+        if (leadUpdErr) return jsonResponse(500, { ok: false, error: leadUpdErr.message });
+      }
+    } catch (e) {
+      console.warn('[omni-webhook] lead upsert skipped (schema not ready?)', { error: (e as any)?.message ?? String(e) });
+      leadId = null;
+    }
+
     // Upsert chat by (company_id + platform + external_thread_id)
     const { data: chat, error: chatError } = await supabaseAdmin
       .from('chats')
@@ -418,6 +492,7 @@ serve(async (req) => {
             company_id: companyId,
             platform: parsed.platform,
             external_thread_id: parsed.threadId,
+            lead_id: leadId,
             last_message: parsed.text,
             last_message_at: lastMessageAt,
             raw: {
@@ -437,6 +512,12 @@ serve(async (req) => {
     if (!chat?.id) return jsonResponse(500, { ok: false, error: 'failed to upsert chat' });
 
     console.log('[omni-webhook] upserted chat', { chat_id: String(chat.id) });
+
+    // Best-effort: keep chat.lead_id in sync (if the chat existed before lead linkage).
+    if (leadId && (chat as any)?.lead_id !== leadId) {
+      const { error: chatLeadErr } = await supabaseAdmin.from('chats').update({ lead_id: leadId }).eq('id', chat.id);
+      if (chatLeadErr) console.warn('[omni-webhook] failed to update chat.lead_id', { error: chatLeadErr.message });
+    }
 
     const { error: msgError } = await supabaseAdmin.from('chat_messages').upsert(
       [
@@ -459,7 +540,48 @@ serve(async (req) => {
       return jsonResponse(500, { ok: false, error: msgError.message });
     }
 
-    return jsonResponse(200, { ok: true, chat_id: chat.id });
+    // Best-effort: timeline event (if Phase PRD schema is enabled).
+    if (leadId) {
+      try {
+        const dedupeKey = parsed.externalMessageId ? `wa:${parsed.externalMessageId}` : null;
+        if (dedupeKey) {
+          const { data: existingEvent } = await supabaseAdmin
+            .from('lead_events')
+            .select('id')
+            .eq('company_id', companyId)
+            .eq('lead_id', leadId)
+            .eq('type', 'inbound_message')
+            .contains('raw', { dedupe_key: dedupeKey })
+            .maybeSingle();
+          if (existingEvent?.id) {
+            return jsonResponse(200, { ok: true, chat_id: chat.id });
+          }
+        }
+
+        await supabaseAdmin.from('lead_events').insert([
+          {
+            company_id: companyId,
+            lead_id: leadId,
+            type: 'inbound_message',
+            channel: platformChannel,
+            summary: 'Mensagem recebida',
+            occurred_at: lastMessageAt,
+            raw: {
+              dedupe_key: dedupeKey,
+              chat_id: chat.id,
+              external_message_id: parsed.externalMessageId ?? null,
+              text: parsed.text,
+              from: parsed.from ?? null,
+              contact_name: parsed.contactName ?? null,
+            },
+          },
+        ] as any);
+      } catch (e) {
+        console.warn('[omni-webhook] lead_events insert skipped', { error: (e as any)?.message ?? String(e) });
+      }
+    }
+
+    return jsonResponse(200, { ok: true, chat_id: chat.id, lead_id: leadId });
   } catch (e: any) {
     console.error('[omni-webhook] unhandled error', { error: e?.message ?? String(e) });
     return jsonResponse(500, { ok: false, error: e?.message ?? 'unknown error' });

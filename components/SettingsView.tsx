@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarClock, RefreshCw, Save, Trash2, UserPlus } from 'lucide-react';
-import { getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
+import { CalendarClock, RefreshCw, Save, Trash2, UserPlus, Send } from 'lucide-react';
+import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { Role } from '../types';
 
 type CompanyRow = {
@@ -12,6 +12,12 @@ type CompanyRow = {
   meta_ad_account_id?: string | null;
   whatsapp_phone_number_id?: string | null;
   whatsapp_waba_id?: string | null;
+  google_ads_customer_id?: string | null;
+  google_ads_login_customer_id?: string | null;
+  google_ads_conversion_action_lead?: string | null;
+  google_ads_conversion_action_purchase?: string | null;
+  google_ads_currency_code?: string | null;
+  meta_pixel_id?: string | null;
   media_balance?: number | null;
   agency_fee_percent?: number | null;
   agency_fee_fixed?: number | null;
@@ -91,6 +97,12 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
   const [metaAdAccountId, setMetaAdAccountId] = useState('');
   const [whatsPhoneNumberId, setWhatsPhoneNumberId] = useState('');
   const [whatsWabaId, setWhatsWabaId] = useState('');
+  const [googleAdsCustomerId, setGoogleAdsCustomerId] = useState('');
+  const [googleAdsLoginCustomerId, setGoogleAdsLoginCustomerId] = useState('');
+  const [googleAdsConvLead, setGoogleAdsConvLead] = useState('');
+  const [googleAdsConvPurchase, setGoogleAdsConvPurchase] = useState('');
+  const [googleAdsCurrencyCode, setGoogleAdsCurrencyCode] = useState('BRL');
+  const [metaPixelId, setMetaPixelId] = useState('');
   const [currency, setCurrency] = useState('BRL');
   const [mediaBalance, setMediaBalance] = useState('');
   const [feePercent, setFeePercent] = useState('');
@@ -107,6 +119,9 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
   const [weeklyError, setWeeklyError] = useState<string | null>(null);
   const [weeklyReports, setWeeklyReports] = useState<WeeklyReportRow[]>([]);
   const [weeklyGenerating, setWeeklyGenerating] = useState(false);
+
+  const [dispatchingConversions, setDispatchingConversions] = useState(false);
+  const [dispatchConversionsMsg, setDispatchConversionsMsg] = useState<string | null>(null);
 
   const [financeLedgerAvailable, setFinanceLedgerAvailable] = useState(false);
   const [financeLoading, setFinanceLoading] = useState(false);
@@ -171,7 +186,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
       case 'company_member.added':
         return 'Membro adicionado';
       case 'company_member.role_changed':
-        return 'PermissÃ£o alterada';
+        return 'Permissão alterada';
       case 'company_member.removed':
         return 'Membro removido';
       case 'finance_transaction.created':
@@ -191,7 +206,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
     void (async () => {
       try {
         const fullSelect =
-          'id,name,brand_name,brand_logo_url,brand_primary_color,meta_ad_account_id,whatsapp_phone_number_id,whatsapp_waba_id,media_balance,agency_fee_percent,agency_fee_fixed,currency';
+          'id,name,brand_name,brand_logo_url,brand_primary_color,meta_ad_account_id,whatsapp_phone_number_id,whatsapp_waba_id,google_ads_customer_id,google_ads_login_customer_id,google_ads_conversion_action_lead,google_ads_conversion_action_purchase,google_ads_currency_code,meta_pixel_id,media_balance,agency_fee_percent,agency_fee_fixed,currency';
 
         let { data, error: dbError } = await supabase.from('companies').select(fullSelect).eq('id', companyId).maybeSingle();
         if (dbError && String(dbError.message || '').toLowerCase().includes('does not exist')) {
@@ -210,6 +225,12 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
         setMetaAdAccountId(row?.meta_ad_account_id ?? '');
         setWhatsPhoneNumberId(row?.whatsapp_phone_number_id ?? '');
         setWhatsWabaId(row?.whatsapp_waba_id ?? '');
+        setGoogleAdsCustomerId(row?.google_ads_customer_id ?? '');
+        setGoogleAdsLoginCustomerId(row?.google_ads_login_customer_id ?? '');
+        setGoogleAdsConvLead(row?.google_ads_conversion_action_lead ?? '');
+        setGoogleAdsConvPurchase(row?.google_ads_conversion_action_purchase ?? '');
+        setGoogleAdsCurrencyCode(row?.google_ads_currency_code ?? 'BRL');
+        setMetaPixelId(row?.meta_pixel_id ?? '');
         setCurrency(row?.currency ?? 'BRL');
         setMediaBalance(row?.media_balance != null ? String(row.media_balance) : '');
         setFeePercent(row?.agency_fee_percent != null ? String(row.agency_fee_percent) : '');
@@ -407,7 +428,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
         membersMsg.includes('relation');
 
       if (missing) {
-        throw new Error('Migrations de membros/convites nÃ£o aplicadas ainda. Rode `supabase db push` e recarregue.');
+        throw new Error('Migrations de membros/convites não aplicadas ainda. Rode `supabase db push` e recarregue.');
       }
       if (membersErr) throw membersErr;
       if (invitesErr) throw invitesErr;
@@ -482,6 +503,49 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
     }
   };
 
+  const dispatchConversionsNow = async () => {
+    if (readOnlyMode || !companyId) return;
+    setDispatchingConversions(true);
+    setDispatchConversionsMsg(null);
+    setError(null);
+    setOk(null);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('Sem sessão. Faça login novamente.');
+
+      const res = await fetch(`${getSupabaseUrl()}/functions/v1/conversions-dispatch`, {
+        method: 'POST',
+        headers: {
+          apikey: getSupabaseAnonKey(),
+          authorization: `Bearer ${accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ company_id: companyId, limit: 100 }),
+      });
+
+      const text = await res.text().catch(() => '');
+      let payload: any = null;
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch {
+        payload = { raw: text };
+      }
+      if (!res.ok) throw new Error(payload?.error ?? `HTTP ${res.status}`);
+
+      const processed = Number(payload?.processed ?? 0);
+      const sent = Number(payload?.sent ?? 0);
+      const failed = Number(payload?.failed ?? 0);
+      setDispatchConversionsMsg(`Conversões: processadas ${processed}, enviadas ${sent}, falhas ${failed}.`);
+      setOk('Conversões processadas.');
+    } catch (e: any) {
+      setDispatchConversionsMsg(null);
+      setError(e?.message ?? 'Falha ao despachar conversões.');
+    } finally {
+      setDispatchingConversions(false);
+    }
+  };
+
   const save = async () => {
     if (!companyId) return;
     if (!canEditCompany) return;
@@ -497,6 +561,12 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
         meta_ad_account_id: metaAdAccountId.trim() || null,
         whatsapp_phone_number_id: whatsPhoneNumberId.trim() || null,
         whatsapp_waba_id: whatsWabaId.trim() || null,
+        google_ads_customer_id: googleAdsCustomerId.trim() ? googleAdsCustomerId.trim().replace(/\D/g, '') : null,
+        google_ads_login_customer_id: googleAdsLoginCustomerId.trim() ? googleAdsLoginCustomerId.trim().replace(/\D/g, '') : null,
+        google_ads_conversion_action_lead: googleAdsConvLead.trim() || null,
+        google_ads_conversion_action_purchase: googleAdsConvPurchase.trim() || null,
+        google_ads_currency_code: googleAdsCurrencyCode.trim() ? googleAdsCurrencyCode.trim().toUpperCase() : null,
+        meta_pixel_id: metaPixelId.trim() || null,
         currency: currency.trim() || 'BRL',
         media_balance: mediaBalance.trim() ? Number(mediaBalance) : null,
         agency_fee_percent: feePercent.trim() ? Number(feePercent) : null,
@@ -576,9 +646,9 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
       });
       if (rpcErr) throw rpcErr;
       await refreshMembersAndInvites();
-      setOk('PermissÃ£o atualizada.');
+      setOk('Permissão atualizada.');
     } catch (e: any) {
-      setError(e?.message ?? 'Falha ao atualizar permissÃ£o.');
+      setError(e?.message ?? 'Falha ao atualizar permissão.');
     } finally {
       setSaving(false);
     }
@@ -819,7 +889,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
               <div>
                 <h3 className="text-sm font-semibold text-[hsl(var(--foreground))]">Movimentos</h3>
                 <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
-                  Registre crÃ©ditos e gastos (atualiza o saldo de mÃ­dia) e fees/ajustes (histÃ³rico).
+                  Registre créditos e gastos (atualiza o saldo de mídia) e fees/ajustes (histórico).
                 </p>
               </div>
               <button
@@ -844,10 +914,10 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
                   disabled={readOnlyMode || !canEditCompany}
                   className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
                 >
-                  <option value="media_credit">CrÃ©dito de mÃ­dia</option>
-                  <option value="media_spend">Gasto de mÃ­dia</option>
+                  <option value="media_credit">Crédito de mídia</option>
+                  <option value="media_spend">Gasto de mídia</option>
                   <option value="adjustment">Ajuste</option>
-                  <option value="agency_fee">Fee da agÃªncia</option>
+                  <option value="agency_fee">Fee da agência</option>
                 </select>
               </div>
 
@@ -927,9 +997,111 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
           </div>
         ) : (
           <p className="text-xs text-[hsl(var(--muted-foreground))]">
-            HistÃ³rico de transaÃ§Ãµes ainda nÃ£o estÃ¡ habilitado neste banco (migration: phase5_finance_ledger).
+            Histórico de transações ainda não está habilitado neste banco (migration: phase5_finance_ledger).
           </p>
         )}
+      </div>
+
+      <div className="cr8-card p-6 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Conversões (Google Ads / Meta)</h2>
+            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+              Usa os click IDs capturados nos leads (ex: <span className="font-mono">gclid</span>) para enviar{' '}
+              <span className="font-medium">Offline Conversions</span>. Os segredos OAuth ficam no Supabase (Edge Secrets), não no banco.
+            </p>
+          </div>
+
+          <button
+            onClick={() => void dispatchConversionsNow()}
+            disabled={dispatchingConversions || readOnlyMode || !companyId}
+            className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+            title="Despachar conversões pendentes (Google Ads)"
+          >
+            <Send className="h-4 w-4" />
+            {dispatchingConversions ? 'Enviando...' : 'Despachar agora'}
+          </button>
+        </div>
+
+        {dispatchConversionsMsg ? <div className="text-xs text-emerald-300">{dispatchConversionsMsg}</div> : null}
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Google Ads Customer ID</label>
+            <input
+              value={googleAdsCustomerId}
+              onChange={(e) => setGoogleAdsCustomerId(e.target.value)}
+              disabled={!canEditCompany}
+              placeholder="1234567890 (sem traços)"
+              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Login Customer ID (MCC)</label>
+            <input
+              value={googleAdsLoginCustomerId}
+              onChange={(e) => setGoogleAdsLoginCustomerId(e.target.value)}
+              disabled={!canEditCompany}
+              placeholder="Opcional (sem traços)"
+              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Currency Code</label>
+            <input
+              value={googleAdsCurrencyCode}
+              onChange={(e) => setGoogleAdsCurrencyCode(e.target.value)}
+              disabled={!canEditCompany}
+              placeholder="BRL"
+              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Conversion Action (Lead)</label>
+            <input
+              value={googleAdsConvLead}
+              onChange={(e) => setGoogleAdsConvLead(e.target.value)}
+              disabled={!canEditCompany}
+              placeholder="ID (ex: 123) ou resource name"
+              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+            />
+            <p className="mt-2 text-[11px] text-[hsl(var(--muted-foreground))]">
+              Ex.: <span className="font-mono">customers/1234567890/conversionActions/111</span>
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Conversion Action (Compra)</label>
+            <input
+              value={googleAdsConvPurchase}
+              onChange={(e) => setGoogleAdsConvPurchase(e.target.value)}
+              disabled={!canEditCompany}
+              placeholder="ID (ex: 456) ou resource name"
+              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Meta Pixel ID (opcional)</label>
+            <input
+              value={metaPixelId}
+              onChange={(e) => setMetaPixelId(e.target.value)}
+              disabled={!canEditCompany}
+              placeholder="1234567890"
+              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+            />
+            <p className="mt-2 text-[11px] text-[hsl(var(--muted-foreground))]">Usaremos isso para eventos da Meta (CAPI) em uma próxima etapa.</p>
+          </div>
+        </div>
+
+        <div className="text-xs text-[hsl(var(--muted-foreground))]">
+          Dica: para enviar automaticamente, configure um Cron (Vercel Cron / QStash) chamando{' '}
+          <span className="font-mono">{getSupabaseUrl()}/functions/v1/conversions-dispatch</span> com{' '}
+          <span className="font-mono">{`{ company_id: "${companyId}" }`}</span>.
+        </div>
       </div>
 
       <div className="cr8-card p-6 space-y-4">

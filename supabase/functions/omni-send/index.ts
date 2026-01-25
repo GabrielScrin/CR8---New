@@ -139,7 +139,7 @@ serve(async (req) => {
 
     const { data: chat, error: chatError } = await supabaseAdmin
       .from('chats')
-      .select('id, company_id, platform, external_thread_id, last_message_at')
+      .select('id, company_id, platform, external_thread_id, last_message_at, lead_id')
       .eq('id', body.chat_id)
       .maybeSingle();
     if (chatError) return jsonResponse(500, { ok: false, error: chatError.message });
@@ -156,6 +156,72 @@ serve(async (req) => {
 
     const nowIso = new Date().toISOString();
 
+    // Ensure lead exists and link it to this chat (Contacts = leads)
+    let leadId: string | null = (chat as any)?.lead_id ?? null;
+    try {
+      const platformChannel = chat.platform === 'whatsapp' ? 'whatsapp' : chat.platform === 'instagram' ? 'instagram' : chat.platform === 'web' ? 'web' : 'meta';
+      const thread = String(chat.external_thread_id ?? '');
+      const threadDigits = thread.replace(/\D/g, '');
+      const leadExternalId =
+        chat.platform === 'whatsapp' && threadDigits ? `phone:${threadDigits}` : `thread:${chat.platform}:${thread}`;
+
+      if (!leadId) {
+        const { data: existingLead, error: leadLookupErr } = await supabaseAdmin
+          .from('leads')
+          .select('id')
+          .eq('company_id', (chat as any).company_id)
+          .eq('external_id', leadExternalId)
+          .maybeSingle();
+        if (leadLookupErr) return jsonResponse(500, { ok: false, error: leadLookupErr.message });
+        leadId = existingLead?.id ?? null;
+      }
+
+      if (!leadId) {
+        const desiredSource =
+          chat.platform === 'whatsapp'
+            ? 'WhatsApp'
+            : chat.platform === 'instagram'
+              ? 'Instagram'
+              : chat.platform === 'web'
+                ? 'Web Chat'
+                : 'Meta';
+
+        const { data: insertedLead, error: leadInsertErr } = await supabaseAdmin
+          .from('leads')
+          .insert([
+            {
+              company_id: (chat as any).company_id,
+              external_id: leadExternalId,
+              phone: chat.platform === 'whatsapp' ? threadDigits : null,
+              status: 'new',
+              source: desiredSource,
+              last_interaction_at: nowIso,
+              last_touch_at: nowIso,
+              last_touch_channel: platformChannel,
+              raw: { created_from: 'omni-send', chat_id: chat.id, platform: chat.platform },
+            },
+          ] as any)
+          .select('id')
+          .maybeSingle();
+        if (leadInsertErr) return jsonResponse(500, { ok: false, error: leadInsertErr.message });
+        leadId = insertedLead?.id ?? null;
+      } else {
+        const { error: leadUpdErr } = await supabaseAdmin
+          .from('leads')
+          .update({ last_interaction_at: nowIso, last_touch_at: nowIso, last_touch_channel: platformChannel })
+          .eq('id', leadId);
+        if (leadUpdErr) return jsonResponse(500, { ok: false, error: leadUpdErr.message });
+      }
+
+      if (leadId && (chat as any)?.lead_id !== leadId) {
+        const { error: chatLeadErr } = await supabaseAdmin.from('chats').update({ lead_id: leadId }).eq('id', chat.id);
+        if (chatLeadErr) return jsonResponse(500, { ok: false, error: chatLeadErr.message });
+      }
+    } catch (e) {
+      console.warn('[omni-send] lead upsert/link skipped', { error: (e as any)?.message ?? String(e) });
+      leadId = (chat as any)?.lead_id ?? null;
+    }
+
     const { data: insertedMsg, error: msgError } = await supabaseAdmin
       .from('chat_messages')
       .insert([
@@ -171,6 +237,25 @@ serve(async (req) => {
       .select('id')
       .maybeSingle();
     if (msgError) return jsonResponse(500, { ok: false, error: msgError.message });
+
+    // Best-effort: timeline event
+    if (leadId && insertedMsg?.id) {
+      try {
+        await supabaseAdmin.from('lead_events').insert([
+          {
+            company_id: (chat as any).company_id,
+            lead_id: leadId,
+            type: 'outbound_message',
+            channel: chat.platform === 'whatsapp' ? 'whatsapp' : chat.platform === 'instagram' ? 'instagram' : chat.platform === 'web' ? 'web' : 'meta',
+            summary: 'Mensagem enviada',
+            occurred_at: nowIso,
+            raw: { chat_id: chat.id, chat_message_id: insertedMsg.id, outbound: true },
+          },
+        ] as any);
+      } catch (e) {
+        console.warn('[omni-send] lead_events insert skipped', { error: (e as any)?.message ?? String(e) });
+      }
+    }
 
     const { error: updError } = await supabaseAdmin
       .from('chats')

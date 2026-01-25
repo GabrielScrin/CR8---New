@@ -53,9 +53,31 @@ export interface Lead {
   source: string;
   utm_source?: string;
   utm_campaign?: string;
+  utm_medium?: string;
+  utm_content?: string;
+  utm_term?: string;
+  landing_page_url?: string;
+  referrer_url?: string;
+  gclid?: string;
+  gbraid?: string;
+  wbraid?: string;
+  fbclid?: string;
+  fbc?: string;
+  fbp?: string;
+  first_touch_at?: string;
+  first_touch_channel?: string;
+  last_touch_at?: string;
+  last_touch_channel?: string;
+  lead_score_total?: number;
+  lead_score_last?: number;
+  lead_score_updated_at?: string;
   lastInteraction: string;
   value?: number;
   assigned_to?: string;
+  external_id?: string;
+  company_id?: string;
+  created_at?: string;
+  updated_at?: string;
   raw?: any;
 }
 

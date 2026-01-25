@@ -30,7 +30,18 @@ type LeadPayload = {
   source?: string;
   value?: number | null;
   utm_source?: string | null;
+  utm_medium?: string | null;
   utm_campaign?: string | null;
+  utm_content?: string | null;
+  utm_term?: string | null;
+  landing_page_url?: string | null;
+  referrer_url?: string | null;
+  gclid?: string | null;
+  gbraid?: string | null;
+  wbraid?: string | null;
+  fbclid?: string | null;
+  fbc?: string | null;
+  fbp?: string | null;
   external_id?: string | null;
   raw?: any;
   status?: 'new' | 'contacted' | 'proposal' | 'won' | 'lost';
@@ -183,7 +194,18 @@ serve(async (req) => {
         status: 'new',
         source: body.source ?? 'Landing Page',
         utm_source: body.utm_source ?? null,
+        utm_medium: body.utm_medium ?? null,
         utm_campaign: body.utm_campaign ?? null,
+        utm_content: body.utm_content ?? null,
+        utm_term: body.utm_term ?? null,
+        landing_page_url: body.landing_page_url ?? body.page_url ?? null,
+        referrer_url: body.referrer_url ?? null,
+        gclid: body.gclid ?? null,
+        gbraid: body.gbraid ?? null,
+        wbraid: body.wbraid ?? null,
+        fbclid: body.fbclid ?? null,
+        fbc: body.fbc ?? null,
+        fbp: body.fbp ?? null,
         value: body.value ?? null,
         last_interaction_at: nowIso,
         raw: body.raw ?? body,

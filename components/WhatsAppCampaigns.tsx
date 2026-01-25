@@ -425,7 +425,7 @@ export function WhatsAppCampaigns({ companyId, role }: { companyId: string; role
                     disabled={!canManage || loading}
                     onClick={() => setRunLoop(true)}
                     className="px-3 py-2 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] disabled:opacity-50"
-                    title="Processar atÃ© acabar"
+                    title="Processar até acabar"
                   >
                     Enviar tudo
                   </button>
@@ -514,7 +514,7 @@ export function WhatsAppCampaigns({ companyId, role }: { companyId: string; role
                 disabled={loading || !selectedCampaignId}
                 onClick={() => setShowTrace((v) => !v)}
                 className="px-3 py-2 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] disabled:opacity-50 inline-flex items-center gap-2"
-                title="Logs tÃ©cnicos do disparo (para debug)"
+                title="Logs técnicos do disparo (para debug)"
               >
                 <ListOrdered className="h-4 w-4" />
                 {showTrace ? 'Ocultar logs' : 'Ver logs'}
@@ -600,7 +600,7 @@ export function WhatsAppCampaigns({ companyId, role }: { companyId: string; role
             {showTrace && (
               <div className="mt-4 border border-[hsl(var(--border))] rounded-xl overflow-hidden">
                 <div className="flex items-center justify-between gap-3 px-3 py-2 bg-[hsl(var(--card))] border-b border-[hsl(var(--border))]">
-                  <div className="text-xs font-semibold text-[hsl(var(--foreground))]">Logs (Ãºltimos 200)</div>
+                  <div className="text-xs font-semibold text-[hsl(var(--foreground))]">Logs (últimos 200)</div>
                   <button
                     disabled={loading || !selectedCampaignId}
                     onClick={() => selectedCampaignId && void fetchTrace(selectedCampaignId)}

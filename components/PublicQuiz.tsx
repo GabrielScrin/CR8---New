@@ -32,10 +32,45 @@ type AnswerValue = string | number | string[] | null;
 
 const sanitizePhone = (value: string) => value.replace(/\D/g, '');
 
-const getUtmFromUrl = (url: URL) => {
+const getCookie = (name: string): string | undefined => {
+  if (typeof document === 'undefined') return undefined;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : undefined;
+};
+
+const getAttributionFromUrl = (url: URL) => {
   const utm_source = url.searchParams.get('utm_source') ?? undefined;
+  const utm_medium = url.searchParams.get('utm_medium') ?? undefined;
   const utm_campaign = url.searchParams.get('utm_campaign') ?? undefined;
-  return { utm_source, utm_campaign };
+  const utm_content = url.searchParams.get('utm_content') ?? undefined;
+  const utm_term = url.searchParams.get('utm_term') ?? undefined;
+
+  const gclid = url.searchParams.get('gclid') ?? undefined;
+  const gbraid = url.searchParams.get('gbraid') ?? undefined;
+  const wbraid = url.searchParams.get('wbraid') ?? undefined;
+
+  const fbclid = url.searchParams.get('fbclid') ?? undefined;
+  const fbc = getCookie('_fbc');
+  const fbp = getCookie('_fbp');
+
+  const landing_page_url = url.href;
+  const referrer_url = typeof document !== 'undefined' ? document.referrer || undefined : undefined;
+
+  return {
+    utm_source,
+    utm_medium,
+    utm_campaign,
+    utm_content,
+    utm_term,
+    gclid,
+    gbraid,
+    wbraid,
+    fbclid,
+    fbc,
+    fbp,
+    landing_page_url,
+    referrer_url,
+  };
 };
 
 export function PublicQuiz({ publicId }: { publicId: string }) {
@@ -105,7 +140,7 @@ export function PublicQuiz({ publicId }: { publicId: string }) {
       setError(null);
 
       const url = new URL(window.location.href);
-      const { utm_source, utm_campaign } = getUtmFromUrl(url);
+      const attribution = getAttributionFromUrl(url);
 
       const requiredMissing = questions
         .filter((q) => q.required)
@@ -127,11 +162,11 @@ export function PublicQuiz({ publicId }: { publicId: string }) {
           email: contactEmail.trim() || undefined,
           phone: contactPhone.trim() ? sanitizePhone(contactPhone) : undefined,
         },
-        utm_source,
-        utm_campaign,
+        ...attribution,
         answers: questions.map((q) => ({ question_id: q.id, answer: answers[q.id] ?? null })),
         raw: {
           page_url: window.location.href,
+          referrer_url: typeof document !== 'undefined' ? document.referrer || null : null,
           user_agent: navigator.userAgent,
         },
       };
@@ -336,4 +371,3 @@ export function PublicQuiz({ publicId }: { publicId: string }) {
     </div>
   );
 }
-
