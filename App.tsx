@@ -11,6 +11,7 @@ import { AIAgent } from './components/AIAgent';
 import { SettingsView } from './components/SettingsView';
 import { QuizForms } from './components/QuizForms';
 import { PublicQuiz } from './components/PublicQuiz';
+import { WhatsApp } from './components/WhatsApp';
 import { Role, User } from './types';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { loadSelectedCompanyId, saveSelectedCompanyId } from './lib/companySelection';
@@ -233,7 +234,7 @@ export default function App() {
       case 'instagram':
         return <PlaceholderView title="Instagram Mirror" />;
       case 'whatsapp':
-        return <PlaceholderView title="Disparador WhatsApp" />;
+        return <WhatsApp companyId={user.companyId} role={user.role} />;
       case 'ai':
         return <AIAgent companyId={user.companyId} userId={user.id} />;
       case 'settings':

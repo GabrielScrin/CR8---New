@@ -380,6 +380,26 @@ serve(async (req) => {
           .select('id');
         if (updErr) return jsonResponse(500, { ok: false, error: updErr.message });
         updated += Array.isArray(updRows) ? updRows.length : 0;
+
+        // Best-effort: update WhatsApp campaign recipient status (if Phase WhatsApp is enabled).
+        try {
+          const recipUpdates: Record<string, any> = { status: s.status };
+          if (s.status === 'delivered') recipUpdates.delivered_at = s.timestamp;
+          if (s.status === 'read') recipUpdates.read_at = s.timestamp;
+          if (s.status === 'failed') {
+            recipUpdates.failed_at = s.timestamp;
+            const e0 = s.errors?.[0];
+            if (e0?.code || e0?.title) recipUpdates.error = `[${e0?.code ?? 'err'}] ${e0?.title ?? 'failed'}`;
+          }
+
+          await supabaseAdmin
+            .from('whatsapp_campaign_recipients')
+            .update(recipUpdates)
+            .eq('company_id', companyId)
+            .eq('external_message_id', s.messageId);
+        } catch {
+          // ignore if table doesn't exist yet
+        }
       }
 
       return jsonResponse(200, { ok: true, updated });
