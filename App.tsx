@@ -9,6 +9,8 @@ import { CompanySetup } from './components/CompanySetup';
 import { ContactsLeads } from './components/ContactsLeads';
 import { AIAgent } from './components/AIAgent';
 import { SettingsView } from './components/SettingsView';
+import { QuizForms } from './components/QuizForms';
+import { PublicQuiz } from './components/PublicQuiz';
 import { Role, User } from './types';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { loadSelectedCompanyId, saveSelectedCompanyId } from './lib/companySelection';
@@ -37,9 +39,20 @@ const LoadingScreen = () => (
 );
 
 export default function App() {
+  const publicQuizId = (() => {
+    try {
+      const path = window.location.pathname || '';
+      const parts = path.split('/').filter(Boolean);
+      if (parts.length >= 2 && parts[0] === 'quiz') return parts[1];
+      return null;
+    } catch {
+      return null;
+    }
+  })();
+
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState('dashboard');
-  const [loadingSession, setLoadingSession] = useState(true);
+  const [loadingSession, setLoadingSession] = useState(() => !publicQuizId);
 
   // Keep hooks unconditional: enforce client-portal view restrictions via an effect,
   // even during the loading/login/setup renders.
@@ -51,6 +64,7 @@ export default function App() {
   }, [currentView, user?.role]);
 
   useEffect(() => {
+    if (publicQuizId) return;
     if (!isSupabaseConfigured()) {
       setLoadingSession(false);
       return;
@@ -145,6 +159,8 @@ export default function App() {
     setCurrentView('dashboard');
   };
 
+  if (publicQuizId) return <PublicQuiz publicId={publicQuizId} />;
+
   if (loadingSession) return <LoadingScreen />;
 
   if (!user) {
@@ -213,7 +229,7 @@ export default function App() {
       case 'contacts':
         return <ContactsLeads companyId={user.companyId} />;
       case 'forms':
-        return <PlaceholderView title="Quiz & Formulários" />;
+        return <QuizForms companyId={user.companyId} />;
       case 'instagram':
         return <PlaceholderView title="Instagram Mirror" />;
       case 'whatsapp':
