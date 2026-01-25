@@ -21,12 +21,30 @@ export type WhatsAppBroadcastRunBody = {
   delay_ms?: number;
 };
 
+export type WhatsAppBroadcastPrecheckBody = {
+  action: 'precheck';
+  campaign_id: string;
+};
+
+export type WhatsAppCampaignRecipientStatus = 'pending' | 'sending' | 'sent' | 'delivered' | 'read' | 'failed' | 'skipped';
+
+export type WhatsAppBroadcastRequeueBody = {
+  action: 'requeue';
+  campaign_id: string;
+  statuses?: WhatsAppCampaignRecipientStatus[];
+};
+
 export type WhatsAppBroadcastCancelBody = {
   action: 'cancel';
   campaign_id: string;
 };
 
-export type WhatsAppBroadcastRequestBody = WhatsAppBroadcastCreateBody | WhatsAppBroadcastRunBody | WhatsAppBroadcastCancelBody;
+export type WhatsAppBroadcastRequestBody =
+  | WhatsAppBroadcastCreateBody
+  | WhatsAppBroadcastRunBody
+  | WhatsAppBroadcastPrecheckBody
+  | WhatsAppBroadcastRequeueBody
+  | WhatsAppBroadcastCancelBody;
 
 export async function callWhatsAppBroadcast<T = any>(body: WhatsAppBroadcastRequestBody): Promise<T> {
   const { data: sessionData } = await supabase.auth.getSession();
@@ -57,4 +75,3 @@ export async function callWhatsAppBroadcast<T = any>(body: WhatsAppBroadcastRequ
   }
   return (json ?? {}) as T;
 }
-

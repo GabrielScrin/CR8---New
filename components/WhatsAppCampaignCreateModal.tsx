@@ -13,6 +13,16 @@ type LeadRow = {
   created_at: string;
 };
 
+type WhatsAppTemplateRow = {
+  id: string;
+  name: string;
+  language: string;
+  status: string;
+  category: string | null;
+  components: unknown;
+  updated_at: string;
+};
+
 const normalizePhone = (v: string) => String(v || '').replace(/\D/g, '');
 
 const parseRecipientsText = (raw: string) => {
@@ -36,6 +46,126 @@ const parseRecipientsText = (raw: string) => {
   return out;
 };
 
+const parseRecipientsCsvText = (raw: string) => {
+  const rows = String(raw || '')
+    .replace(/^\uFEFF/, '')
+    .split(/\r?\n/g)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  if (rows.length === 0) return [] as Array<{ phone: string; name?: string | null }>;
+
+  const headerLine = rows[0] || '';
+  const delimiter = headerLine.includes(';') && !headerLine.includes(',') ? ';' : headerLine.includes('\t') ? '\t' : ',';
+
+  const split = (line: string) => line.split(delimiter).map((v) => v.trim().replace(/^"|"$/g, ''));
+
+  const first = split(rows[0]).map((v) => v.toLowerCase());
+  const looksLikeHeader =
+    first.some((v) => ['phone', 'telefone', 'celular', 'whatsapp', 'numero', 'number'].includes(v)) ||
+    first.some((v) => ['name', 'nome'].includes(v));
+
+  let start = 0;
+  let phoneIdx = 0;
+  let nameIdx: number | null = 1;
+  if (looksLikeHeader) {
+    start = 1;
+    const pi = first.findIndex((v) => ['phone', 'telefone', 'celular', 'whatsapp', 'numero', 'number'].includes(v));
+    phoneIdx = pi >= 0 ? pi : 0;
+    const ni = first.findIndex((v) => ['name', 'nome'].includes(v));
+    nameIdx = ni >= 0 ? ni : null;
+  }
+
+  const out: Array<{ phone: string; name?: string | null }> = [];
+  for (const line of rows.slice(start)) {
+    const cols = split(line);
+    const phone = normalizePhone(cols[phoneIdx] || '');
+    if (!phone) continue;
+    const name = nameIdx != null ? (cols[nameIdx] || '').trim() : '';
+    out.push({ phone, name: name || null });
+  }
+  return out;
+};
+
+type TemplateHeaderRequirement =
+  | { kind: 'none' }
+  | { kind: 'text'; varCount: number }
+  | { kind: 'image' | 'video' | 'document' };
+
+const placeholderMaxIndex = (text: string): number => {
+  let max = 0;
+  for (const m of String(text || '').matchAll(/\{\{\s*(\d+)\s*\}\}/g)) {
+    const n = Number(m[1]);
+    if (Number.isFinite(n) && n > max) max = n;
+  }
+  return max;
+};
+
+const detectTemplateHeaderRequirement = (components: unknown): TemplateHeaderRequirement => {
+  if (!Array.isArray(components)) return { kind: 'none' };
+  const header = (components as any[]).find((c) => String(c?.type || '').toUpperCase() === 'HEADER');
+  const format = String(header?.format || '').toUpperCase();
+  if (format === 'TEXT') {
+    return { kind: 'text', varCount: placeholderMaxIndex(String(header?.text || '')) };
+  }
+  if (format === 'IMAGE') return { kind: 'image' };
+  if (format === 'VIDEO') return { kind: 'video' };
+  if (format === 'DOCUMENT') return { kind: 'document' };
+  return { kind: 'none' };
+};
+
+const templateVarCount = (components: unknown): number => {
+  if (!Array.isArray(components)) return 0;
+  for (const c of components as any[]) {
+    const type = String(c?.type || '').toUpperCase();
+    if (type !== 'BODY') continue;
+    const text = typeof c?.text === 'string' ? c.text : '';
+    if (!text) return 0;
+    let max = 0;
+    for (const m of text.matchAll(/\{\{\s*(\d+)\s*\}\}/g)) {
+      const n = Number(m[1]);
+      if (Number.isFinite(n) && n > max) max = n;
+    }
+    return max;
+  }
+  return 0;
+};
+
+const suggestTemplateComponents = (template: WhatsAppTemplateRow): string => {
+  const header = detectTemplateHeaderRequirement(template.components);
+  const out: any[] = [];
+
+  if (header.kind === 'text' && header.varCount > 0) {
+    const headerParams = Array.from({ length: header.varCount }).map((_, idx) => {
+      const i = idx + 1;
+      const text = i === 1 ? '{{name}}' : i === 2 ? '{{phone}}' : '{{name}}';
+      return { type: 'text', text };
+    });
+    out.push({ type: 'header', parameters: headerParams });
+  } else if (header.kind === 'image') {
+    out.push({ type: 'header', parameters: [{ type: 'image', image: { link: 'https://example.com/header.jpg' } }] });
+  } else if (header.kind === 'video') {
+    out.push({ type: 'header', parameters: [{ type: 'video', video: { link: 'https://example.com/header.mp4' } }] });
+  } else if (header.kind === 'document') {
+    out.push({
+      type: 'header',
+      parameters: [{ type: 'document', document: { link: 'https://example.com/arquivo.pdf', filename: 'arquivo.pdf' } }],
+    });
+  }
+
+  const count = templateVarCount(template.components);
+  if (!count) return out.length ? JSON.stringify(out, null, 2) : '';
+
+  const params = Array.from({ length: count }).map((_, idx) => {
+    const i = idx + 1;
+    const text = i === 1 ? '{{name}}' : i === 2 ? '{{phone}}' : '{{name}}';
+    return { type: 'text', text };
+  });
+
+  out.push({ type: 'body', parameters: params });
+  return JSON.stringify(out, null, 2);
+};
+
 export function WhatsAppCampaignCreateModal({
   isOpen,
   onClose,
@@ -51,7 +181,7 @@ export function WhatsAppCampaignCreateModal({
 }) {
   const canManage = useMemo(() => role === 'admin' || role === 'gestor', [role]);
 
-  const [tab, setTab] = useState<'leads' | 'paste'>('leads');
+  const [tab, setTab] = useState<'leads' | 'paste' | 'csv'>('leads');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -62,12 +192,21 @@ export function WhatsAppCampaignCreateModal({
   const [templateName, setTemplateName] = useState('');
   const [templateLanguage, setTemplateLanguage] = useState('pt_BR');
   const [templateComponents, setTemplateComponents] = useState('');
+  const [templates, setTemplates] = useState<WhatsAppTemplateRow[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templatesError, setTemplatesError] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
 
   const [leadQuery, setLeadQuery] = useState('');
   const [leadRows, setLeadRows] = useState<LeadRow[]>([]);
   const [selectedLeadIds, setSelectedLeadIds] = useState<Record<string, boolean>>({});
 
   const [paste, setPaste] = useState('');
+  const [csvName, setCsvName] = useState<string | null>(null);
+  const [csvText, setCsvText] = useState('');
+
+  const [headerMediaUrl, setHeaderMediaUrl] = useState('');
+  const [headerMediaFilename, setHeaderMediaFilename] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
@@ -80,11 +219,48 @@ export function WhatsAppCampaignCreateModal({
     setTemplateName('');
     setTemplateLanguage('pt_BR');
     setTemplateComponents('');
+    setTemplates([]);
+    setTemplatesLoading(false);
+    setTemplatesError(null);
+    setSelectedTemplateId('');
     setLeadQuery('');
     setLeadRows([]);
     setSelectedLeadIds({});
     setPaste('');
+    setCsvName(null);
+    setCsvText('');
+    setHeaderMediaUrl('');
+    setHeaderMediaFilename('');
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    let cancelled = false;
+    (async () => {
+      setTemplatesLoading(true);
+      setTemplatesError(null);
+      try {
+        const { data, error } = await supabase
+          .from('whatsapp_templates')
+          .select('id,name,language,status,category,components,updated_at')
+          .eq('company_id', companyId)
+          .order('updated_at', { ascending: false })
+          .limit(300);
+        if (error) throw error;
+        if (!cancelled) setTemplates((data ?? []) as any as WhatsAppTemplateRow[]);
+      } catch (e: any) {
+        if (!cancelled) {
+          setTemplates([]);
+          setTemplatesError(e?.message ?? 'Erro ao carregar templates.');
+        }
+      } finally {
+        if (!cancelled) setTemplatesLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [companyId, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -135,16 +311,27 @@ export function WhatsAppCampaignCreateModal({
   }, [leadRows, selectedLeadIds]);
 
   const recipientsFromPaste = useMemo(() => parseRecipientsText(paste).map((r) => ({ ...r, lead_id: null })), [paste]);
+  const recipientsFromCsv = useMemo(() => parseRecipientsCsvText(csvText).map((r) => ({ ...r, lead_id: null })), [csvText]);
 
   const totalRecipients = useMemo(() => {
     const byPhone = new Map<string, { phone: string; name?: string | null; lead_id?: string | null }>();
-    for (const r of [...recipientsFromLeads, ...recipientsFromPaste]) {
+    for (const r of [...recipientsFromLeads, ...recipientsFromPaste, ...recipientsFromCsv]) {
       const p = normalizePhone(r.phone);
       if (!p) continue;
       if (!byPhone.has(p)) byPhone.set(p, { phone: p, name: r.name || null, lead_id: r.lead_id ?? null });
     }
     return Array.from(byPhone.values());
-  }, [recipientsFromLeads, recipientsFromPaste]);
+  }, [recipientsFromLeads, recipientsFromPaste, recipientsFromCsv]);
+
+  const selectedTemplate = useMemo(
+    () => (selectedTemplateId ? templates.find((t) => t.id === selectedTemplateId) ?? null : null),
+    [selectedTemplateId, templates]
+  );
+
+  const headerRequirement = useMemo(
+    () => detectTemplateHeaderRequirement(selectedTemplate?.components),
+    [selectedTemplate]
+  );
 
   const create = async () => {
     if (!canManage) {
@@ -176,6 +363,36 @@ export function WhatsAppCampaignCreateModal({
         setError('Template components deve ser um JSON válido.');
         return;
       }
+    }
+
+    if (kind === 'template' && headerRequirement.kind !== 'none' && headerRequirement.kind !== 'text') {
+      const list = Array.isArray(parsedComponents) ? ([...parsedComponents] as any[]) : [];
+      const idx = list.findIndex((c) => String(c?.type || '').toLowerCase() === 'header');
+
+      const upsertHeader = (headerComponent: any) => {
+        if (idx >= 0) list[idx] = headerComponent;
+        else list.unshift(headerComponent);
+      };
+
+      if (!headerMediaUrl.trim()) {
+        setError('Este template exige HEADER de mídia: informe a URL pública.');
+        return;
+      }
+
+      if (headerRequirement.kind === 'image') {
+        upsertHeader({ type: 'header', parameters: [{ type: 'image', image: { link: headerMediaUrl.trim() } }] });
+      } else if (headerRequirement.kind === 'video') {
+        upsertHeader({ type: 'header', parameters: [{ type: 'video', video: { link: headerMediaUrl.trim() } }] });
+      } else if (headerRequirement.kind === 'document') {
+        const filename = headerMediaFilename.trim();
+        if (!filename) {
+          setError('Este template exige HEADER de documento: informe o filename.');
+          return;
+        }
+        upsertHeader({ type: 'header', parameters: [{ type: 'document', document: { link: headerMediaUrl.trim(), filename } }] });
+      }
+
+      parsedComponents = list;
     }
 
     setLoading(true);
@@ -263,6 +480,42 @@ export function WhatsAppCampaignCreateModal({
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
+                <label className="block text-xs text-[hsl(var(--muted-foreground))]">
+                  Template do catálogo <span className="text-[10px]">(opcional)</span>
+                </label>
+                <select
+                  value={selectedTemplateId}
+                  onChange={(e) => {
+                    const nextId = e.target.value;
+                    setSelectedTemplateId(nextId);
+                    const t = templates.find((x) => x.id === nextId);
+                    if (t) {
+                      setTemplateName(t.name);
+                      setTemplateLanguage(t.language);
+                      setHeaderMediaUrl('');
+                      setHeaderMediaFilename('');
+                      const suggested = suggestTemplateComponents(t);
+                      if (suggested) setTemplateComponents(suggested);
+                    }
+                  }}
+                  disabled={templatesLoading}
+                  className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-[hsl(var(--foreground))] disabled:opacity-50"
+                >
+                  <option value="">(selecionar)</option>
+                  {templates.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name} ({t.language}) - {t.status}
+                    </option>
+                  ))}
+                </select>
+                {templatesError && <div className="mt-1 text-[11px] text-[hsl(var(--destructive))]">{templatesError}</div>}
+                {!templatesError && (
+                  <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">
+                    {templatesLoading ? 'Carregando...' : `${templates.length} template(s) no cache.`}
+                  </div>
+                )}
+              </div>
+              <div>
                 <label className="block text-xs text-[hsl(var(--muted-foreground))]">Template name</label>
                 <input
                   value={templateName}
@@ -271,7 +524,7 @@ export function WhatsAppCampaignCreateModal({
                   className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-[hsl(var(--foreground))]"
                 />
               </div>
-              <div>
+              <div className="md:col-span-1">
                 <label className="block text-xs text-[hsl(var(--muted-foreground))]">Language</label>
                 <input
                   value={templateLanguage}
@@ -280,6 +533,36 @@ export function WhatsAppCampaignCreateModal({
                   className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-[hsl(var(--foreground))]"
                 />
               </div>
+              {headerRequirement.kind !== 'none' && headerRequirement.kind !== 'text' && (
+                <div className="md:col-span-3 cr8-card p-3">
+                  <div className="text-xs font-semibold text-[hsl(var(--foreground))]">HEADER de mídia</div>
+                  <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">
+                    Este template exige HEADER de {headerRequirement.kind}. Informe a URL pública do arquivo para enviar.
+                  </div>
+                  <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <div className={headerRequirement.kind === 'document' ? 'md:col-span-2' : 'md:col-span-3'}>
+                      <label className="block text-xs text-[hsl(var(--muted-foreground))]">URL da mídia</label>
+                      <input
+                        value={headerMediaUrl}
+                        onChange={(e) => setHeaderMediaUrl(e.target.value)}
+                        placeholder="https://..."
+                        className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-[hsl(var(--foreground))]"
+                      />
+                    </div>
+                    {headerRequirement.kind === 'document' && (
+                      <div>
+                        <label className="block text-xs text-[hsl(var(--muted-foreground))]">Filename</label>
+                        <input
+                          value={headerMediaFilename}
+                          onChange={(e) => setHeaderMediaFilename(e.target.value)}
+                          placeholder="arquivo.pdf"
+                          className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-[hsl(var(--foreground))]"
+                        />
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
               <div className="md:col-span-3">
                 <label className="block text-xs text-[hsl(var(--muted-foreground))]">Components (JSON, opcional)</label>
                 <textarea
@@ -289,6 +572,9 @@ export function WhatsAppCampaignCreateModal({
                   rows={4}
                   className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-[hsl(var(--foreground))] font-mono text-xs"
                 />
+                <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">
+                  Dica: use <span className="font-mono">{'{{name}}'}</span> e <span className="font-mono">{'{{phone}}'}</span> dentro dos parâmetros.
+                </div>
               </div>
             </div>
           )}
@@ -312,6 +598,12 @@ export function WhatsAppCampaignCreateModal({
                   className={`px-3 py-2 text-xs rounded-lg ${tab === 'paste' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'text-[hsl(var(--muted-foreground))]'}`}
                 >
                   Colar lista
+                </button>
+                <button
+                  onClick={() => setTab('csv')}
+                  className={`px-3 py-2 text-xs rounded-lg ${tab === 'csv' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'text-[hsl(var(--muted-foreground))]'}`}
+                >
+                  Importar CSV
                 </button>
               </div>
 
@@ -361,7 +653,7 @@ export function WhatsAppCampaignCreateModal({
                     </table>
                   </div>
                 </div>
-              ) : (
+              ) : tab === 'paste' ? (
                 <div className="mt-3">
                   <textarea
                     value={paste}
@@ -372,6 +664,47 @@ export function WhatsAppCampaignCreateModal({
                   />
                   <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">
                     Um por linha. Formato: <span className="font-mono">telefone;nome</span> (nome opcional).
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-3 space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                      {csvName ? `Arquivo: ${csvName}` : 'Escolha um arquivo CSV com colunas phone/telefone e opcionalmente name/nome.'}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setCsvName(null);
+                        setCsvText('');
+                      }}
+                      className="text-xs px-3 py-2 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))]"
+                    >
+                      Limpar CSV
+                    </button>
+                  </div>
+                  <input
+                    type="file"
+                    accept=".csv,text/csv"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (!file) return;
+                      setCsvName(file.name);
+                      const reader = new FileReader();
+                      reader.onload = () => setCsvText(String(reader.result || ''));
+                      reader.readAsText(file);
+                    }}
+                    className="block w-full text-xs text-[hsl(var(--muted-foreground))]"
+                  />
+                  <textarea
+                    value={csvText}
+                    onChange={(e) => setCsvText(e.target.value)}
+                    rows={6}
+                    placeholder={'phone,name\n5511999999999,Maria'}
+                    className="w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-[hsl(var(--foreground))] font-mono text-xs"
+                  />
+                  <div className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                    Dica: se não tiver cabeçalho, use <span className="font-mono">telefone,nome</span> nas colunas 1 e 2.
                   </div>
                 </div>
               )}
@@ -413,4 +746,3 @@ export function WhatsAppCampaignCreateModal({
     </div>
   );
 }
-

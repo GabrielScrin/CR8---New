@@ -3,6 +3,7 @@ import { isSupabaseConfigured } from '../lib/supabase';
 import { Role } from '../types';
 import { WhatsAppCampaigns } from './WhatsAppCampaigns';
 import { WhatsAppOptOut } from './WhatsAppOptOut';
+import { WhatsAppTemplates } from './WhatsAppTemplates';
 
 const Tabs = ({
   value,
@@ -56,7 +57,7 @@ export function WhatsApp({ companyId, role }: { companyId?: string; role: Role }
     );
   }
 
-  const [tab, setTab] = useState<'campaigns' | 'optout'>('campaigns');
+  const [tab, setTab] = useState<'campaigns' | 'templates' | 'optout'>('campaigns');
 
   return (
     <div className="p-8">
@@ -72,19 +73,17 @@ export function WhatsApp({ companyId, role }: { companyId?: string; role: Role }
           onChange={(v) => setTab(v as any)}
           items={[
             { id: 'campaigns', label: 'Campanhas' },
+            { id: 'templates', label: 'Templates' },
             { id: 'optout', label: 'Opt-out' },
           ]}
         />
       </div>
 
       <div className="mt-6">
-        {tab === 'campaigns' ? (
-          <WhatsAppCampaigns companyId={companyId} role={role} />
-        ) : (
-          <WhatsAppOptOut companyId={companyId} role={role} />
-        )}
+        {tab === 'campaigns' ? <WhatsAppCampaigns companyId={companyId} role={role} /> : null}
+        {tab === 'templates' ? <WhatsAppTemplates companyId={companyId} role={role} /> : null}
+        {tab === 'optout' ? <WhatsAppOptOut companyId={companyId} role={role} /> : null}
       </div>
     </div>
   );
 }
-

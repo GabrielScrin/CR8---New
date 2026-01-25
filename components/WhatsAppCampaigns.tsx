@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Plus, RefreshCw, Send, StopCircle } from 'lucide-react';
+import { FileDown, Plus, RefreshCw, RotateCcw, Send, StopCircle, ClipboardCheck, ListOrdered } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Role } from '../types';
 import { callWhatsAppBroadcast } from './whatsapp/broadcastApi';
@@ -41,6 +41,18 @@ type RecipientRow = {
   read_at: string | null;
   failed_at: string | null;
   skipped_at: string | null;
+};
+
+type TraceEventRow = {
+  id: string;
+  campaign_id: string;
+  recipient_id: string | null;
+  chat_id: string | null;
+  step: string;
+  ok: boolean;
+  http_status: number | null;
+  message: string | null;
+  created_at: string;
 };
 
 const formatDateTimeShort = (iso?: string | null) => {
@@ -90,11 +102,41 @@ export function WhatsAppCampaigns({ companyId, role }: { companyId: string; role
   const [recipients, setRecipients] = useState<RecipientRow[]>([]);
   const [recipientStatusFilter, setRecipientStatusFilter] = useState<string>('all');
 
+  const [showTrace, setShowTrace] = useState(false);
+  const [traceEvents, setTraceEvents] = useState<TraceEventRow[]>([]);
+
   const [batchSize, setBatchSize] = useState(10);
   const [delayMs, setDelayMs] = useState(500);
   const [runLoop, setRunLoop] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
+
+  const downloadCsv = (rows: RecipientRow[], filename: string) => {
+    const headers = ['phone', 'name', 'status', 'error', 'external_message_id', 'created_at'];
+    const escape = (v: any) => `"${String(v ?? '').replaceAll('"', '""')}"`;
+    const lines = [
+      headers.join(','),
+      ...rows.map((r) =>
+        [
+          escape(r.phone),
+          escape(r.name),
+          escape(r.status),
+          escape(r.error),
+          escape(r.external_message_id),
+          escape(r.created_at),
+        ].join(',')
+      ),
+    ];
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  };
 
   const fetchCampaigns = async (selectId?: string | null) => {
     setLoading(true);
@@ -145,6 +187,22 @@ export function WhatsAppCampaigns({ companyId, role }: { companyId: string; role
     }
   };
 
+  const fetchTrace = async (campaignId: string) => {
+    try {
+      const { data, error: dbError } = await supabase
+        .from('whatsapp_campaign_trace_events')
+        .select('id,campaign_id,recipient_id,chat_id,step,ok,http_status,message,created_at')
+        .eq('company_id', companyId)
+        .eq('campaign_id', campaignId)
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (dbError) throw dbError;
+      setTraceEvents((data ?? []) as any as TraceEventRow[]);
+    } catch {
+      setTraceEvents([]);
+    }
+  };
+
   useEffect(() => {
     void fetchCampaigns(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -153,11 +211,13 @@ export function WhatsAppCampaigns({ companyId, role }: { companyId: string; role
   useEffect(() => {
     if (!selectedCampaignId) {
       setRecipients([]);
+      setTraceEvents([]);
       return;
     }
     void fetchRecipients(selectedCampaignId);
+    if (showTrace) void fetchTrace(selectedCampaignId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCampaignId, recipientStatusFilter]);
+  }, [selectedCampaignId, recipientStatusFilter, showTrace]);
 
   const runBatch = async () => {
     if (!canManage || !selectedCampaignId) return;
@@ -178,6 +238,52 @@ export function WhatsAppCampaigns({ companyId, role }: { companyId: string; role
     } catch (e: any) {
       setError(e?.message ?? 'Erro ao enviar.');
       return { ok: false, processed: 0, sent: 0, failed: 0, skipped: 0 };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const precheckCampaign = async () => {
+    if (!canManage || !selectedCampaignId) return;
+    setLoading(true);
+    setError(null);
+    setOk(null);
+    try {
+      const res = await callWhatsAppBroadcast<{
+        ok: boolean;
+        totals?: { pending: number; failed: number; skipped: number };
+        opt_out?: { checked: number; hits: number; limit: number };
+      }>({ action: 'precheck', campaign_id: selectedCampaignId });
+      const pending = Number(res?.totals?.pending ?? 0);
+      const failed = Number(res?.totals?.failed ?? 0);
+      const skipped = Number(res?.totals?.skipped ?? 0);
+      const optChecked = Number(res?.opt_out?.checked ?? 0);
+      const optHits = Number(res?.opt_out?.hits ?? 0);
+      setOk(`Pré-check: pending ${pending}, failed ${failed}, skipped ${skipped}. Opt-out (amostra ${optChecked}): ${optHits}.`);
+    } catch (e: any) {
+      setError(e?.message ?? 'Erro no pré-check.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const requeue = async (statuses: Array<'failed' | 'skipped'>) => {
+    if (!canManage || !selectedCampaignId) return;
+    setLoading(true);
+    setError(null);
+    setOk(null);
+    try {
+      const res = await callWhatsAppBroadcast<{ ok: boolean; requeued: number; error?: string }>({
+        action: 'requeue',
+        campaign_id: selectedCampaignId,
+        statuses,
+      });
+      if (!res?.ok) throw new Error(res?.error || 'Falha ao reenfileirar.');
+      setOk(`Reenfileirados: ${res.requeued}.`);
+      await fetchCampaigns(selectedCampaignId);
+      await fetchRecipients(selectedCampaignId);
+    } catch (e: any) {
+      setError(e?.message ?? 'Erro ao reenfileirar.');
     } finally {
       setLoading(false);
     }
@@ -369,6 +475,52 @@ export function WhatsAppCampaigns({ companyId, role }: { companyId: string; role
               </div>
             </div>
 
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <button
+                disabled={!canManage || loading}
+                onClick={() => void precheckCampaign()}
+                className="px-3 py-2 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] disabled:opacity-50 inline-flex items-center gap-2"
+                title="Dry-run: contagens e opt-out (amostra)"
+              >
+                <ClipboardCheck className="h-4 w-4" />
+                Pré-checar
+              </button>
+              <button
+                disabled={!canManage || loading}
+                onClick={() => void requeue(['failed'])}
+                className="px-3 py-2 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reenviar falhas
+              </button>
+              <button
+                disabled={!canManage || loading}
+                onClick={() => void requeue(['skipped'])}
+                className="px-3 py-2 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] disabled:opacity-50 inline-flex items-center gap-2"
+              >
+                <RotateCcw className="h-4 w-4" />
+                Reenviar ignorados
+              </button>
+              <button
+                disabled={loading || recipients.length === 0}
+                onClick={() => downloadCsv(recipients, `whatsapp-campaign-${selectedCampaignId}-recipients.csv`)}
+                className="px-3 py-2 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] disabled:opacity-50 inline-flex items-center gap-2"
+                title="Exporta os destinatários carregados (filtro atual)"
+              >
+                <FileDown className="h-4 w-4" />
+                Exportar CSV
+              </button>
+              <button
+                disabled={loading || !selectedCampaignId}
+                onClick={() => setShowTrace((v) => !v)}
+                className="px-3 py-2 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] disabled:opacity-50 inline-flex items-center gap-2"
+                title="Logs tÃ©cnicos do disparo (para debug)"
+              >
+                <ListOrdered className="h-4 w-4" />
+                {showTrace ? 'Ocultar logs' : 'Ver logs'}
+              </button>
+            </div>
+
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <label className="text-xs text-[hsl(var(--muted-foreground))]">Batch</label>
@@ -444,6 +596,60 @@ export function WhatsAppCampaigns({ companyId, role }: { companyId: string; role
                 </tbody>
               </table>
             </div>
+
+            {showTrace && (
+              <div className="mt-4 border border-[hsl(var(--border))] rounded-xl overflow-hidden">
+                <div className="flex items-center justify-between gap-3 px-3 py-2 bg-[hsl(var(--card))] border-b border-[hsl(var(--border))]">
+                  <div className="text-xs font-semibold text-[hsl(var(--foreground))]">Logs (Ãºltimos 200)</div>
+                  <button
+                    disabled={loading || !selectedCampaignId}
+                    onClick={() => selectedCampaignId && void fetchTrace(selectedCampaignId)}
+                    className="px-2 py-1 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] disabled:opacity-50 text-xs"
+                  >
+                    Atualizar
+                  </button>
+                </div>
+                <div className="max-h-[26vh] overflow-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-[hsl(var(--card))] text-[hsl(var(--muted-foreground))]">
+                      <tr className="border-b border-[hsl(var(--border))] text-left">
+                        <th className="p-2">Quando</th>
+                        <th className="p-2">Step</th>
+                        <th className="p-2">OK</th>
+                        <th className="p-2">HTTP</th>
+                        <th className="p-2">Mensagem</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {traceEvents.map((ev) => (
+                        <tr key={ev.id} className="border-b border-[hsl(var(--border))]">
+                          <td className="p-2 text-[hsl(var(--muted-foreground))]">{formatDateTimeShort(ev.created_at)}</td>
+                          <td className="p-2 font-mono text-[hsl(var(--foreground))]">{ev.step}</td>
+                          <td className="p-2">
+                            <span
+                              className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                                ev.ok ? 'border-emerald-500/20 text-emerald-300 bg-emerald-500/10' : 'border-red-500/20 text-red-300 bg-red-500/10'
+                              }`}
+                            >
+                              {ev.ok ? 'ok' : 'fail'}
+                            </span>
+                          </td>
+                          <td className="p-2 text-[hsl(var(--muted-foreground))]">{ev.http_status ?? ''}</td>
+                          <td className="p-2 text-[hsl(var(--muted-foreground))]">{ev.message ?? ''}</td>
+                        </tr>
+                      ))}
+                      {!loading && traceEvents.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="p-4 text-center text-[hsl(var(--muted-foreground))]">
+                            Sem logs ainda.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -461,4 +667,3 @@ export function WhatsAppCampaigns({ companyId, role }: { companyId: string; role
     </div>
   );
 }
-

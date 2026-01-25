@@ -48,6 +48,12 @@ const jsonResponse = (status: number, data: unknown) =>
 
 const normalizePhone = (value: string): string => String(value || '').replace(/\D/g, '');
 
+const isProbablyValidE164Digits = (digitsOnly: string): boolean => {
+  const v = normalizePhone(digitsOnly);
+  // Best-effort: accept 10-15 digits (E.164 max is 15). Reject empty/short values.
+  return v.length >= 10 && v.length <= 15;
+};
+
 const extractBearerToken = (authorizationHeader: string | null): string | null => {
   if (!authorizationHeader) return null;
   const match = authorizationHeader.match(/^Bearer\s+(.+)$/i);
@@ -87,12 +93,23 @@ type RunCampaignBody = {
   delay_ms?: number;
 };
 
+type PrecheckCampaignBody = {
+  action: 'precheck';
+  campaign_id: string;
+};
+
+type RequeueCampaignBody = {
+  action: 'requeue';
+  campaign_id: string;
+  statuses?: RecipientStatus[];
+};
+
 type CancelCampaignBody = {
   action: 'cancel';
   campaign_id: string;
 };
 
-type RequestBody = CreateCampaignBody | RunCampaignBody | CancelCampaignBody;
+type RequestBody = CreateCampaignBody | RunCampaignBody | PrecheckCampaignBody | RequeueCampaignBody | CancelCampaignBody;
 
 const renderText = (template: string, vars: Record<string, string>) => {
   let out = String(template ?? '');
@@ -101,6 +118,30 @@ const renderText = (template: string, vars: Record<string, string>) => {
   }
   return out;
 };
+
+const deepRender = (value: unknown, vars: Record<string, string>): unknown => {
+  if (typeof value === 'string') return renderText(value, vars);
+  if (Array.isArray(value)) return value.map((v) => deepRender(v, vars));
+  if (value && typeof value === 'object') {
+    const out: any = Array.isArray(value) ? [] : {};
+    for (const [k, v] of Object.entries(value as any)) {
+      out[k] = deepRender(v, vars);
+    }
+    return out;
+  }
+  return value;
+};
+
+const renderTemplateComponents = (components: unknown, vars: Record<string, string>): unknown => {
+  if (!Array.isArray(components)) return components;
+  // SmartZap parity: allow {{name}}/{{phone}} replacements not only for text parameters,
+  // but also nested template fields (document.filename, media links, button params, etc).
+  return (components as any[]).map((c) => deepRender(c, vars));
+};
+
+const canManageRole = (memberRole: string) => memberRole === 'admin' || memberRole === 'gestor';
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function sendWhatsAppMessage(params: {
   phoneNumberId: string;
@@ -186,6 +227,38 @@ async function requireMembership(companyId: string, userId: string) {
   return { ok: true as const, memberRole: String((membership as any).member_role || '') };
 }
 
+async function insertTraceEvent(params: {
+  campaignId: string;
+  companyId: string;
+  userId: string;
+  step: string;
+  ok: boolean;
+  recipientId?: string;
+  chatId?: string;
+  httpStatus?: number | null;
+  message?: string | null;
+  raw?: unknown;
+}) {
+  try {
+    await supabaseAdmin.from('whatsapp_campaign_trace_events').insert([
+      {
+        campaign_id: params.campaignId,
+        company_id: params.companyId,
+        recipient_id: params.recipientId ?? null,
+        chat_id: params.chatId ?? null,
+        step: params.step,
+        ok: params.ok,
+        http_status: params.httpStatus ?? null,
+        message: params.message ?? null,
+        raw: params.raw ?? null,
+        created_by: params.userId,
+      },
+    ] as any);
+  } catch {
+    // best-effort
+  }
+}
+
 serve(async (req) => {
   try {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -206,6 +279,7 @@ serve(async (req) => {
 
       const member = await requireMembership(companyId, auth.userId);
       if (!member.ok) return jsonResponse(member.status, member.payload);
+      if (!canManageRole(member.memberRole)) return jsonResponse(403, { ok: false, error: 'forbidden' });
 
       const messageKind: CampaignMessageKind = (body.message_kind as any) === 'template' ? 'template' : 'text';
       const insertCampaign: any = {
@@ -255,6 +329,123 @@ serve(async (req) => {
       return jsonResponse(200, { ok: true, campaign_id: campaign.id });
     }
 
+    if (body.action === 'precheck') {
+      const campaignId = String((body as PrecheckCampaignBody).campaign_id || '').trim();
+      if (!campaignId) return jsonResponse(400, { ok: false, error: 'missing campaign_id' });
+
+      const { data: campaign, error: campaignErr } = await supabaseAdmin
+        .from('whatsapp_campaigns')
+        .select('id,company_id,message_kind')
+        .eq('id', campaignId)
+        .maybeSingle();
+      if (campaignErr) return jsonResponse(500, { ok: false, error: campaignErr.message });
+      if (!campaign) return jsonResponse(404, { ok: false, error: 'campaign not found' });
+
+      const companyId = String((campaign as any).company_id);
+      const member = await requireMembership(companyId, auth.userId);
+      if (!member.ok) return jsonResponse(member.status, member.payload);
+
+      const { count: pendingCount } = await supabaseAdmin
+        .from('whatsapp_campaign_recipients')
+        .select('id', { count: 'exact', head: true })
+        .eq('campaign_id', campaignId)
+        .eq('company_id', companyId)
+        .eq('status', 'pending');
+
+      const { count: failedCount } = await supabaseAdmin
+        .from('whatsapp_campaign_recipients')
+        .select('id', { count: 'exact', head: true })
+        .eq('campaign_id', campaignId)
+        .eq('company_id', companyId)
+        .eq('status', 'failed');
+
+      const { count: skippedCount } = await supabaseAdmin
+        .from('whatsapp_campaign_recipients')
+        .select('id', { count: 'exact', head: true })
+        .eq('campaign_id', campaignId)
+        .eq('company_id', companyId)
+        .eq('status', 'skipped');
+
+      // Best-effort opt-out check over a limited sample of pending recipients (keeps payload small).
+      const sampleLimit = 1000;
+      const { data: sample, error: sampleErr } = await supabaseAdmin
+        .from('whatsapp_campaign_recipients')
+        .select('phone')
+        .eq('campaign_id', campaignId)
+        .eq('company_id', companyId)
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(sampleLimit);
+      if (sampleErr) return jsonResponse(500, { ok: false, error: sampleErr.message });
+
+      const phones = (sample ?? []).map((r: any) => normalizePhone(String(r?.phone ?? ''))).filter(Boolean);
+      let optOutHits = 0;
+      if (phones.length > 0) {
+        const { data: suppressions, error: supErr } = await supabaseAdmin
+          .from('whatsapp_phone_suppressions')
+          .select('phone')
+          .eq('company_id', companyId)
+          .in('phone', phones);
+        if (supErr) return jsonResponse(500, { ok: false, error: supErr.message });
+        optOutHits = (suppressions ?? []).length;
+      }
+
+      return jsonResponse(200, {
+        ok: true,
+        campaign_id: campaignId,
+        message_kind: (campaign as any).message_kind,
+        totals: {
+          pending: Number(pendingCount ?? 0),
+          failed: Number(failedCount ?? 0),
+          skipped: Number(skippedCount ?? 0),
+        },
+        opt_out: {
+          checked: phones.length,
+          hits: optOutHits,
+          limit: sampleLimit,
+        },
+      });
+    }
+
+    if (body.action === 'requeue') {
+      const campaignId = String((body as RequeueCampaignBody).campaign_id || '').trim();
+      if (!campaignId) return jsonResponse(400, { ok: false, error: 'missing campaign_id' });
+
+      const { data: campaign, error: campErr } = await supabaseAdmin
+        .from('whatsapp_campaigns')
+        .select('id,company_id')
+        .eq('id', campaignId)
+        .maybeSingle();
+      if (campErr) return jsonResponse(500, { ok: false, error: campErr.message });
+      if (!campaign) return jsonResponse(404, { ok: false, error: 'campaign not found' });
+
+      const companyId = String((campaign as any).company_id);
+      const member = await requireMembership(companyId, auth.userId);
+      if (!member.ok) return jsonResponse(member.status, member.payload);
+      if (!canManageRole(member.memberRole)) return jsonResponse(403, { ok: false, error: 'forbidden' });
+
+      const statuses = Array.isArray((body as RequeueCampaignBody).statuses) && (body as RequeueCampaignBody).statuses!.length > 0
+        ? (body as RequeueCampaignBody).statuses!
+        : (['failed', 'skipped'] as RecipientStatus[]);
+
+      const { data: updated, error: updErr } = await supabaseAdmin
+        .from('whatsapp_campaign_recipients')
+        .update({
+          status: 'pending' as RecipientStatus,
+          error: null,
+          external_message_id: null,
+          sending_at: null,
+          updated_at: nowIso,
+        })
+        .eq('campaign_id', campaignId)
+        .eq('company_id', companyId)
+        .in('status', statuses as any)
+        .select('id');
+      if (updErr) return jsonResponse(500, { ok: false, error: updErr.message });
+
+      return jsonResponse(200, { ok: true, requeued: (updated ?? []).length });
+    }
+
     if (body.action === 'cancel') {
       const campaignId = String((body as CancelCampaignBody).campaign_id || '').trim();
       if (!campaignId) return jsonResponse(400, { ok: false, error: 'missing campaign_id' });
@@ -269,6 +460,7 @@ serve(async (req) => {
 
       const member = await requireMembership(String((campaign as any).company_id), auth.userId);
       if (!member.ok) return jsonResponse(member.status, member.payload);
+      if (!canManageRole(member.memberRole)) return jsonResponse(403, { ok: false, error: 'forbidden' });
 
       const { error: updErr } = await supabaseAdmin
         .from('whatsapp_campaigns')
@@ -297,6 +489,7 @@ serve(async (req) => {
     const companyId = String((campaign as any).company_id);
     const member = await requireMembership(companyId, auth.userId);
     if (!member.ok) return jsonResponse(member.status, member.payload);
+    if (!canManageRole(member.memberRole)) return jsonResponse(403, { ok: false, error: 'forbidden' });
 
     if ((campaign as any).status === 'cancelled') return jsonResponse(400, { ok: false, error: 'campaign cancelled' });
 
@@ -350,6 +543,21 @@ serve(async (req) => {
       return jsonResponse(200, { ok: true, processed: 0, done: true });
     }
 
+    // Suppressions / opt-out: fetch all phones for this batch in a single query (SmartZap-style)
+    const phonesInBatch = Array.from(
+      new Set(list.map((r) => normalizePhone(String(r?.phone ?? ''))).filter(Boolean))
+    );
+    let suppressedPhones = new Set<string>();
+    if (phonesInBatch.length > 0) {
+      const { data: suppressions, error: supErr } = await supabaseAdmin
+        .from('whatsapp_phone_suppressions')
+        .select('phone')
+        .eq('company_id', companyId)
+        .in('phone', phonesInBatch);
+      if (supErr) return jsonResponse(500, { ok: false, error: supErr.message });
+      suppressedPhones = new Set((suppressions ?? []).map((s: any) => normalizePhone(String(s?.phone ?? ''))).filter(Boolean));
+    }
+
     let sent = 0;
     let skipped = 0;
     let failed = 0;
@@ -358,20 +566,40 @@ serve(async (req) => {
       const recipientId = String(r.id);
       const phone = normalizePhone(r.phone);
       const name = r.name ? String(r.name) : '';
-      if (!phone) continue;
-
-      // Suppressions / opt-out
-      const { data: suppression } = await supabaseAdmin
-        .from('whatsapp_phone_suppressions')
-        .select('id')
-        .eq('company_id', companyId)
-        .eq('phone', phone)
-        .maybeSingle();
-      if (suppression?.id) {
+      if (!phone || !isProbablyValidE164Digits(phone)) {
         await supabaseAdmin
           .from('whatsapp_campaign_recipients')
-          .update({ status: 'skipped' as RecipientStatus, skipped_at: nowIso, error: 'opt-out' })
+          .update({ status: 'skipped' as RecipientStatus, skipped_at: nowIso, error: 'invalid_phone' })
           .eq('id', recipientId);
+        await insertTraceEvent({
+          campaignId,
+          companyId,
+          userId: auth.userId,
+          recipientId,
+          step: 'skip_invalid_phone',
+          ok: false,
+          message: 'invalid_phone',
+          raw: { phone },
+        });
+        skipped += 1;
+        continue;
+      }
+
+      if (suppressedPhones.has(phone)) {
+        await supabaseAdmin
+          .from('whatsapp_campaign_recipients')
+          .update({ status: 'skipped' as RecipientStatus, skipped_at: nowIso, error: 'opt_out' })
+          .eq('id', recipientId);
+        await insertTraceEvent({
+          campaignId,
+          companyId,
+          userId: auth.userId,
+          recipientId,
+          step: 'skip_opt_out',
+          ok: false,
+          message: 'opt_out',
+          raw: { phone },
+        });
         skipped += 1;
         continue;
       }
@@ -380,6 +608,15 @@ serve(async (req) => {
         .from('whatsapp_campaign_recipients')
         .update({ status: 'sending' as RecipientStatus, sending_at: nowIso })
         .eq('id', recipientId);
+
+      await insertTraceEvent({
+        campaignId,
+        companyId,
+        userId: auth.userId,
+        recipientId,
+        step: 'recipient_sending',
+        ok: true,
+      });
 
       // Upsert chat for this phone
       const { data: chat, error: chatErr } = await supabaseAdmin
@@ -404,6 +641,15 @@ serve(async (req) => {
           .from('whatsapp_campaign_recipients')
           .update({ status: 'failed' as RecipientStatus, failed_at: nowIso, error: chatErr?.message ?? 'failed to upsert chat' })
           .eq('id', recipientId);
+        await insertTraceEvent({
+          campaignId,
+          companyId,
+          userId: auth.userId,
+          recipientId,
+          step: 'chat_upsert_failed',
+          ok: false,
+          message: chatErr?.message ?? 'failed_to_upsert_chat',
+        });
         failed += 1;
         continue;
       }
@@ -411,6 +657,13 @@ serve(async (req) => {
       const vars = { name: name || 'Cliente', phone };
       const campaignKind = ((campaign as any).message_kind as CampaignMessageKind) || 'text';
       const textBody = campaignKind === 'text' ? renderText(String((campaign as any).text_body ?? ''), vars) : undefined;
+      const renderedTemplateComponents =
+        campaignKind === 'template' ? renderTemplateComponents((campaign as any).template_components ?? undefined, vars) : undefined;
+
+      const messageContent =
+        campaignKind === 'template'
+          ? `[Template] ${(campaign as any).template_name ?? ''}`
+          : String(textBody ?? '');
 
       // Insert message row first (keeps inbox consistent even if provider fails)
       const { data: msg, error: msgErr } = await supabaseAdmin
@@ -420,7 +673,7 @@ serve(async (req) => {
             {
               chat_id: chat.id,
               sender: 'agent',
-              content: campaignKind === 'template' ? `[Template] ${(campaign as any).template_name ?? ''}` : textBody ?? '',
+              content: messageContent,
               delivery_status: 'pending',
               raw: { outbound: true, user_id: auth.userId, campaign_id: campaignId, campaign_recipient_id: recipientId },
               created_at: nowIso,
@@ -434,9 +687,36 @@ serve(async (req) => {
           .from('whatsapp_campaign_recipients')
           .update({ status: 'failed' as RecipientStatus, failed_at: nowIso, chat_id: chat.id, error: msgErr?.message ?? 'failed to insert message' })
           .eq('id', recipientId);
+        await insertTraceEvent({
+          campaignId,
+          companyId,
+          userId: auth.userId,
+          recipientId,
+          chatId: chat.id,
+          step: 'insert_message_failed',
+          ok: false,
+          message: msgErr?.message ?? 'failed_to_insert_message',
+        });
         failed += 1;
         continue;
       }
+
+      // Update chat preview immediately (even if provider fails)
+      await supabaseAdmin
+        .from('chats')
+        .update({ last_message: messageContent, last_message_at: nowIso })
+        .eq('id', chat.id);
+
+      await insertTraceEvent({
+        campaignId,
+        companyId,
+        userId: auth.userId,
+        recipientId,
+        chatId: chat.id,
+        step: 'provider_send_start',
+        ok: true,
+        raw: { kind: campaignKind },
+      });
 
       const provider = await sendWhatsAppMessage({
         phoneNumberId,
@@ -445,7 +725,7 @@ serve(async (req) => {
         textBody,
         templateName: (campaign as any).template_name ?? undefined,
         templateLanguage: (campaign as any).template_language ?? undefined,
-        templateComponents: (campaign as any).template_components ?? undefined,
+        templateComponents: renderedTemplateComponents,
       });
 
       const patchMsg: any = { raw: { outbound: true, user_id: auth.userId, campaign_id: campaignId, campaign_recipient_id: recipientId, provider } };
@@ -460,6 +740,16 @@ serve(async (req) => {
           patchMsg.external_message_id = messageId;
           patchRecipient.external_message_id = messageId;
         }
+        await insertTraceEvent({
+          campaignId,
+          companyId,
+          userId: auth.userId,
+          recipientId,
+          chatId: chat.id,
+          step: 'provider_send_ok',
+          ok: true,
+          raw: { messageId },
+        });
         sent += 1;
       } else if (provider?.ok === false && provider?.skipped !== true) {
         patchMsg.delivery_status = 'failed';
@@ -468,6 +758,18 @@ serve(async (req) => {
         patchRecipient.status = 'failed' as RecipientStatus;
         patchRecipient.failed_at = nowIso;
         patchRecipient.error = provider?.status ? `HTTP ${provider.status}` : 'provider_failed';
+        await insertTraceEvent({
+          campaignId,
+          companyId,
+          userId: auth.userId,
+          recipientId,
+          chatId: chat.id,
+          step: 'provider_send_failed',
+          ok: false,
+          httpStatus: provider?.status ?? null,
+          message: patchMsg.failure_reason,
+          raw: provider,
+        });
         failed += 1;
       } else {
         patchRecipient.status = 'failed' as RecipientStatus;
@@ -476,14 +778,24 @@ serve(async (req) => {
         patchMsg.delivery_status = 'failed';
         patchMsg.failed_at = nowIso;
         patchMsg.failure_reason = provider?.reason ?? 'provider_skipped';
+        await insertTraceEvent({
+          campaignId,
+          companyId,
+          userId: auth.userId,
+          recipientId,
+          chatId: chat.id,
+          step: 'provider_send_skipped',
+          ok: false,
+          message: patchMsg.failure_reason,
+          raw: provider,
+        });
         failed += 1;
       }
 
       await supabaseAdmin.from('chat_messages').update(patchMsg).eq('id', msg.id);
-      await supabaseAdmin.from('chats').update({ last_message: patchMsg?.content ?? null, last_message_at: nowIso }).eq('id', chat.id);
       await supabaseAdmin.from('whatsapp_campaign_recipients').update(patchRecipient).eq('id', recipientId);
 
-      if (delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
+      if (delayMs > 0) await sleep(delayMs);
     }
 
     return jsonResponse(200, { ok: true, processed: list.length, sent, skipped, failed });
@@ -491,4 +803,3 @@ serve(async (req) => {
     return jsonResponse(500, { ok: false, error: e?.message ?? 'unknown error' });
   }
 });
-

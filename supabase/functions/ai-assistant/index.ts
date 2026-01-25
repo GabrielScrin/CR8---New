@@ -44,7 +44,7 @@ const extractBearerToken = (authorizationHeader: string | null): string | null =
   return token ? token : null;
 };
 
-type Mode = 'helper' | 'sdr_reply' | 'creative_analysis' | 'weekly_report';
+type Mode = 'helper' | 'sdr_reply' | 'creative_analysis' | 'weekly_report' | 'wa_template';
 
 type Provider = 'openai' | 'google' | 'anthropic' | 'deepseek';
 
@@ -56,6 +56,10 @@ type Body = {
   user_message?: string;
   image_url?: string;
   metrics?: Record<string, unknown>;
+  template_prompt?: string;
+  template_language?: string;
+  template_category?: string;
+  template_name_hint?: string;
   provider?: Provider;
   api_key?: string;
   model?: string;
@@ -89,6 +93,40 @@ const defaultModelForProvider = (provider: Provider): string => {
   if (provider === 'anthropic') return 'claude-3-5-sonnet-20241022';
   if (provider === 'deepseek') return 'deepseek-chat';
   return 'gpt-4o-mini';
+};
+
+const waTemplatePrompt = (args: { language: string; category: string; nameHint?: string | null }) => {
+  const language = String(args.language || 'pt_BR');
+  const category = String(args.category || 'UTILITY');
+  const hint = String(args.nameHint || '').trim();
+
+  return (
+    baseSystemPrompt() +
+    '\n\n' +
+    [
+      'Você vai gerar um TEMPLATE do WhatsApp (Meta Cloud API) para ser criado via Graph API /{WABA_ID}/message_templates.',
+      'Regras importantes:',
+      '- Responda SOMENTE com JSON válido (um único objeto).',
+      '- Use category em MAIÚSCULO (ex: UTILITY, MARKETING, AUTHENTICATION). Categoria solicitada: ' + category,
+      '- Use language no padrão WhatsApp (ex: pt_BR). Idioma solicitado: ' + language,
+      '- O "name" deve ser válido para template: letras minúsculas, números e underscore, sem espaços, começando com letra.',
+      hint ? `- Dica de nome (opcional): ${hint}` : '- Se não houver dica de nome, gere um nome simples baseado no conteúdo.',
+      '- Use parameter_format "positional" (padrão). Logo, use placeholders {{1}}, {{2}}, ... sem buracos.',
+      '- Sempre inclua components com pelo menos BODY.',
+      '- Se o BODY tiver placeholders, inclua example.body_text com uma linha de exemplos.',
+      '- Se incluir HEADER de texto com placeholder, inclua example.header_text (máx 1 variável).',
+      '- Não use HEADER de mídia (IMAGE/VIDEO/DOCUMENT) neste modo (exigiria header_handle).',
+      '',
+      'Formato de saída obrigatório:',
+      '{',
+      '  "name": "exemplo_template",',
+      '  "language": "pt_BR",',
+      '  "category": "UTILITY",',
+      '  "parameter_format": "positional",',
+      '  "components": [ ... componentes no formato da Meta ... ]',
+      '}',
+    ].join('\n')
+  );
 };
 
 async function openaiCompatibleChat(args: {
@@ -386,6 +424,22 @@ function creativePrompt(metrics: Record<string, unknown> | undefined) {
   ].join('\n');
 }
 
+function normalizeWaTemplateResult(result: any, defaults: { language: string; category: string }) {
+  const src = result?.template && typeof result.template === 'object' ? result.template : result;
+
+  const name = String(src?.name ?? '').trim();
+  const language = String(src?.language ?? defaults.language ?? 'pt_BR').trim() || 'pt_BR';
+  const category = String(src?.category ?? defaults.category ?? 'UTILITY').trim() || 'UTILITY';
+  const components = src?.components;
+
+  return {
+    name,
+    language,
+    category,
+    components: Array.isArray(components) ? components : [],
+  };
+}
+
 serve(async (req) => {
   try {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -474,6 +528,30 @@ serve(async (req) => {
       const { text, raw } = await llmChat(provider, apiKey, model, messages, false);
       rawProvider = raw;
       resultJson = safeJsonParse(text);
+    } else if (body.mode === 'wa_template') {
+      const templatePrompt = String(body.template_prompt ?? body.user_message ?? '').trim();
+      if (!templatePrompt) return jsonResponse(400, { ok: false, error: 'missing template_prompt' });
+
+      const language = String(body.template_language ?? 'pt_BR').trim() || 'pt_BR';
+      const category = String(body.template_category ?? 'UTILITY').trim() || 'UTILITY';
+      const nameHint = body.template_name_hint ? String(body.template_name_hint) : null;
+
+      const messages: ChatMsg[] = [
+        { role: 'system', content: waTemplatePrompt({ language, category, nameHint }) },
+        { role: 'user', content: templatePrompt },
+      ];
+
+      const model = body.model ?? defaultModelForProvider(provider);
+      const { text, raw } = await llmChat(provider, apiKey, model, messages, false);
+      rawProvider = raw;
+
+      const parsed = safeJsonParse(text);
+      const normalized = normalizeWaTemplateResult(parsed, { language, category });
+      if (!normalized.name) return jsonResponse(502, { ok: false, error: 'invalid template: missing name', raw: parsed });
+      if (!Array.isArray(normalized.components) || normalized.components.length === 0) {
+        return jsonResponse(502, { ok: false, error: 'invalid template: missing components', raw: parsed });
+      }
+      resultJson = normalized;
     }
 
     const event = {
@@ -487,6 +565,8 @@ serve(async (req) => {
         context_view: body.context_view ?? null,
         has_image_url: Boolean(body.image_url),
         metrics: body.metrics ?? null,
+        template_language: body.template_language ?? null,
+        template_category: body.template_category ?? null,
         provider,
         model: body.model ?? null,
       },
