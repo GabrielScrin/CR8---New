@@ -139,7 +139,13 @@ serve(async (req) => {
     if (!customerId) return jsonResponse(400, { ok: false, error: 'missing customer_id' });
 
     const auth = await requireUserFromBearer(req);
-    if (!auth.ok) return jsonResponse(401, { ok: false, error: 'This endpoint requires a valid Bearer token' });
+    if (!auth.ok) {
+      return jsonResponse(401, {
+        ok: false,
+        error: 'This endpoint requires a valid Bearer token',
+        details: auth.error,
+      });
+    }
     const perm = await requireCompanyAdmin(companyId, auth.userId);
     if (!perm.ok) return jsonResponse(perm.status, { ok: false, error: perm.error });
 
@@ -193,4 +199,3 @@ serve(async (req) => {
     return jsonResponse(500, { ok: false, error: e?.message ?? 'unknown error' });
   }
 });
-

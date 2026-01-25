@@ -557,22 +557,41 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
     setGoogleActionsLoading(true);
     setGoogleActionsError(null);
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error('Sem sessão. Faça login novamente.');
+      const getAccessToken = async (): Promise<string> => {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData.session?.access_token) return sessionData.session.access_token;
+
+        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) throw refreshError;
+        const token = refreshed.session?.access_token;
+        if (!token) throw new Error('Sem sessão. Faça login novamente.');
+        return token;
+      };
 
       const customerId = googleAdsCustomerId.trim().replace(/\D/g, '');
       if (!customerId) throw new Error('Preencha o Google Ads Customer ID primeiro.');
 
-      const res = await fetch(`${getSupabaseUrl()}/functions/v1/google-ads-actions`, {
-        method: 'POST',
-        headers: {
-          apikey: getSupabaseAnonKey(),
-          authorization: `Bearer ${accessToken}`,
-          'content-type': 'application/json',
-        },
-        body: JSON.stringify({ company_id: companyId, customer_id: customerId }),
-      });
+      const callOnce = async (accessToken: string) => {
+        return fetch(`${getSupabaseUrl()}/functions/v1/google-ads-actions`, {
+          method: 'POST',
+          headers: {
+            apikey: getSupabaseAnonKey(),
+            authorization: `Bearer ${accessToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ company_id: companyId, customer_id: customerId }),
+        });
+      };
+
+      let accessToken = await getAccessToken();
+      let res = await callOnce(accessToken);
+      if (res.status === 401) {
+        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+        if (!refreshError && refreshed.session?.access_token) {
+          accessToken = refreshed.session.access_token;
+          res = await callOnce(accessToken);
+        }
+      }
 
       const text = await res.text().catch(() => '');
       let payload: any = null;
