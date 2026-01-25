@@ -122,6 +122,12 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
 
   const [dispatchingConversions, setDispatchingConversions] = useState(false);
   const [dispatchConversionsMsg, setDispatchConversionsMsg] = useState<string | null>(null);
+  const [googleActionsLoading, setGoogleActionsLoading] = useState(false);
+  const [googleActionsError, setGoogleActionsError] = useState<string | null>(null);
+  const [googleActions, setGoogleActions] = useState<
+    Array<{ id: string; resource_name: string; name: string | null; status: string | null; type: string | null; category: string | null }>
+  >([]);
+  const [googleActionsManual, setGoogleActionsManual] = useState(false);
 
   const [financeLedgerAvailable, setFinanceLedgerAvailable] = useState(false);
   const [financeLoading, setFinanceLoading] = useState(false);
@@ -543,6 +549,48 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
       setError(e?.message ?? 'Falha ao despachar conversões.');
     } finally {
       setDispatchingConversions(false);
+    }
+  };
+
+  const refreshGoogleConversionActions = async () => {
+    if (readOnlyMode || !companyId) return;
+    setGoogleActionsLoading(true);
+    setGoogleActionsError(null);
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('Sem sessão. Faça login novamente.');
+
+      const customerId = googleAdsCustomerId.trim().replace(/\D/g, '');
+      if (!customerId) throw new Error('Preencha o Google Ads Customer ID primeiro.');
+
+      const res = await fetch(`${getSupabaseUrl()}/functions/v1/google-ads-actions`, {
+        method: 'POST',
+        headers: {
+          apikey: getSupabaseAnonKey(),
+          authorization: `Bearer ${accessToken}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ company_id: companyId, customer_id: customerId }),
+      });
+
+      const text = await res.text().catch(() => '');
+      let payload: any = null;
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch {
+        payload = { raw: text };
+      }
+      if (!res.ok) throw new Error(payload?.error ?? `HTTP ${res.status}`);
+
+      const actions = Array.isArray(payload?.actions) ? payload.actions : [];
+      setGoogleActions(actions);
+      if (actions.length === 0) setGoogleActionsError('Nenhuma Conversion Action encontrada nesse Customer ID.');
+    } catch (e: any) {
+      setGoogleActions([]);
+      setGoogleActionsError(e?.message ?? 'Falha ao buscar Conversion Actions.');
+    } finally {
+      setGoogleActionsLoading(false);
     }
   };
 
@@ -1059,29 +1107,86 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
             />
           </div>
 
+          <div className="md:col-span-3 flex items-end justify-between gap-3">
+            <div className="min-w-0">
+              <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                Dica: clique em <span className="font-medium">Buscar ações</span> para listar as Conversion Actions desse Customer ID e só selecionar.
+              </div>
+              {googleActionsError ? <div className="mt-1 text-xs text-rose-300">{googleActionsError}</div> : null}
+            </div>
+            <button
+              onClick={() => void refreshGoogleConversionActions()}
+              disabled={googleActionsLoading || readOnlyMode || !companyId}
+              className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] text-sm hover:bg-[hsl(var(--accent))] disabled:opacity-60"
+              title="Buscar Conversion Actions no Google Ads"
+            >
+              <RefreshCw className={`h-4 w-4 ${googleActionsLoading ? 'animate-spin' : ''}`} />
+              {googleActionsLoading ? 'Buscando...' : 'Buscar ações'}
+            </button>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Conversion Action (Lead)</label>
-            <input
+            <select
               value={googleAdsConvLead}
               onChange={(e) => setGoogleAdsConvLead(e.target.value)}
               disabled={!canEditCompany}
-              placeholder="ID (ex: 123) ou resource name"
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
-            />
-            <p className="mt-2 text-[11px] text-[hsl(var(--muted-foreground))]">
-              Ex.: <span className="font-mono">customers/1234567890/conversionActions/111</span>
-            </p>
+              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+            >
+              <option value="">Selecione (ou preencha manualmente)</option>
+              {googleActions.map((a) => (
+                <option key={a.resource_name} value={a.id || a.resource_name}>
+                  {(a.name || 'Sem nome') + ` — ${a.id}`}
+                </option>
+              ))}
+            </select>
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <div className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                Se preferir, você pode colar o resource name (ex.: <span className="font-mono">customers/123.../conversionActions/111</span>).
+              </div>
+              <button
+                type="button"
+                onClick={() => setGoogleActionsManual((v) => !v)}
+                className="text-[11px] text-[hsl(var(--primary))] hover:underline"
+              >
+                {googleActionsManual ? 'Ocultar manual' : 'Editar manual'}
+              </button>
+            </div>
+            {googleActionsManual ? (
+              <input
+                value={googleAdsConvLead}
+                onChange={(e) => setGoogleAdsConvLead(e.target.value)}
+                disabled={!canEditCompany}
+                placeholder="ID (ex: 123) ou resource name"
+                className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+              />
+            ) : null}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Conversion Action (Compra)</label>
-            <input
+            <select
               value={googleAdsConvPurchase}
               onChange={(e) => setGoogleAdsConvPurchase(e.target.value)}
               disabled={!canEditCompany}
-              placeholder="ID (ex: 456) ou resource name"
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
-            />
+              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+            >
+              <option value="">(Opcional) Selecione</option>
+              {googleActions.map((a) => (
+                <option key={a.resource_name + ':purchase'} value={a.id || a.resource_name}>
+                  {(a.name || 'Sem nome') + ` — ${a.id}`}
+                </option>
+              ))}
+            </select>
+            {googleActionsManual ? (
+              <input
+                value={googleAdsConvPurchase}
+                onChange={(e) => setGoogleAdsConvPurchase(e.target.value)}
+                disabled={!canEditCompany}
+                placeholder="ID (ex: 456) ou resource name"
+                className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+              />
+            ) : null}
           </div>
 
           <div>
