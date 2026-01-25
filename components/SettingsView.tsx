@@ -128,6 +128,17 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
     Array<{ id: string; resource_name: string; name: string | null; status: string | null; type: string | null; category: string | null }>
   >([]);
   const [googleActionsManual, setGoogleActionsManual] = useState(false);
+  const [googleCustomersLoading, setGoogleCustomersLoading] = useState(false);
+  const [googleCustomersError, setGoogleCustomersError] = useState<string | null>(null);
+  const [googleCustomers, setGoogleCustomers] = useState<
+    Array<{
+      id: string;
+      resource_name: string;
+      descriptive_name: string | null;
+      currency_code: string | null;
+      time_zone: string | null;
+    }>
+  >([]);
 
   const [financeLedgerAvailable, setFinanceLedgerAvailable] = useState(false);
   const [financeLoading, setFinanceLoading] = useState(false);
@@ -610,6 +621,64 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
       setGoogleActionsError(e?.message ?? 'Falha ao buscar Conversion Actions.');
     } finally {
       setGoogleActionsLoading(false);
+    }
+  };
+
+  const refreshGoogleCustomers = async () => {
+    if (readOnlyMode || !companyId) return;
+    setGoogleCustomersLoading(true);
+    setGoogleCustomersError(null);
+    try {
+      const getAccessToken = async (): Promise<string> => {
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (sessionData.session?.access_token) return sessionData.session.access_token;
+
+        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError) throw refreshError;
+        const token = refreshed.session?.access_token;
+        if (!token) throw new Error('Sem sessão. Faça login novamente.');
+        return token;
+      };
+
+      const callOnce = async (accessToken: string) => {
+        return fetch(`${getSupabaseUrl()}/functions/v1/google-ads-customers`, {
+          method: 'POST',
+          headers: {
+            apikey: getSupabaseAnonKey(),
+            authorization: `Bearer ${accessToken}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ company_id: companyId }),
+        });
+      };
+
+      let accessToken = await getAccessToken();
+      let res = await callOnce(accessToken);
+      if (res.status === 401) {
+        const { data: refreshed, error: refreshError } = await supabase.auth.refreshSession();
+        if (!refreshError && refreshed.session?.access_token) {
+          accessToken = refreshed.session.access_token;
+          res = await callOnce(accessToken);
+        }
+      }
+
+      const text = await res.text().catch(() => '');
+      let payload: any = null;
+      try {
+        payload = text ? JSON.parse(text) : null;
+      } catch {
+        payload = { raw: text };
+      }
+      if (!res.ok) throw new Error(payload?.error ?? `HTTP ${res.status}`);
+
+      const customers = Array.isArray(payload?.customers) ? payload.customers : [];
+      setGoogleCustomers(customers);
+      if (customers.length === 0) setGoogleCustomersError('Nenhuma conta do Google Ads encontrada para essa integração.');
+    } catch (e: any) {
+      setGoogleCustomers([]);
+      setGoogleCustomersError(e?.message ?? 'Falha ao buscar contas do Google Ads.');
+    } finally {
+      setGoogleCustomersLoading(false);
     }
   };
 
@@ -1102,6 +1171,39 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
               placeholder="1234567890 (sem traços)"
               className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
             />
+            <div className="mt-2 flex items-center justify-between gap-3">
+              <div className="text-[11px] text-[hsl(var(--muted-foreground))]">Opcional: buscar as contas acessíveis e selecionar.</div>
+              <button
+                type="button"
+                onClick={() => void refreshGoogleCustomers()}
+                disabled={googleCustomersLoading || readOnlyMode || !companyId}
+                className="inline-flex items-center gap-2 px-2 py-1 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] text-xs hover:bg-[hsl(var(--accent))] disabled:opacity-60"
+                title="Buscar contas acessíveis no Google Ads"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${googleCustomersLoading ? 'animate-spin' : ''}`} />
+                {googleCustomersLoading ? 'Buscando...' : 'Buscar contas'}
+              </button>
+            </div>
+            {googleCustomersError ? <div className="mt-1 text-xs text-rose-300">{googleCustomersError}</div> : null}
+            {googleCustomers.length ? (
+              <select
+                value=""
+                onChange={(e) => {
+                  const raw = e.target.value || '';
+                  const id = raw.replace(/\\D/g, '');
+                  if (id) setGoogleAdsCustomerId(id);
+                }}
+                disabled={!canEditCompany}
+                className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+              >
+                <option value="">Selecionar conta...</option>
+                {googleCustomers.map((c) => (
+                  <option key={c.resource_name} value={c.id}>
+                    {(c.descriptive_name ? `${c.descriptive_name} — ` : '') + c.id}
+                  </option>
+                ))}
+              </select>
+            ) : null}
           </div>
 
           <div>
