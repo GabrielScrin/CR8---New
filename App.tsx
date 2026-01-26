@@ -233,6 +233,13 @@ export default function App() {
   };
 
   const renderView = () => {
+    // support views like 'settings' and 'settings:<section>' so sidebar can open subsections
+    if (currentView.startsWith('settings')) {
+      const parts = currentView.split(':');
+      const section = parts[1] || 'company';
+      return <SettingsView companyId={user.companyId} role={user.role} userId={user.id} initialSection={section} />;
+    }
+
     switch (currentView) {
       case 'dashboard':
         return <Dashboard companyId={user.companyId} variant={isClientRole(user.role) ? 'client' : 'agency'} />;

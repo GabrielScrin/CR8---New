@@ -162,7 +162,7 @@ const ModalShell = ({
   );
 };
 
-export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: string }> = ({ companyId, role, userId }) => {
+export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: string; initialSection?: string }> = ({ companyId, role, userId, initialSection }) => {
   const readOnlyMode = !isSupabaseConfigured();
   const canEditCompany = useMemo(() => role === 'admin' || role === 'gestor', [role]);
   const canManageIdentity = useMemo(() => normalizeRole(role) === 'admin', [role]);
@@ -322,7 +322,11 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
     { key: 'integracoes', label: 'Integrações' },
   ];
 
-  const [selectedSection, setSelectedSection] = useState<string>('company');
+  const [selectedSection, setSelectedSection] = useState<string>(() =>
+    initialSection && ['company', 'whatsapp', 'financeiro', 'conversoes', 'auditoria', 'equipe', 'integracoes'].includes(initialSection)
+      ? initialSection
+      : 'company'
+  );
 
   const canViewIntegrations = useMemo(() => role === 'admin' || role === 'gestor', [role]);
 

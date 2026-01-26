@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   LayoutDashboard, 
   Users, 
@@ -39,6 +39,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, r
   const filteredMenuItems =
     isClientRole(role) ? menuItems.filter((item) => item.id === 'dashboard' || item.id === 'traffic') : menuItems;
 
+  const SETTINGS_SUB = [
+    { id: 'company', label: 'Empresa e White Label' },
+    { id: 'whatsapp', label: 'WhatsApp' },
+    { id: 'financeiro', label: 'Financeiro' },
+    { id: 'conversoes', label: 'Conversões' },
+    { id: 'auditoria', label: 'Auditoria' },
+    { id: 'equipe', label: 'Equipe' },
+    { id: 'integracoes', label: 'Integrações' },
+  ];
+
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   return (
     <div className="h-screen w-64 bg-[hsl(var(--sidebar-background))] text-[hsl(var(--foreground))] flex flex-col fixed left-0 top-0 shadow-xl z-50 border-r border-[hsl(var(--sidebar-border))]">
       <div className="p-6 flex items-center space-x-3 border-b border-[hsl(var(--sidebar-border))]">
@@ -52,20 +64,61 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, r
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4 space-y-1">
-        {filteredMenuItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => setCurrentView(item.id)}
-            className={`w-full flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-              currentView === item.id
-                ? 'bg-[hsl(var(--sidebar-primary))] text-[hsl(var(--sidebar-primary-foreground))] border-r-4 border-[hsl(var(--accent))]'
-                : 'text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-accent-foreground))]'
-            }`}
-          >
-            <item.icon className="w-5 h-5 mr-3" />
-            {item.label}
-          </button>
-        ))}
+        {filteredMenuItems.map((item) => {
+          if (item.id !== 'settings') {
+            return (
+              <button
+                key={item.id}
+                onClick={() => setCurrentView(item.id)}
+                className={`w-full flex items-center px-6 py-3 text-sm font-medium transition-colors ${
+                  currentView === item.id
+                    ? 'bg-[hsl(var(--sidebar-primary))] text-[hsl(var(--sidebar-primary-foreground))] border-r-4 border-[hsl(var(--accent))]'
+                    : 'text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-accent-foreground))]'
+                }`}
+              >
+                <item.icon className="w-5 h-5 mr-3" />
+                {item.label}
+              </button>
+            );
+          }
+
+          // settings parent button with dropdown
+          const settingsActive = currentView === 'settings' || currentView.startsWith('settings:');
+          return (
+            <div key={item.id} className="w-full">
+              <button
+                onClick={() => {
+                  // toggle dropdown visibility; also set view to base settings
+                  setSettingsOpen((s) => !s);
+                  setCurrentView('settings');
+                }}
+                className={`w-full flex items-center px-6 py-3 text-sm font-medium transition-colors ${
+                  settingsActive
+                    ? 'bg-[hsl(var(--sidebar-primary))] text-[hsl(var(--sidebar-primary-foreground))] border-r-4 border-[hsl(var(--accent))]'
+                    : 'text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-accent-foreground))]'
+                }`}
+              >
+                <item.icon className="w-5 h-5 mr-3" />
+                {item.label}
+              </button>
+              {settingsOpen && (
+                <div className="pl-12 pr-4">
+                  {SETTINGS_SUB.map((s) => (
+                    <button
+                      key={s.id}
+                      onClick={() => setCurrentView(`settings:${s.id}`)}
+                      className={`w-full text-left mt-1 mb-1 px-2 py-2 rounded text-sm ${
+                        currentView === `settings:${s.id}` ? 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-accent-foreground))]' : 'text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))]'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </nav>
 
       <div className="p-4 border-t border-[hsl(var(--sidebar-border))]">
