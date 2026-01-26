@@ -27,7 +27,7 @@ begin
   -- token: 48 hex chars (~24 bytes) -> length 48
   token := encode(gen_random_bytes(24), 'hex');
   prefix := left(token, 8);
-  hash := digest(token, 'sha256');
+  hash := digest(token, 'sha256'::text);
 
   insert into public.api_keys (company_id, key_prefix, key_hash, name, created_by)
   values (p_company_id, prefix, hash, p_name, auth.uid())
@@ -44,7 +44,7 @@ language sql security definer set search_path = public
 as $$
   select id, company_id, key_prefix, status
   from public.api_keys
-  where key_hash = digest(p_token, 'sha256')
+  where key_hash = digest(p_token, 'sha256'::text)
   limit 1;
 $$;
 

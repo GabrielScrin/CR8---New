@@ -71,7 +71,7 @@ declare
 begin
   token := encode(gen_random_bytes(24), 'hex');
   prefix := left(token, 8);
-  hash := digest(token, 'sha256');
+  hash := digest(token, 'sha256'::text);
 
   insert into public.integration_inbound_sources (company_id, name, entry_board_id, entry_stage_id, secret_prefix, secret_hash, created_by)
   values (p_company_id, p_name, p_entry_board_id, p_entry_stage_id, prefix, hash, auth.uid());
@@ -87,7 +87,7 @@ language sql security definer set search_path = public
 as $$
   select id, company_id, name, entry_board_id, entry_stage_id, active
   from public.integration_inbound_sources
-  where id = p_source_id and secret_hash = digest(p_token, 'sha256')
+  where id = p_source_id and secret_hash = digest(p_token, 'sha256'::text)
   limit 1;
 $$;
 
