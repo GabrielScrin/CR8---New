@@ -117,7 +117,6 @@ const isMembersInvitesMissingSchema = (error: unknown) => {
   const msg = String((error as any)?.message ?? '').toLowerCase();
   return (
     msg.includes('does not exist') ||
-    msg.includes('relation') ||
     msg.includes('could not find the function') ||
     msg.includes('schema cache')
   );
@@ -532,17 +531,14 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
     try {
       const [{ data: membersData, error: membersErr }, { data: invitesData, error: invitesErr }] = await Promise.all([
         supabase.rpc('list_company_members', { p_company_id: companyId }),
-        supabase
-          .from('company_invites')
-          .select('id,email,member_role,created_at,accepted_at,token,expires_at,used_at')
-          .eq('company_id', companyId)
-          .order('created_at', { ascending: false }),
+        supabase.rpc('list_company_invite_links', { p_company_id: companyId }),
       ]);
       if (isMembersInvitesMissingSchema(invitesErr) || isMembersInvitesMissingSchema(membersErr)) {
         throw new Error(
           "Migrations de membros/convites não aplicadas (ou schema cache desatualizado). Rode `supabase db push`. Se persistir, no Supabase SQL Editor rode: notify pgrst, 'reload schema'; e recarregue."
         );
-      }      if (membersErr) throw membersErr;
+      }
+      if (membersErr) throw membersErr;
       if (invitesErr) throw invitesErr;
 
       setMembers(((membersData ?? []) as any) as CompanyMemberRow[]);
