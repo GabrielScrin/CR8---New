@@ -624,9 +624,36 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
       // If the agent is typing, avoid "fighting" the human.
       if (messageInputRef.current.trim()) return;
 
-      // Safety: only auto-reply when the chat is assumed by this user (avoids double replies across devices/users).
       if (!chat.ai_active) return;
-      if (chat.taken_by !== userId) return;
+
+      // Safety: avoid double replies across users.
+      // If nobody has taken the chat yet, try to take it atomically.
+      // If another user already took it, do not auto-reply from this client.
+      if (chat.taken_by && chat.taken_by !== userId) return;
+      if (!chat.taken_by) {
+        try {
+          const nowIso = new Date().toISOString();
+          const { data: taken, error: takeErr } = await supabase
+            .from('chats')
+            .update({ taken_by: userId, taken_at: nowIso } as any)
+            .eq('id', chat.id)
+            .is('taken_by', null)
+            .select('id,taken_by,taken_at,ai_active')
+            .maybeSingle();
+          if (!takeErr && taken?.id) {
+            setChats((prev) => prev.map((c) => (c.id === chat.id ? ({ ...c, ...(taken as any) } as any) : c)));
+            const nextChat = { ...(chat as any), ...(taken as any) } as ChatRow;
+            activeChatRef.current = nextChat;
+          } else {
+            // Another user probably took it first (or RLS denied); bail out to avoid duplicates.
+            return;
+          }
+        } catch {
+          return;
+        }
+      } else if (chat.taken_by !== userId) {
+        return;
+      }
 
       if (processedInboundMessageIdsRef.current.size > 2000) processedInboundMessageIdsRef.current.clear();
       if (processedInboundMessageIdsRef.current.has(incoming.id)) return;
