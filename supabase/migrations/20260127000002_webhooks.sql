@@ -1,4 +1,6 @@
 -- Migration: webhooks inbound/outbound tables, events and RPC helpers
+-- Ensure pgcrypto extension is available for digest/gen_random_bytes
+create extension if not exists pgcrypto;
 
 create table if not exists public.integration_inbound_sources (
   id uuid primary key default gen_random_uuid(),

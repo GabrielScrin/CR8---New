@@ -1,4 +1,6 @@
 -- Migration: create api_keys table and helper to create API tokens
+-- Ensure pgcrypto extension is available for digest/gen_random_bytes
+create extension if not exists pgcrypto;
 
 create table if not exists public.api_keys (
   id uuid primary key default gen_random_uuid(),
