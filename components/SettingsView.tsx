@@ -311,6 +311,47 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
     }
   };
 
+  const SECTIONS = [
+    { key: 'company', label: 'Empresa e White Label' },
+    { key: 'whatsapp', label: 'WhatsApp' },
+    { key: 'financeiro', label: 'Financeiro' },
+    { key: 'conversoes', label: 'Conversões (Google Ads / Meta)' },
+    { key: 'auditoria', label: 'Auditoria e Relatório semanal' },
+    { key: 'equipe', label: 'Equipe' },
+    { key: 'integracoes', label: 'Integrações' },
+  ];
+
+  const [selectedSection, setSelectedSection] = useState<string>('company');
+
+  const canViewIntegrations = useMemo(() => role === 'admin' || role === 'gestor', [role]);
+
+  const [integrationsTab, setIntegrationsTab] = useState<string>(() => {
+    try {
+      const h = (window?.location?.hash || '').replace('#', '');
+      return ['api', 'webhooks', 'mcp'].includes(h) ? h : 'api';
+    } catch {
+      return 'api';
+    }
+  });
+
+  useEffect(() => {
+    const onHash = () => {
+      try {
+        const h = (window.location.hash || '').replace('#', '');
+        if (['api', 'webhooks', 'mcp'].includes(h)) setIntegrationsTab(h);
+      } catch {}
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const setIntegrationsHash = (tab: string) => {
+    try {
+      window.location.hash = tab;
+    } catch {}
+    setIntegrationsTab(tab);
+  };
+
   useEffect(() => {
     if (readOnlyMode || !companyId) return;
     let cancelled = false;
@@ -987,6 +1028,21 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
         <div>
           <h1 className="text-3xl font-bold text-[hsl(var(--foreground))]">Configurações</h1>
           <p className="text-[hsl(var(--muted-foreground))] mt-1 text-sm">Ajuste branding, integrações e financeiro por empresa.</p>
+
+          <div className="mt-3 flex items-center gap-3">
+            <label className="text-xs text-[hsl(var(--muted-foreground))]">Seção</label>
+            <select
+              value={selectedSection}
+              onChange={(e) => setSelectedSection(e.target.value)}
+              className="rounded-md bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+            >
+              {SECTIONS.map((s) => (
+                <option key={s.key} value={s.key}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
         <button
           onClick={() => void save()}
@@ -1004,87 +1060,157 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
         </div>
       )}
 
+        {selectedSection === 'integracoes' && (
+          <div className="cr8-card p-6 space-y-4">
+            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Integrações</h2>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">Centralize APIs públicas, Webhooks e o MCP Server.</p>
+
+            {!canViewIntegrations ? (
+              <div className="text-sm text-[hsl(var(--muted-foreground))]">Aba disponível para admin e gestor.</div>
+            ) : (
+              <div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIntegrationsHash('api')}
+                    className={`px-3 py-1 rounded-md ${integrationsTab === 'api' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--secondary))]'}`}
+                  >
+                    API
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIntegrationsHash('webhooks')}
+                    className={`px-3 py-1 rounded-md ${integrationsTab === 'webhooks' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--secondary))]'}`}
+                  >
+                    Webhooks
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIntegrationsHash('mcp')}
+                    className={`px-3 py-1 rounded-md ${integrationsTab === 'mcp' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--secondary))]'}`}
+                  >
+                    MCP
+                  </button>
+                </div>
+
+                <div className="mt-4">
+                  {integrationsTab === 'api' && (
+                    <div>
+                      <h3 className="text-sm font-semibold">API Pública</h3>
+                      {role !== 'admin' ? (
+                        <div className="text-xs text-[hsl(var(--muted-foreground))]">Somente admins podem criar/gerenciar API Keys.</div>
+                      ) : (
+                        <div className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">Gerenciamento de API Keys (criar, listar, revogar, docs e testes)</div>
+                      )}
+                    </div>
+                  )}
+
+                  {integrationsTab === 'webhooks' && (
+                    <div>
+                      <h3 className="text-sm font-semibold">Webhooks (Inbound / Outbound)</h3>
+                      <div className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">Configuração de fontes inbound e endpoints de outbound, testes e auditoria.</div>
+                    </div>
+                  )}
+
+                  {integrationsTab === 'mcp' && (
+                    <div>
+                      <h3 className="text-sm font-semibold">MCP Server</h3>
+                      <div className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">Gerar/usar API Key e testar initialize + tools/list.</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
       {error && <div className="text-sm text-[hsl(var(--destructive))]">{error}</div>}
       {ok && <div className="text-sm text-emerald-300">{ok}</div>}
 
-      <div className="cr8-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Empresa</h2>
+      {selectedSection === 'company' && (
+        <>
+          <div className="cr8-card p-6 space-y-4">
+            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Empresa</h2>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Nome</label>
-            <input
-              value={companyName}
-              onChange={(e) => setCompanyName(e.target.value)}
-              disabled={!canEditCompany}
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-            />
-          </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Nome</label>
+                <input
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  disabled={!canEditCompany}
+                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                />
+              </div>
 
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Meta Ad Account ID</label>
-            <input
-              value={metaAdAccountId}
-              onChange={(e) => setMetaAdAccountId(e.target.value)}
-              disabled={!canEditCompany}
-              placeholder="act_123..."
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="cr8-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">White Label</h2>
-        <p className="text-xs text-[hsl(var(--muted-foreground))]">Esses campos personalizam o nome e o logo no menu lateral.</p>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Nome de marca</label>
-            <input
-              value={brandName}
-              onChange={(e) => setBrandName(e.target.value)}
-              disabled={!canEditCompany}
-              placeholder="Ex: Agência X"
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">URL do logo</label>
-            <input
-              value={brandLogoUrl}
-              onChange={(e) => setBrandLogoUrl(e.target.value)}
-              disabled={!canEditCompany}
-              placeholder="https://..."
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Cor primária (opcional)</label>
-            <div className="mt-2 flex items-center gap-3">
-              <input
-                type="color"
-                value={brandPrimaryColor?.startsWith('#') ? brandPrimaryColor : '#0D6EFD'}
-                onChange={(e) => setBrandPrimaryColor(e.target.value)}
-                disabled={!canEditCompany}
-                className="h-10 w-12 rounded bg-transparent border border-[hsl(var(--border))]"
-              />
-              <input
-                value={brandPrimaryColor}
-                onChange={(e) => setBrandPrimaryColor(e.target.value)}
-                disabled={!canEditCompany}
-                placeholder="#0D6EFD"
-                className="w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
-              />
+              <div>
+                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Meta Ad Account ID</label>
+                <input
+                  value={metaAdAccountId}
+                  onChange={(e) => setMetaAdAccountId(e.target.value)}
+                  disabled={!canEditCompany}
+                  placeholder="act_123..."
+                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                />
+              </div>
             </div>
-            <p className="mt-2 text-[11px] text-[hsl(var(--muted-foreground))]">Use HEX (ex: #0D6EFD). Aplica no tema ao trocar de empresa.</p>
           </div>
-        </div>
-      </div>
+        )}
 
-      <div className="cr8-card p-6 space-y-4">
+        <div className="cr8-card p-6 space-y-4">
+            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">White Label</h2>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">Esses campos personalizam o nome e o logo no menu lateral.</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Nome de marca</label>
+                <input
+                  value={brandName}
+                  onChange={(e) => setBrandName(e.target.value)}
+                  disabled={!canEditCompany}
+                  placeholder="Ex: Agência X"
+                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">URL do logo</label>
+                <input
+                  value={brandLogoUrl}
+                  onChange={(e) => setBrandLogoUrl(e.target.value)}
+                  disabled={!canEditCompany}
+                  placeholder="https://..."
+                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Cor primária (opcional)</label>
+                <div className="mt-2 flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={brandPrimaryColor?.startsWith('#') ? brandPrimaryColor : '#0D6EFD'}
+                    onChange={(e) => setBrandPrimaryColor(e.target.value)}
+                    disabled={!canEditCompany}
+                    className="h-10 w-12 rounded bg-transparent border border-[hsl(var(--border))]"
+                  />
+                  <input
+                    value={brandPrimaryColor}
+                    onChange={(e) => setBrandPrimaryColor(e.target.value)}
+                    disabled={!canEditCompany}
+                    placeholder="#0D6EFD"
+                    className="w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+                  />
+                </div>
+                <p className="mt-2 text-[11px] text-[hsl(var(--muted-foreground))]">Use HEX (ex: #0D6EFD). Aplica no tema ao trocar de empresa.</p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {selectedSection === 'whatsapp' && (
+        <div className="cr8-card p-6 space-y-4">
         <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">WhatsApp (Cloud API)</h2>
         <p className="text-xs text-[hsl(var(--muted-foreground))]">
           Para receber mensagens no Live Chat, configure o webhook na Meta com esta URL de callback:{' '}
@@ -1114,10 +1240,12 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
             />
           </div>
         </div>
-      </div>
+        </div>
+      )}
 
-      <div className="cr8-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Financeiro</h2>
+      {selectedSection === 'financeiro' && (
+        <div className="cr8-card p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Financeiro</h2>
         <p className="text-xs text-[hsl(var(--muted-foreground))]">Controle de saldo de mídia e fee da agência (por empresa).</p>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -1286,28 +1414,30 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
             Histórico de transações ainda não está habilitado neste banco (migration: phase5_finance_ledger).
           </p>
         )}
-      </div>
-
-      <div className="cr8-card p-6 space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Conversões (Google Ads / Meta)</h2>
-            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-              Usa os click IDs capturados nos leads (ex: <span className="font-mono">gclid</span>) para enviar{' '}
-              <span className="font-medium">Offline Conversions</span>. Os segredos OAuth ficam no Supabase (Edge Secrets), não no banco.
-            </p>
-          </div>
-
-          <button
-            onClick={() => void dispatchConversionsNow()}
-            disabled={dispatchingConversions || readOnlyMode || !companyId}
-            className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] text-sm font-semibold hover:opacity-90 disabled:opacity-60"
-            title="Despachar conversões pendentes (Google Ads)"
-          >
-            <Send className="h-4 w-4" />
-            {dispatchingConversions ? 'Enviando...' : 'Despachar agora'}
-          </button>
         </div>
+      )}
+
+      {selectedSection === 'conversoes' && (
+        <div className="cr8-card p-6 space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Conversões (Google Ads / Meta)</h2>
+              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+                Usa os click IDs capturados nos leads (ex: <span className="font-mono">gclid</span>) para enviar{' '}
+                <span className="font-medium">Offline Conversions</span>. Os segredos OAuth ficam no Supabase (Edge Secrets), não no banco.
+              </p>
+            </div>
+
+            <button
+              onClick={() => void dispatchConversionsNow()}
+              disabled={dispatchingConversions || readOnlyMode || !companyId}
+              className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+              title="Despachar conversões pendentes (Google Ads)"
+            >
+              <Send className="h-4 w-4" />
+              {dispatchingConversions ? 'Enviando...' : 'Despachar agora'}
+            </button>
+          </div>
 
         {dispatchConversionsMsg ? <div className="text-xs text-emerald-300">{dispatchConversionsMsg}</div> : null}
 
@@ -1480,7 +1610,8 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
         </div>
       </div>
 
-      <div className="cr8-card p-6 space-y-4">
+      {selectedSection === 'auditoria' && (
+        <div className="cr8-card p-6 space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Auditoria</h2>
@@ -1664,9 +1795,10 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
             })}
           </div>
         )}
-      </div>
+        </div>
+      )}
 
-      {canEditCompany && (
+      {selectedSection === 'equipe' && canEditCompany && (
         <div className="cr8-card p-6 space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div>
