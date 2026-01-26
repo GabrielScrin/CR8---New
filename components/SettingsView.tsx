@@ -1,5 +1,6 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { InboundSources } from './InboundSources';
 import { CalendarClock, RefreshCw, Save, Trash2, UserPlus, Send, Copy, Link2, X, Crown, Sparkles, Briefcase, Mail } from 'lucide-react';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { Role, labelRolePt, normalizeRole } from '../types';
@@ -1335,6 +1336,14 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                     <div>
                       <h3 className="text-sm font-semibold">Webhooks (Inbound / Outbound)</h3>
                       <div className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">Configuração de fontes inbound e endpoints de outbound, testes e auditoria.</div>
+
+                      {role !== 'admin' ? (
+                        <div className="mt-3 text-xs text-[hsl(var(--muted-foreground))]">Somente admins podem criar/gerenciar integrações de Webhooks.</div>
+                      ) : (
+                        <div className="mt-4 space-y-4">
+                          <InboundSources companyId={companyId} refreshTrigger={companyId} />
+                        </div>
+                      )}
                     </div>
                   )}
 
