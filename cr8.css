@@ -80,6 +80,30 @@ body {
   background: hsl(var(--muted-foreground) / 0.35);
 }
 
+/* Discreet scrollbars for modals/panels */
+.cr8-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--border)) transparent;
+}
+
+.cr8-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.cr8-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.cr8-scroll::-webkit-scrollbar-thumb {
+  background: hsl(var(--border) / 0.8);
+  border-radius: 999px;
+}
+
+.cr8-scroll::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.45);
+}
+
 /* Small helpers */
 .cr8-card {
   background: var(--gradient-card);

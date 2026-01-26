@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+﻿import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { CalendarClock, RefreshCw, Save, Trash2, UserPlus, Send, Copy, Link2, X, Crown, Sparkles, Briefcase, Mail } from 'lucide-react';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
@@ -113,6 +113,16 @@ const ROLE_META: Record<
   },
 };
 
+const isMembersInvitesMissingSchema = (error: unknown) => {
+  const msg = String((error as any)?.message ?? '').toLowerCase();
+  return (
+    msg.includes('does not exist') ||
+    msg.includes('relation') ||
+    msg.includes('could not find the function') ||
+    msg.includes('schema cache')
+  );
+};
+
 const ModalShell = ({
   title,
   open,
@@ -145,7 +155,7 @@ const ModalShell = ({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="mt-4 min-h-0 overflow-y-auto pr-2">{children}</div>
+        <div className="mt-4 min-h-0 overflow-y-auto pr-2 cr8-scroll">{children}</div>
       </div>
     </div>,
     document.body
@@ -528,19 +538,11 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
           .eq('company_id', companyId)
           .order('created_at', { ascending: false }),
       ]);
-
-      const inviteMsg = String(invitesErr?.message ?? '').toLowerCase();
-      const membersMsg = String(membersErr?.message ?? '').toLowerCase();
-      const missing =
-        inviteMsg.includes('does not exist') ||
-        inviteMsg.includes('relation') ||
-        membersMsg.includes('does not exist') ||
-        membersMsg.includes('relation');
-
-      if (missing) {
-        throw new Error('Migrations de membros/convites não aplicadas ainda. Rode `supabase db push` e recarregue.');
-      }
-      if (membersErr) throw membersErr;
+      if (isMembersInvitesMissingSchema(invitesErr) || isMembersInvitesMissingSchema(membersErr)) {
+        throw new Error(
+          "Migrations de membros/convites não aplicadas (ou schema cache desatualizado). Rode `supabase db push`. Se persistir, no Supabase SQL Editor rode: notify pgrst, 'reload schema'; e recarregue."
+        );
+      }      if (membersErr) throw membersErr;
       if (invitesErr) throw invitesErr;
 
       setMembers(((membersData ?? []) as any) as CompanyMemberRow[]);
@@ -869,7 +871,13 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
       await copyText(link);
       await refreshMembersAndInvites();
     } catch (e: any) {
-      setInviteModalError(e?.message ?? 'Falha ao gerar convite.');
+      if (isMembersInvitesMissingSchema(e)) {
+        setInviteModalError(
+          "Convites ainda não estão disponíveis (migrations/schema cache). Rode `supabase db push`. Se persistir, no Supabase SQL Editor rode: notify pgrst, 'reload schema'; e tente novamente."
+        );
+      } else {
+        setInviteModalError(e?.message ?? 'Falha ao gerar convite.');
+      }
     } finally {
       setInviteModalBusy(false);
     }
@@ -1887,7 +1895,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                     className={`group text-left rounded-2xl border p-4 transition ${
                       selected
                         ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary))]/10 ring-1 ring-[hsl(var(--primary))]/30'
-                        : 'border-[hsl(var(--border))] bg-[hsl(var(--secondary))] hover:bg-[hsl(var(--accent))]'
+                        : 'border-[hsl(var(--border))] bg-[hsl(var(--secondary))] hover:bg-[hsl(var(--muted))] hover:border-[hsl(var(--primary))]/30'
                     }`}
                   >
                     <div className="flex items-start gap-3">
