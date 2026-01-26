@@ -548,7 +548,11 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
       } catch {
         payload = { raw: text };
       }
-      if (!res.ok) throw new Error(payload?.error ?? `HTTP ${res.status}`);
+      if (!res.ok) {
+        const base = payload?.error ?? `HTTP ${res.status}`;
+        const details = payload?.details ? String(payload.details) : payload?.raw ? String(payload.raw) : '';
+        throw new Error(details ? `${base} — ${details}` : base);
+      }
 
       const processed = Number(payload?.processed ?? 0);
       const sent = Number(payload?.sent ?? 0);
@@ -611,7 +615,11 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
       } catch {
         payload = { raw: text };
       }
-      if (!res.ok) throw new Error(payload?.error ?? `HTTP ${res.status}`);
+      if (!res.ok) {
+        const base = payload?.error ?? `HTTP ${res.status}`;
+        const details = payload?.details ? String(payload.details) : payload?.raw ? String(payload.raw) : '';
+        throw new Error(details ? `${base} — ${details}` : base);
+      }
 
       const actions = Array.isArray(payload?.actions) ? payload.actions : [];
       setGoogleActions(actions);

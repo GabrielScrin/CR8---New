@@ -119,6 +119,14 @@ type ActionRow = {
   category: string | null;
 };
 
+function tryParseJson(text: string): any | null {
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return null;
+  }
+}
+
 serve(async (req) => {
   try {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -158,28 +166,54 @@ serve(async (req) => {
     const loginCustomerId = String((companyRow as any)?.google_ads_login_customer_id ?? '').replace(/\\D/g, '');
 
     const accessToken = await getGoogleAccessToken();
-    const url = `https://googleads.googleapis.com/v${encodeURIComponent(GOOGLE_ADS_API_VERSION)}/customers/${encodeURIComponent(customerId)}/googleAds:search`;
+    const url = `https://googleads.googleapis.com/v${encodeURIComponent(GOOGLE_ADS_API_VERSION)}/customers/${encodeURIComponent(
+      customerId,
+    )}/googleAds:search`;
 
     const query =
       "SELECT conversion_action.id, conversion_action.resource_name, conversion_action.name, conversion_action.status, conversion_action.type, conversion_action.category FROM conversion_action WHERE conversion_action.status != 'REMOVED' ORDER BY conversion_action.name";
 
-    const headers: Record<string, string> = {
-      'content-type': 'application/json',
-      authorization: `Bearer ${accessToken}`,
-      'developer-token': GOOGLE_ADS_DEVELOPER_TOKEN,
-    };
     const loginId = loginCustomerId || GOOGLE_ADS_LOGIN_CUSTOMER_ID;
-    if (loginId) headers['login-customer-id'] = loginId;
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({ query, page_size: 1000 }),
-    });
-    const text = await res.text().catch(() => '');
-    if (!res.ok) return jsonResponse(502, { ok: false, error: `Google Ads API error: HTTP ${res.status}`, raw: text });
+    const callAdsApi = async (withLoginCustomer: boolean) => {
+      const headers: Record<string, string> = {
+        'content-type': 'application/json',
+        authorization: `Bearer ${accessToken}`,
+        'developer-token': GOOGLE_ADS_DEVELOPER_TOKEN,
+      };
+      if (withLoginCustomer && loginId) headers['login-customer-id'] = String(loginId).replace(/\\D/g, '');
+      const res = await fetch(url, {
+        method: 'POST',
+        headers,
+        // Google Ads REST uses camelCase
+        body: JSON.stringify({ query, pageSize: 1000 }),
+      });
+      const text = await res.text().catch(() => '');
+      return { res, text };
+    };
 
-    const json = JSON.parse(text);
+    let attempt = await callAdsApi(true);
+    if (!attempt.res.ok && loginId && (attempt.res.status === 400 || attempt.res.status === 403)) {
+      // Some accounts fail when a wrong MCC is forced; retry without login-customer-id.
+      attempt = await callAdsApi(false);
+    }
+
+    if (!attempt.res.ok) {
+      const parsed = tryParseJson(attempt.text);
+      const message =
+        parsed?.error?.message ||
+        parsed?.error?.details?.[0]?.message ||
+        parsed?.error?.details?.[0]?.description ||
+        attempt.text;
+      return jsonResponse(502, {
+        ok: false,
+        error: `Google Ads API error: HTTP ${attempt.res.status}`,
+        details: typeof message === 'string' ? message : attempt.text,
+        raw: attempt.text,
+      });
+    }
+
+    const json = JSON.parse(attempt.text);
     const results: any[] = Array.isArray(json?.results) ? json.results : [];
     const actions: ActionRow[] = results
       .map((r) => r?.conversionAction ?? r?.conversion_action ?? null)

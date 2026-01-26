@@ -118,6 +118,14 @@ type CustomerRow = {
   time_zone: string | null;
 };
 
+function tryParseJson(text: string): any | null {
+  try {
+    return text ? JSON.parse(text) : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseCustomerId(resourceName: string): string {
   const match = resourceName.match(/customers\/(\d+)/);
   return match?.[1] ?? '';
@@ -164,7 +172,8 @@ async function listViaMccCustomerClient(accessToken: string, loginCustomerId: st
       'developer-token': GOOGLE_ADS_DEVELOPER_TOKEN,
       'login-customer-id': loginCustomerId,
     },
-    body: JSON.stringify({ query, page_size: 1000 }),
+    // Google Ads REST uses camelCase
+    body: JSON.stringify({ query, pageSize: 1000 }),
   });
   const text = await res.text().catch(() => '');
   if (!res.ok) throw new Error(`Google Ads API error: HTTP ${res.status} ${text}`);
@@ -183,6 +192,73 @@ async function listViaMccCustomerClient(accessToken: string, loginCustomerId: st
       time_zone: c?.timeZone ? String(c.timeZone) : c?.time_zone ? String(c.time_zone) : null,
     }))
     .filter((c: any) => c.id);
+}
+
+async function enrichAccessibleCustomers(
+  accessToken: string,
+  customers: CustomerRow[],
+  loginCustomerId: string | null,
+): Promise<CustomerRow[]> {
+  const concurrency = 6;
+  const queue = [...customers];
+  const out: CustomerRow[] = [];
+
+  const worker = async () => {
+    while (queue.length) {
+      const next = queue.shift();
+      if (!next) return;
+
+      const customerId = String(next.id || '').replace(/\D/g, '');
+      if (!customerId) {
+        out.push(next);
+        continue;
+      }
+
+      const url = `https://googleads.googleapis.com/v${encodeURIComponent(GOOGLE_ADS_API_VERSION)}/customers/${encodeURIComponent(
+        customerId,
+      )}/googleAds:search`;
+      const query = 'SELECT customer.descriptive_name, customer.currency_code, customer.time_zone FROM customer LIMIT 1';
+
+      const callOnce = async (withLoginHeader: boolean) => {
+        const headers: Record<string, string> = {
+          'content-type': 'application/json',
+          authorization: `Bearer ${accessToken}`,
+          'developer-token': GOOGLE_ADS_DEVELOPER_TOKEN,
+        };
+        if (withLoginHeader && loginCustomerId) headers['login-customer-id'] = loginCustomerId;
+        const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ query, pageSize: 1 }) });
+        const text = await res.text().catch(() => '');
+        return { res, text };
+      };
+
+      let attempt = await callOnce(true);
+      if (!attempt.res.ok && loginCustomerId && (attempt.res.status === 400 || attempt.res.status === 403)) {
+        attempt = await callOnce(false);
+      }
+
+      if (!attempt.res.ok) {
+        out.push(next);
+        continue;
+      }
+
+      const json = tryParseJson(attempt.text);
+      const first = Array.isArray(json?.results) ? json.results[0] : null;
+      const c = first?.customer ?? null;
+
+      out.push({
+        ...next,
+        descriptive_name: c?.descriptiveName ? String(c.descriptiveName) : c?.descriptive_name ? String(c.descriptive_name) : next.descriptive_name,
+        currency_code: c?.currencyCode ? String(c.currencyCode) : c?.currency_code ? String(c.currency_code) : next.currency_code,
+        time_zone: c?.timeZone ? String(c.timeZone) : c?.time_zone ? String(c.time_zone) : next.time_zone,
+      });
+    }
+  };
+
+  const workers = Array.from({ length: concurrency }, () => worker());
+  await Promise.all(workers);
+
+  const byId = new Map(out.map((c) => [c.id, c]));
+  return customers.map((c) => byId.get(c.id) ?? c);
 }
 
 serve(async (req) => {
@@ -225,6 +301,13 @@ serve(async (req) => {
       customers = [];
     }
     if (customers.length === 0) customers = await listViaAccessibleCustomers(accessToken);
+    if (customers.length && customers.every((c) => !c.descriptive_name)) {
+      try {
+        customers = await enrichAccessibleCustomers(accessToken, customers, loginId || null);
+      } catch (_e) {
+        // ignore
+      }
+    }
 
     return jsonResponse(200, { ok: true, customers });
   } catch (e: any) {
