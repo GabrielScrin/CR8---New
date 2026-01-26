@@ -130,12 +130,12 @@ const ModalShell = ({
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onMouseDown={onClose}>
       <div
-        className={`w-full ${maxWidthClassName} cr8-card p-5`}
+        className={`w-full ${maxWidthClassName} cr8-card p-5 max-h-[calc(100vh-3rem)] overflow-hidden flex flex-col`}
         onMouseDown={(e) => {
           e.stopPropagation();
         }}
       >
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between shrink-0">
           <div className="text-lg font-semibold text-[hsl(var(--foreground))]">{title}</div>
           <button
             type="button"
@@ -145,7 +145,7 @@ const ModalShell = ({
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="mt-4">{children}</div>
+        <div className="mt-4 min-h-0 overflow-y-auto pr-2">{children}</div>
       </div>
     </div>,
     document.body
@@ -1884,7 +1884,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                     key={r}
                     type="button"
                     onClick={() => setInviteDraftRole(r)}
-                    className={`text-left rounded-2xl border p-4 transition ${
+                    className={`group text-left rounded-2xl border p-4 transition ${
                       selected
                         ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary))]/10 ring-1 ring-[hsl(var(--primary))]/30'
                         : 'border-[hsl(var(--border))] bg-[hsl(var(--secondary))] hover:bg-[hsl(var(--accent))]'
@@ -1899,7 +1899,15 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                           <div className="text-sm font-semibold text-[hsl(var(--foreground))]">{meta.label}</div>
                           {selected ? <div className="h-2 w-2 rounded-full bg-[hsl(var(--primary))]" /> : null}
                         </div>
-                        <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{meta.description}</div>
+                        <div
+                          className={`mt-1 text-xs ${
+                            selected
+                              ? 'text-[hsl(var(--foreground))]/80'
+                              : 'text-[hsl(var(--muted-foreground))] group-hover:text-[hsl(var(--foreground))]/80'
+                          }`}
+                        >
+                          {meta.description}
+                        </div>
                       </div>
                     </div>
                   </button>
