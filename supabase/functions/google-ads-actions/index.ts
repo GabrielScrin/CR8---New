@@ -185,8 +185,9 @@ serve(async (req) => {
       const res = await fetch(url, {
         method: 'POST',
         headers,
-        // Google Ads REST uses camelCase
-        body: JSON.stringify({ query, pageSize: 1000 }),
+        // NOTE: pageSize is deprecated and errors on recent Google Ads API versions.
+        // Use query LIMIT / pageToken paging if needed.
+        body: JSON.stringify({ query }),
       });
       const text = await res.text().catch(() => '');
       return { res, text };

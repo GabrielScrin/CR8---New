@@ -172,8 +172,8 @@ async function listViaMccCustomerClient(accessToken: string, loginCustomerId: st
       'developer-token': GOOGLE_ADS_DEVELOPER_TOKEN,
       'login-customer-id': loginCustomerId,
     },
-    // Google Ads REST uses camelCase
-    body: JSON.stringify({ query, pageSize: 1000 }),
+    // NOTE: pageSize is deprecated and errors on recent Google Ads API versions.
+    body: JSON.stringify({ query }),
   });
   const text = await res.text().catch(() => '');
   if (!res.ok) throw new Error(`Google Ads API error: HTTP ${res.status} ${text}`);
@@ -226,7 +226,7 @@ async function enrichAccessibleCustomers(
           'developer-token': GOOGLE_ADS_DEVELOPER_TOKEN,
         };
         if (withLoginHeader && loginCustomerId) headers['login-customer-id'] = loginCustomerId;
-        const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ query, pageSize: 1 }) });
+        const res = await fetch(url, { method: 'POST', headers, body: JSON.stringify({ query }) });
         const text = await res.text().catch(() => '');
         return { res, text };
       };
