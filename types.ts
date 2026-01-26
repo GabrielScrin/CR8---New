@@ -1,4 +1,35 @@
-export type Role = 'admin' | 'gestor' | 'empresa' | 'vendedor';
+// Role model (RBAC)
+// - Current product roles: admin | gestor | vendedor | cliente
+// - Legacy alias kept for backward compatibility: empresa -> cliente
+export type Role = 'admin' | 'gestor' | 'vendedor' | 'cliente' | 'empresa';
+
+export const normalizeRole = (role: unknown): Role => {
+  const r = String(role ?? '').toLowerCase().trim();
+  if (r === 'empresa') return 'cliente';
+  if (r === 'cliente') return 'cliente';
+  if (r === 'admin') return 'admin';
+  if (r === 'gestor') return 'gestor';
+  if (r === 'vendedor') return 'vendedor';
+  return 'gestor';
+};
+
+export const isClientRole = (role: Role | null | undefined) => role === 'cliente' || role === 'empresa';
+
+export const labelRolePt = (role: Role) => {
+  const r = normalizeRole(role);
+  switch (r) {
+    case 'admin':
+      return 'Admin';
+    case 'gestor':
+      return 'Gestor';
+    case 'vendedor':
+      return 'Vendedor';
+    case 'cliente':
+      return 'Cliente';
+    default:
+      return 'Gestor';
+  }
+};
 
 export interface User {
   id: string;

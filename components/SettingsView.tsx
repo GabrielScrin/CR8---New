@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CalendarClock, RefreshCw, Save, Trash2, UserPlus, Send } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { CalendarClock, RefreshCw, Save, Trash2, UserPlus, Send, Copy, Link2, X, Crown, Sparkles, Briefcase, Mail } from 'lucide-react';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
-import { Role } from '../types';
+import { Role, labelRolePt, normalizeRole } from '../types';
 
 type CompanyRow = {
   id: string;
@@ -35,10 +36,13 @@ type CompanyMemberRow = {
 
 type CompanyInviteRow = {
   id: string;
-  email: string;
+  email: string | null;
   member_role: Role;
   created_at: string;
   accepted_at: string | null;
+  token?: string | null;
+  expires_at?: string | null;
+  used_at?: string | null;
 };
 
 type WeeklyReportRow = {
@@ -79,9 +83,79 @@ type AuditEventRow = {
   created_at: string;
 };
 
-export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ companyId, role }) => {
+const ROLE_META: Record<
+  'admin' | 'gestor' | 'vendedor' | 'cliente',
+  { label: string; description: string; Icon: React.ComponentType<{ className?: string }>; badgeClass: string }
+> = {
+  admin: {
+    label: 'Admin',
+    description: 'Acesso total, configurações e gestão de usuários.',
+    Icon: Crown,
+    badgeClass: 'bg-amber-500/15 text-amber-200 border-amber-500/30',
+  },
+  gestor: {
+    label: 'Gestor de Tráfego',
+    description: 'Acesso operacional e dados de mídia desta empresa.',
+    Icon: Sparkles,
+    badgeClass: 'bg-cyan-500/15 text-cyan-200 border-cyan-500/30',
+  },
+  vendedor: {
+    label: 'Vendedor',
+    description: 'Foco em pipeline e atendimento (CRM/WhatsApp) desta empresa.',
+    Icon: Briefcase,
+    badgeClass: 'bg-[hsl(var(--primary))]/15 text-[hsl(var(--primary-foreground))] border-[hsl(var(--primary))]/30',
+  },
+  cliente: {
+    label: 'Cliente',
+    description: 'Acesso limitado ao dashboard e resultados (somente leitura).',
+    Icon: Mail,
+    badgeClass: 'bg-emerald-500/15 text-emerald-200 border-emerald-500/30',
+  },
+};
+
+const ModalShell = ({
+  title,
+  open,
+  onClose,
+  maxWidthClassName = 'max-w-2xl',
+  children,
+}: {
+  title: string;
+  open: boolean;
+  onClose: () => void;
+  maxWidthClassName?: string;
+  children: React.ReactNode;
+}) => {
+  if (!open) return null;
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onMouseDown={onClose}>
+      <div
+        className={`w-full ${maxWidthClassName} cr8-card p-5`}
+        onMouseDown={(e) => {
+          e.stopPropagation();
+        }}
+      >
+        <div className="flex items-center justify-between">
+          <div className="text-lg font-semibold text-[hsl(var(--foreground))]">{title}</div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-2 py-1 rounded-md text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))]"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mt-4">{children}</div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: string }> = ({ companyId, role, userId }) => {
   const readOnlyMode = !isSupabaseConfigured();
   const canEditCompany = useMemo(() => role === 'admin' || role === 'gestor', [role]);
+  const canManageIdentity = useMemo(() => normalizeRole(role) === 'admin', [role]);
 
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -112,8 +186,23 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
   const [membersError, setMembersError] = useState<string | null>(null);
   const [members, setMembers] = useState<CompanyMemberRow[]>([]);
   const [invites, setInvites] = useState<CompanyInviteRow[]>([]);
-  const [inviteEmail, setInviteEmail] = useState('');
-  const [inviteRole, setInviteRole] = useState<Role>('empresa');
+  const [inviteModalOpen, setInviteModalOpen] = useState(false);
+  const [inviteModalBusy, setInviteModalBusy] = useState(false);
+  const [inviteModalOk, setInviteModalOk] = useState<string | null>(null);
+  const [inviteModalError, setInviteModalError] = useState<string | null>(null);
+  const [inviteDraftRole, setInviteDraftRole] = useState<Role>('gestor');
+  const [inviteDraftEmail, setInviteDraftEmail] = useState('');
+  const [inviteDraftExpiryDays, setInviteDraftExpiryDays] = useState<number>(30); // <=0 means never
+  const [inviteLastLink, setInviteLastLink] = useState<string | null>(null);
+  const [confirmDialog, setConfirmDialog] = useState<
+    | null
+    | {
+        title: string;
+        message: string;
+        kind: 'revoke_invite' | 'remove_member';
+        id: string;
+      }
+  >(null);
 
   const [weeklyLoading, setWeeklyLoading] = useState(false);
   const [weeklyError, setWeeklyError] = useState<string | null>(null);
@@ -420,7 +509,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
   };
 
   const refreshMembersAndInvites = async () => {
-    if (readOnlyMode || !companyId || !canEditCompany) {
+    if (readOnlyMode || !companyId || !canManageIdentity) {
       setMembers([]);
       setInvites([]);
       setMembersError(null);
@@ -433,7 +522,11 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
     try {
       const [{ data: membersData, error: membersErr }, { data: invitesData, error: invitesErr }] = await Promise.all([
         supabase.rpc('list_company_members', { p_company_id: companyId }),
-        supabase.from('company_invites').select('id,email,member_role,created_at,accepted_at').eq('company_id', companyId).order('created_at', { ascending: false }),
+        supabase
+          .from('company_invites')
+          .select('id,email,member_role,created_at,accepted_at,token,expires_at,used_at')
+          .eq('company_id', companyId)
+          .order('created_at', { ascending: false }),
       ]);
 
       const inviteMsg = String(invitesErr?.message ?? '').toLowerCase();
@@ -464,7 +557,26 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
   useEffect(() => {
     void refreshMembersAndInvites();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [companyId, readOnlyMode, canEditCompany]);
+  }, [companyId, readOnlyMode, canManageIdentity]);
+
+  const buildJoinLink = (token: string) => `${window.location.origin}/join?token=${encodeURIComponent(token)}`;
+
+  const copyText = async (value: string) => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setInviteModalOk('Link copiado!');
+    } catch {
+      setInviteModalOk('Copie manualmente (seu navegador bloqueou o clipboard).');
+    }
+  };
+
+  const openInviteModal = async () => {
+    setInviteModalOk(null);
+    setInviteModalError(null);
+    setInviteLastLink(null);
+    setInviteModalOpen(true);
+    await refreshMembersAndInvites();
+  };
 
   const refreshWeeklyReports = async () => {
     if (readOnlyMode || !companyId) {
@@ -727,57 +839,60 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
     }
   };
 
-  const createInvite = async () => {
+  const createInviteLink = async () => {
     if (!companyId) return;
-    if (!canEditCompany) return;
+    if (!canManageIdentity) return;
 
-    setSaving(true);
-    setError(null);
-    setOk(null);
+    setInviteModalBusy(true);
+    setInviteModalError(null);
+    setInviteModalOk(null);
+    setInviteLastLink(null);
     try {
-      const email = inviteEmail.trim();
-      if (!email) throw new Error('Informe um e-mail.');
+      const roleToInvite = normalizeRole(inviteDraftRole);
+      const expiresInDays = Number(inviteDraftExpiryDays);
+      const email = inviteDraftEmail.trim() ? inviteDraftEmail.trim().toLowerCase() : null;
 
-      const { error: rpcErr } = await supabase.rpc('create_company_invite', {
+      const { data, error: rpcErr } = await supabase.rpc('create_company_invite_link', {
         p_company_id: companyId,
+        p_member_role: roleToInvite,
+        p_expires_in_days: expiresInDays,
         p_email: email,
-        p_member_role: inviteRole,
       });
       if (rpcErr) throw rpcErr;
 
-      setInviteEmail('');
-      setInviteRole('empresa');
+      const row = (data as any)?.[0];
+      const token = row?.token ? String(row.token) : null;
+      if (!token) throw new Error('Falha ao gerar token do convite.');
+
+      const link = buildJoinLink(token);
+      setInviteLastLink(link);
+      await copyText(link);
       await refreshMembersAndInvites();
-      setOk('Convite criado.');
     } catch (e: any) {
-      setError(e?.message ?? 'Falha ao criar convite.');
+      setInviteModalError(e?.message ?? 'Falha ao gerar convite.');
     } finally {
-      setSaving(false);
+      setInviteModalBusy(false);
     }
   };
 
   const revokeInvite = async (inviteId: string) => {
     if (!companyId) return;
-    if (!canEditCompany) return;
-
-    setSaving(true);
-    setError(null);
-    setOk(null);
-    try {
-      const { error: rpcErr } = await supabase.rpc('revoke_company_invite', { p_invite_id: inviteId });
-      if (rpcErr) throw rpcErr;
-      await refreshMembersAndInvites();
-      setOk('Convite removido.');
-    } catch (e: any) {
-      setError(e?.message ?? 'Falha ao remover convite.');
-    } finally {
-      setSaving(false);
-    }
+    if (!canManageIdentity) return;
+    setConfirmDialog({
+      title: 'Revogar convite',
+      message: 'Este link deixará de funcionar imediatamente.',
+      kind: 'revoke_invite',
+      id: inviteId,
+    });
   };
 
-  const updateMemberRole = async (userId: string, nextRole: Role) => {
+  const updateMemberRole = async (targetUserId: string, nextRole: Role) => {
     if (!companyId) return;
-    if (!canEditCompany) return;
+    if (!canManageIdentity) return;
+    if (userId && targetUserId === userId) {
+      setError('Você não pode alterar seu próprio perfil.');
+      return;
+    }
 
     setSaving(true);
     setError(null);
@@ -785,8 +900,8 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
     try {
       const { error: rpcErr } = await supabase.rpc('set_company_member_role', {
         p_company_id: companyId,
-        p_user_id: userId,
-        p_member_role: nextRole,
+        p_user_id: targetUserId,
+        p_member_role: normalizeRole(nextRole),
       });
       if (rpcErr) throw rpcErr;
       await refreshMembersAndInvites();
@@ -798,22 +913,45 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
     }
   };
 
-  const removeMember = async (userId: string) => {
+  const removeMember = async (targetUserId: string) => {
     if (!companyId) return;
-    if (!canEditCompany) return;
+    if (!canManageIdentity) return;
+    if (userId && targetUserId === userId) {
+      setError('Você não pode remover a si mesmo.');
+      return;
+    }
+    setConfirmDialog({
+      title: 'Remover membro',
+      message: 'Este usuário perderá acesso a esta empresa.',
+      kind: 'remove_member',
+      id: targetUserId,
+    });
+  };
+
+  const runConfirmAction = async () => {
+    if (!companyId) return;
+    if (!canManageIdentity) return;
+    if (!confirmDialog) return;
 
     setSaving(true);
     setError(null);
     setOk(null);
     try {
-      const { error: rpcErr } = await supabase.rpc('remove_company_member', { p_company_id: companyId, p_user_id: userId });
-      if (rpcErr) throw rpcErr;
+      if (confirmDialog.kind === 'revoke_invite') {
+        const { error: rpcErr } = await supabase.rpc('revoke_company_invite', { p_invite_id: confirmDialog.id });
+        if (rpcErr) throw rpcErr;
+        setOk('Convite revogado.');
+      } else if (confirmDialog.kind === 'remove_member') {
+        const { error: rpcErr } = await supabase.rpc('remove_company_member', { p_company_id: companyId, p_user_id: confirmDialog.id });
+        if (rpcErr) throw rpcErr;
+        setOk('Membro removido.');
+      }
       await refreshMembersAndInvites();
-      setOk('Membro removido.');
     } catch (e: any) {
-      setError(e?.message ?? 'Falha ao remover membro.');
+      setError(e?.message ?? 'Falha na ação.');
     } finally {
       setSaving(false);
+      setConfirmDialog(null);
     }
   };
 
@@ -1526,186 +1664,362 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role }> = ({ com
 
       {canEditCompany && (
         <div className="cr8-card p-6 space-y-4">
-          <div>
-            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Membros</h2>
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">Convide equipe e clientes para acessar esta empresa.</p>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Equipe</h2>
+              <p className="text-xs text-[hsl(var(--muted-foreground))]">
+                Permissões por empresa (multi-tenant). Admin gerencia convites e membros.
+              </p>
+            </div>
+
+            {canManageIdentity ? (
+              <button
+                type="button"
+                onClick={() => void openInviteModal()}
+                className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-[hsl(var(--primary-foreground))] hover:opacity-90"
+              >
+                <Link2 className="h-4 w-4" />
+                Convidar
+              </button>
+            ) : null}
           </div>
 
           {membersError && <div className="text-sm text-[hsl(var(--destructive))]">{membersError}</div>}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-            <div>
-              <label className="block text-sm font-medium text-[hsl(var(--foreground))]">E-mail</label>
-              <input
-                value={inviteEmail}
-                onChange={(e) => setInviteEmail(e.target.value)}
-                disabled={saving}
-                placeholder="cliente@empresa.com"
-                className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-              />
+          {!canManageIdentity ? (
+            <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-4 text-sm text-[hsl(var(--muted-foreground))]">
+              Somente <span className="text-[hsl(var(--foreground))] font-semibold">admins</span> podem convidar, remover e alterar perfis.
             </div>
+          ) : null}
 
-            <div>
-              <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Perfil</label>
-              <select
-                value={inviteRole}
-                onChange={(e) => setInviteRole(e.target.value as Role)}
-                disabled={saving}
-                className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-              >
-                <option value="empresa">Cliente (empresa)</option>
-                <option value="vendedor">Vendedor</option>
-                <option value="gestor">Gestor</option>
-                <option value="admin">Admin</option>
-              </select>
-            </div>
-
-            <button
-              onClick={() => void createInvite()}
-              disabled={saving || !inviteEmail.trim()}
-              className="h-10 inline-flex items-center justify-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-4 text-sm font-semibold text-[hsl(var(--primary-foreground))] hover:opacity-90 disabled:opacity-60"
-            >
-              <UserPlus className="h-4 w-4" /> Convidar
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Membros atuais</div>
-              <div className="rounded-lg border border-[hsl(var(--border))] overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-[hsl(var(--secondary))]">
-                    <tr className="text-left text-[hsl(var(--muted-foreground))]">
-                      <th className="px-3 py-2">Usuário</th>
-                      <th className="px-3 py-2">Perfil</th>
-                      <th className="px-3 py-2 text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {membersLoading ? (
-                      <tr>
-                        <td className="px-3 py-3 text-[hsl(var(--muted-foreground))]" colSpan={3}>
-                          Carregando...
-                        </td>
+          {canManageIdentity ? (
+            <div className="grid grid-cols-1 gap-6">
+              <div className="space-y-2">
+                <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Membros atuais</div>
+                <div className="rounded-lg border border-[hsl(var(--border))] overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-[hsl(var(--secondary))]">
+                      <tr className="text-left text-[hsl(var(--muted-foreground))]">
+                        <th className="px-3 py-2">Usuário</th>
+                        <th className="px-3 py-2">Perfil</th>
+                        <th className="px-3 py-2 text-right">Ações</th>
                       </tr>
-                    ) : members.length === 0 ? (
-                      <tr>
-                        <td className="px-3 py-3 text-[hsl(var(--muted-foreground))]" colSpan={3}>
-                          Nenhum membro encontrado.
-                        </td>
-                      </tr>
-                    ) : (
-                      members.map((m) => (
-                        <tr key={m.user_id} className="border-t border-[hsl(var(--border))]">
-                          <td className="px-3 py-2">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <img
-                                src={m.avatar_url ?? 'https://via.placeholder.com/32'}
-                                alt={m.full_name ?? m.email ?? 'user'}
-                                className="h-7 w-7 rounded-full bg-[hsl(var(--muted))]"
-                              />
-                              <div className="min-w-0">
-                                <div className="text-[hsl(var(--foreground))] truncate">{m.full_name ?? '(sem nome)'}</div>
-                                <div className="text-xs text-[hsl(var(--muted-foreground))] truncate">{m.email ?? ''}</div>
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2">
-                            <select
-                              value={m.member_role}
-                              onChange={(e) => void updateMemberRole(m.user_id, e.target.value as Role)}
-                              disabled={saving}
-                              className="rounded-md bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-2 py-1 text-sm text-[hsl(var(--foreground))]"
-                            >
-                              <option value="empresa">empresa</option>
-                              <option value="vendedor">vendedor</option>
-                              <option value="gestor">gestor</option>
-                              <option value="admin">admin</option>
-                            </select>
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            <button
-                              onClick={() => void removeMember(m.user_id)}
-                              disabled={saving}
-                              className="inline-flex items-center gap-2 rounded-md border border-[hsl(var(--border))] px-3 py-1.5 text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] disabled:opacity-60"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                              Remover
-                            </button>
+                    </thead>
+                    <tbody>
+                      {membersLoading ? (
+                        <tr>
+                          <td className="px-3 py-3 text-[hsl(var(--muted-foreground))]" colSpan={3}>
+                            Carregando...
                           </td>
                         </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-[11px] text-[hsl(var(--muted-foreground))]">O perfil é por empresa (multi-tenancy).</p>
-            </div>
-
-            <div className="space-y-2">
-              <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Convites</div>
-              <div className="rounded-lg border border-[hsl(var(--border))] overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-[hsl(var(--secondary))]">
-                    <tr className="text-left text-[hsl(var(--muted-foreground))]">
-                      <th className="px-3 py-2">E-mail</th>
-                      <th className="px-3 py-2">Perfil</th>
-                      <th className="px-3 py-2">Status</th>
-                      <th className="px-3 py-2 text-right">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {membersLoading ? (
-                      <tr>
-                        <td className="px-3 py-3 text-[hsl(var(--muted-foreground))]" colSpan={4}>
-                          Carregando...
-                        </td>
-                      </tr>
-                    ) : invites.length === 0 ? (
-                      <tr>
-                        <td className="px-3 py-3 text-[hsl(var(--muted-foreground))]" colSpan={4}>
-                          Nenhum convite.
-                        </td>
-                      </tr>
-                    ) : (
-                      invites.map((i) => (
-                        <tr key={i.id} className="border-t border-[hsl(var(--border))]">
-                          <td className="px-3 py-2 text-[hsl(var(--foreground))]">{i.email}</td>
-                          <td className="px-3 py-2 text-[hsl(var(--foreground))]">{i.member_role}</td>
-                          <td className="px-3 py-2">
-                            {i.accepted_at ? (
-                              <span className="text-emerald-300 text-xs">aceito</span>
-                            ) : (
-                              <span className="text-[hsl(var(--muted-foreground))] text-xs">pendente</span>
-                            )}
+                      ) : members.length === 0 ? (
+                        <tr>
+                          <td className="px-3 py-3 text-[hsl(var(--muted-foreground))]" colSpan={3}>
+                            Nenhum membro encontrado.
                           </td>
-                          <td className="px-3 py-2 text-right">
-                            {!i.accepted_at ? (
+                        </tr>
+                      ) : (
+                        members.map((m) => (
+                          <tr key={m.user_id} className="border-t border-[hsl(var(--border))]">
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <img
+                                  src={m.avatar_url ?? 'https://via.placeholder.com/32'}
+                                  alt={m.full_name ?? m.email ?? 'user'}
+                                  className="h-7 w-7 rounded-full bg-[hsl(var(--muted))]"
+                                />
+                                <div className="min-w-0">
+                                  <div className="text-[hsl(var(--foreground))] truncate">
+                                    {m.full_name ?? '(sem nome)'}
+                                    {userId && m.user_id === userId ? (
+                                      <span className="ml-2 rounded border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] px-1.5 py-0.5 text-[10px] text-[hsl(var(--muted-foreground))]">
+                                        você
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <div className="text-xs text-[hsl(var(--muted-foreground))] truncate">{m.email ?? ''}</div>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <select
+                                value={normalizeRole(m.member_role)}
+                                onChange={(e) => void updateMemberRole(m.user_id, e.target.value as Role)}
+                                disabled={saving || (userId && m.user_id === userId)}
+                                className="rounded-md bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-2 py-1 text-sm text-[hsl(var(--foreground))]"
+                              >
+                                <option value="cliente">cliente</option>
+                                <option value="vendedor">vendedor</option>
+                                <option value="gestor">gestor</option>
+                                <option value="admin">admin</option>
+                              </select>
+                            </td>
+                            <td className="px-3 py-2 text-right">
                               <button
-                                onClick={() => void revokeInvite(i.id)}
-                                disabled={saving}
+                                onClick={() => void removeMember(m.user_id)}
+                                disabled={saving || (userId && m.user_id === userId)}
                                 className="inline-flex items-center gap-2 rounded-md border border-[hsl(var(--border))] px-3 py-1.5 text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] disabled:opacity-60"
                               >
                                 <Trash2 className="h-4 w-4" />
-                                Revogar
+                                Remover
                               </button>
-                            ) : (
-                              <span className="text-xs text-[hsl(var(--muted-foreground))]">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="text-[11px] text-[hsl(var(--muted-foreground))]">O perfil é por empresa (multi-tenancy).</p>
               </div>
-              <p className="text-[11px] text-[hsl(var(--muted-foreground))]">
-                Se o usuário já existir, o convite é aceito automaticamente. Caso contrário, será aceito no primeiro login.
-              </p>
             </div>
-          </div>
+          ) : null}
         </div>
       )}
+
+      <ModalShell title="Gerar convite" open={inviteModalOpen} onClose={() => setInviteModalOpen(false)} maxWidthClassName="max-w-xl">
+        <div className="space-y-5">
+          <div className="text-sm text-[hsl(var(--muted-foreground))]">Crie links de acesso para sua equipe.</div>
+
+          {inviteModalError ? (
+            <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{inviteModalError}</div>
+          ) : null}
+          {inviteModalOk ? (
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-200">
+              {inviteModalOk}
+            </div>
+          ) : null}
+
+          <div className="space-y-2">
+            <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Links ativos</div>
+            <div className="space-y-2">
+              {(() => {
+                const now = Date.now();
+                const activeInvites = invites.filter((i) => {
+                  if (i.used_at || i.accepted_at) return false;
+                  if (i.expires_at) {
+                    const exp = new Date(i.expires_at).getTime();
+                    if (!Number.isFinite(exp) || exp <= now) return false;
+                  }
+                  return true;
+                });
+
+                if (membersLoading) {
+                  return (
+                    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-4 text-sm text-[hsl(var(--muted-foreground))]">
+                      Carregando convites...
+                    </div>
+                  );
+                }
+
+                if (activeInvites.length === 0) {
+                  return (
+                    <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-4 text-sm text-[hsl(var(--muted-foreground))]">
+                      Nenhum link ativo.
+                    </div>
+                  );
+                }
+
+                return activeInvites.slice(0, 10).map((inv) => {
+                  const r = normalizeRole(inv.member_role);
+                  const meta = ROLE_META[r];
+                  const token = inv.token ? String(inv.token) : '';
+                  const tokenTail = token ? token.slice(-8) : '????????';
+                  const expiresText = inv.expires_at ? new Date(inv.expires_at).toLocaleString('pt-BR') : 'Nunca expira';
+
+                  return (
+                    <div
+                      key={inv.id}
+                      className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] px-4 py-3 flex items-center justify-between gap-3"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className={`inline-flex items-center gap-1 rounded-lg border px-2 py-1 text-xs ${meta.badgeClass}`}>
+                            <meta.Icon className="h-3.5 w-3.5" />
+                            {meta.label}
+                          </span>
+                          <span className="text-xs text-[hsl(var(--muted-foreground))]">{expiresText}</span>
+                        </div>
+                        <div className="mt-1 font-mono text-sm text-[hsl(var(--foreground))] truncate">...{tokenTail}</div>
+                        {inv.email ? (
+                          <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))] truncate">{inv.email}</div>
+                        ) : null}
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => void copyText(buildJoinLink(token))}
+                          disabled={!token}
+                          className="inline-flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-2 text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))] disabled:opacity-50"
+                          title="Copiar link"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => void revokeInvite(inv.id)}
+                          disabled={inviteModalBusy}
+                          className="inline-flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200 hover:bg-rose-500/15 disabled:opacity-50"
+                          title="Revogar"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Cargo</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(['vendedor', 'gestor', 'cliente', 'admin'] as const).map((r) => {
+                const meta = ROLE_META[r];
+                const selected = normalizeRole(inviteDraftRole) === r;
+                return (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setInviteDraftRole(r)}
+                    className={`text-left rounded-2xl border p-4 transition ${
+                      selected
+                        ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary))]/10 ring-1 ring-[hsl(var(--primary))]/30'
+                        : 'border-[hsl(var(--border))] bg-[hsl(var(--secondary))] hover:bg-[hsl(var(--accent))]'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className={`mt-0.5 rounded-xl border px-2 py-2 ${meta.badgeClass}`}>
+                        <meta.Icon className="h-4 w-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="text-sm font-semibold text-[hsl(var(--foreground))]">{meta.label}</div>
+                          {selected ? <div className="h-2 w-2 rounded-full bg-[hsl(var(--primary))]" /> : null}
+                        </div>
+                        <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{meta.description}</div>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Expiração</div>
+            <div className="grid grid-cols-3 gap-3">
+              {[
+                { label: '7 dias', days: 7 },
+                { label: '30 dias', days: 30 },
+                { label: 'Nunca', days: 0 },
+              ].map((opt) => {
+                const selected = Number(inviteDraftExpiryDays) === opt.days;
+                return (
+                  <button
+                    key={opt.label}
+                    type="button"
+                    onClick={() => setInviteDraftExpiryDays(opt.days)}
+                    className={`rounded-xl border px-3 py-2 text-sm font-semibold transition ${
+                      selected
+                        ? 'border-[hsl(var(--primary))] bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]'
+                        : 'border-[hsl(var(--border))] bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]'
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Email (opcional)</div>
+            <input
+              value={inviteDraftEmail}
+              onChange={(e) => setInviteDraftEmail(e.target.value)}
+              placeholder="Opcional (se preenchido, trava no /join)"
+              disabled={inviteModalBusy}
+              className="w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+            />
+          </div>
+
+          {inviteLastLink ? (
+            <div className="space-y-2">
+              <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Último link gerado</div>
+              <div className="flex items-center gap-2">
+                <input
+                  value={inviteLastLink}
+                  readOnly
+                  className="flex-1 rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                />
+                <button
+                  type="button"
+                  onClick={() => void copyText(inviteLastLink)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] px-3 py-2 text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]"
+                >
+                  <Copy className="h-4 w-4" />
+                  Copiar
+                </button>
+              </div>
+              <div className="text-xs text-[hsl(var(--muted-foreground))]">
+                Dica: este link contém um token secreto. Compartilhe apenas com quem deve entrar.
+              </div>
+            </div>
+          ) : null}
+
+          <div className="flex items-center justify-between gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setInviteModalOpen(false)}
+              className="inline-flex items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] px-4 py-2 text-sm font-semibold text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))]"
+            >
+              Fechar
+            </button>
+            <button
+              type="button"
+              onClick={() => void createInviteLink()}
+              disabled={inviteModalBusy}
+              className="inline-flex items-center gap-2 rounded-xl bg-[hsl(var(--primary))] px-5 py-2 text-sm font-semibold text-[hsl(var(--primary-foreground))] hover:opacity-90 disabled:opacity-60"
+            >
+              {inviteModalBusy ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />}
+              {inviteModalBusy ? 'Gerando...' : 'Gerar link'}
+            </button>
+          </div>
+        </div>
+      </ModalShell>
+
+      <ModalShell
+        title={confirmDialog?.title ?? 'Confirmar'}
+        open={Boolean(confirmDialog)}
+        onClose={() => setConfirmDialog(null)}
+        maxWidthClassName="max-w-md"
+      >
+        <div className="space-y-4">
+          <div className="text-sm text-[hsl(var(--muted-foreground))]">{confirmDialog?.message ?? ''}</div>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmDialog(null)}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] px-4 py-2 text-sm font-semibold text-[hsl(var(--foreground))] hover:bg-[hsl(var(--accent))] disabled:opacity-60"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => void runConfirmAction()}
+              disabled={saving}
+              className="inline-flex items-center gap-2 rounded-lg bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-500 disabled:opacity-60"
+            >
+              {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : null}
+              Confirmar
+            </button>
+          </div>
+        </div>
+      </ModalShell>
 
     </div>
   );

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
-import { User } from '../types';
+import { User, isClientRole } from '../types';
 import { Bell, Bot, ChevronDown } from 'lucide-react';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { loadLocalAiSettings } from '../lib/aiLocal';
@@ -110,7 +110,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
   const [companiesError, setCompaniesError] = useState<string | null>(null);
 
   const canUseAi = useMemo(() => isSupabaseConfigured() && Boolean(user.companyId), [user.companyId]);
-  const isClientPortal = useMemo(() => user.role === 'empresa', [user.role]);
+  const isClientPortal = useMemo(() => isClientRole(user.role), [user.role]);
   const selectedCompany = useMemo(() => companies.find((c) => c.id === user.companyId) ?? null, [companies, user.companyId]);
 
   useEffect(() => {

@@ -12,7 +12,8 @@ import { SettingsView } from './components/SettingsView';
 import { QuizForms } from './components/QuizForms';
 import { PublicQuiz } from './components/PublicQuiz';
 import { WhatsApp } from './components/WhatsApp';
-import { Role, User } from './types';
+import { Join } from './components/Join';
+import { Role, User, isClientRole, normalizeRole } from './types';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { loadSelectedCompanyId, saveSelectedCompanyId } from './lib/companySelection';
 
@@ -51,21 +52,33 @@ export default function App() {
     }
   })();
 
+  const joinToken = (() => {
+    try {
+      const path = (window.location.pathname || '').replace(/\/+$/, '');
+      if (path !== '/join') return null;
+      const qs = new URLSearchParams(window.location.search || '');
+      return qs.get('token');
+    } catch {
+      return null;
+    }
+  })();
+
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState('dashboard');
-  const [loadingSession, setLoadingSession] = useState(() => !publicQuizId);
+  const [loadingSession, setLoadingSession] = useState(() => !publicQuizId && !joinToken);
 
   // Keep hooks unconditional: enforce client-portal view restrictions via an effect,
   // even during the loading/login/setup renders.
   useEffect(() => {
     if (!user) return;
-    if (user.role !== 'empresa') return;
+    if (!isClientRole(user.role)) return;
     const allowed = new Set(['dashboard', 'traffic']);
     if (!allowed.has(currentView)) setCurrentView('dashboard');
   }, [currentView, user?.role]);
 
   useEffect(() => {
     if (publicQuizId) return;
+    if (joinToken) return;
     if (!isSupabaseConfigured()) {
       setLoadingSession(false);
       return;
@@ -117,7 +130,7 @@ export default function App() {
           name: profile?.full_name || fallback.name,
           avatar: profile?.avatar_url || fallback.avatar,
           // Role should be per-company (company_members.member_role), falling back to profile role for legacy paths.
-          role: companyRole || ((profile?.role as Role) || fallback.role),
+          role: normalizeRole(companyRole || (profile?.role as Role) || fallback.role),
           companyId,
         };
       } catch {
@@ -161,6 +174,8 @@ export default function App() {
   };
 
   if (publicQuizId) return <PublicQuiz publicId={publicQuizId} />;
+
+  if (joinToken) return <Join token={joinToken} />;
 
   if (loadingSession) return <LoadingScreen />;
 
@@ -220,7 +235,7 @@ export default function App() {
   const renderView = () => {
     switch (currentView) {
       case 'dashboard':
-        return <Dashboard companyId={user.companyId} variant={user.role === 'empresa' ? 'client' : 'agency'} />;
+        return <Dashboard companyId={user.companyId} variant={isClientRole(user.role) ? 'client' : 'agency'} />;
       case 'traffic':
         return <TrafficAnalytics companyId={user.companyId} />;
       case 'crm':
@@ -238,7 +253,7 @@ export default function App() {
       case 'ai':
         return <AIAgent companyId={user.companyId} userId={user.id} />;
       case 'settings':
-        return <SettingsView companyId={user.companyId} role={user.role} />;
+        return <SettingsView companyId={user.companyId} role={user.role} userId={user.id} />;
       default:
         return <Dashboard />;
     }

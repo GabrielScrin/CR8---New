@@ -11,7 +11,7 @@ import {
   FileText,
   LogOut
 } from 'lucide-react';
-import { Role } from '../types';
+import { Role, isClientRole, labelRolePt, normalizeRole } from '../types';
 
 interface SidebarProps {
   currentView: string;
@@ -37,7 +37,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, r
   ];
 
   const filteredMenuItems =
-    role === 'empresa' ? menuItems.filter((item) => item.id === 'dashboard' || item.id === 'traffic') : menuItems;
+    isClientRole(role) ? menuItems.filter((item) => item.id === 'dashboard' || item.id === 'traffic') : menuItems;
 
   return (
     <div className="h-screen w-64 bg-[hsl(var(--sidebar-background))] text-[hsl(var(--foreground))] flex flex-col fixed left-0 top-0 shadow-xl z-50 border-r border-[hsl(var(--sidebar-border))]">
@@ -71,7 +71,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, r
       <div className="p-4 border-t border-[hsl(var(--sidebar-border))]">
         <div className="flex items-center mb-4 px-2">
           <div className="w-2 h-2 rounded-full bg-[hsl(var(--accent))] mr-2"></div>
-          <span className="text-xs text-[hsl(var(--sidebar-foreground))] uppercase tracking-wider">{role}</span>
+          <span className="text-xs text-[hsl(var(--sidebar-foreground))] uppercase tracking-wider">
+            {labelRolePt(normalizeRole(role))}
+          </span>
         </div>
         <button 
           onClick={onLogout}
