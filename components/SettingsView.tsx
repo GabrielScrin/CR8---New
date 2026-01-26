@@ -352,6 +352,82 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
     setIntegrationsTab(tab);
   };
 
+  // API Keys state & actions (Integrations -> API)
+  const [apiKeys, setApiKeys] = useState<
+    Array<{ id: string; key_prefix: string; name: string | null; status: string | null; last_used_at: string | null; created_at: string | null }>
+  >([]);
+  const [apiLoading, setApiLoading] = useState(false);
+  const [newApiName, setNewApiName] = useState('');
+  const [createdToken, setCreatedToken] = useState<string | null>(null);
+
+  const refreshApiKeys = async () => {
+    if (readOnlyMode || !companyId) return;
+    setApiLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('api_keys')
+        .select('id,key_prefix,name,status,last_used_at,created_at')
+        .eq('company_id', companyId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setApiKeys((data ?? []) as any);
+    } catch (e: any) {
+      console.error('refreshApiKeys', e?.message ?? e);
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  const createApiKey = async () => {
+    if (readOnlyMode || !companyId) return;
+    if (!newApiName.trim()) {
+      setError('Nome é obrigatório para a chave');
+      return;
+    }
+    setApiLoading(true);
+    setError(null);
+    try {
+      const { data, error } = await supabase.rpc('create_api_key', { p_company_id: companyId, p_name: newApiName.trim() });
+      if (error) throw error;
+      const token = (data as any) ?? null;
+      setCreatedToken(String(token));
+      setNewApiName('');
+      await refreshApiKeys();
+    } catch (e: any) {
+      setError(e?.message ?? 'Erro ao criar chave');
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  const revokeApiKey = async (id: string) => {
+    if (readOnlyMode || !companyId) return;
+    setApiLoading(true);
+    try {
+      const { error } = await supabase.from('api_keys').update({ status: 'revoked' }).eq('id', id);
+      if (error) throw error;
+      await refreshApiKeys();
+    } catch (e: any) {
+      console.error('revokeApiKey', e?.message ?? e);
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
+  const deleteApiKey = async (id: string) => {
+    if (readOnlyMode || !companyId) return;
+    setApiLoading(true);
+    try {
+      const { error } = await supabase.from('api_keys').delete().eq('id', id);
+      if (error) throw error;
+      await refreshApiKeys();
+    } catch (e: any) {
+      console.error('deleteApiKey', e?.message ?? e);
+    } finally {
+      setApiLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (readOnlyMode || !companyId) return;
     let cancelled = false;
@@ -1100,7 +1176,108 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                       {role !== 'admin' ? (
                         <div className="text-xs text-[hsl(var(--muted-foreground))]">Somente admins podem criar/gerenciar API Keys.</div>
                       ) : (
-                        <div className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">Gerenciamento de API Keys (criar, listar, revogar, docs e testes)</div>
+                        <div>
+                          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                            <div className="md:col-span-2">
+                              <label className="block text-xs text-[hsl(var(--muted-foreground))]">Nome da chave</label>
+                              <input
+                                value={newApiName}
+                                onChange={(e) => setNewApiName(e.target.value)}
+                                disabled={apiLoading}
+                                placeholder="ex: n8n integration"
+                                className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                              />
+                            </div>
+                            <div>
+                              <button
+                                onClick={() => void createApiKey()}
+                                disabled={apiLoading}
+                                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 disabled:opacity-60"
+                              >
+                                Criar chave
+                              </button>
+                            </div>
+                          </div>
+
+                          {createdToken ? (
+                            <div className="mt-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-3">
+                              <div className="text-xs text-[hsl(var(--muted-foreground))]">Token (mostrado apenas uma vez)</div>
+                              <div className="mt-2 font-mono text-sm break-all">{createdToken}</div>
+                              <div className="mt-2 flex items-center gap-2">
+                                <button
+                                  onClick={() => {
+                                    navigator.clipboard?.writeText(createdToken ?? '');
+                                  }}
+                                  className="inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm"
+                                >
+                                  Copiar
+                                </button>
+                                <button
+                                  onClick={() => setCreatedToken(null)}
+                                  className="inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm"
+                                >
+                                  Fechar
+                                </button>
+                              </div>
+                            </div>
+                          ) : null}
+
+                          <div className="mt-4">
+                            <div className="text-xs text-[hsl(var(--muted-foreground))] mb-2">Chaves existentes</div>
+                            <div className="rounded-md border border-[hsl(var(--border))] overflow-auto">
+                              <table className="w-full text-sm">
+                                <thead className="bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))]">
+                                  <tr>
+                                    <th className="px-3 py-2 text-left">Prefixo</th>
+                                    <th className="px-3 py-2 text-left">Nome</th>
+                                    <th className="px-3 py-2 text-left">Status</th>
+                                    <th className="px-3 py-2 text-left">Último uso</th>
+                                    <th className="px-3 py-2 text-right">Ações</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {apiLoading ? (
+                                    <tr>
+                                      <td colSpan={5} className="px-3 py-3 text-[hsl(var(--muted-foreground))]">Carregando...</td>
+                                    </tr>
+                                  ) : apiKeys.length === 0 ? (
+                                    <tr>
+                                      <td colSpan={5} className="px-3 py-3 text-[hsl(var(--muted-foreground))]">Nenhuma chave.</td>
+                                    </tr>
+                                  ) : (
+                                    apiKeys.map((k) => (
+                                      <tr key={k.id} className="border-t border-[hsl(var(--border))]">
+                                        <td className="px-3 py-2 font-mono">{k.key_prefix}</td>
+                                        <td className="px-3 py-2">{k.name || '—'}</td>
+                                        <td className="px-3 py-2">{k.status || 'active'}</td>
+                                        <td className="px-3 py-2">{k.last_used_at ? new Date(k.last_used_at).toLocaleString('pt-BR') : '—'}</td>
+                                        <td className="px-3 py-2 text-right">
+                                          {k.status !== 'revoked' ? (
+                                            <button
+                                              onClick={() => void revokeApiKey(k.id)}
+                                              disabled={apiLoading}
+                                              className="inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm"
+                                            >
+                                              Revogar
+                                            </button>
+                                          ) : (
+                                            <button
+                                              onClick={() => void deleteApiKey(k.id)}
+                                              disabled={apiLoading}
+                                              className="inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm text-rose-500"
+                                            >
+                                              Excluir
+                                            </button>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    ))
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}
