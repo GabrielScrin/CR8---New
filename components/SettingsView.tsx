@@ -359,6 +359,9 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
   const [apiLoading, setApiLoading] = useState(false);
   const [newApiName, setNewApiName] = useState('');
   const [createdToken, setCreatedToken] = useState<string | null>(null);
+  const [testToken, setTestToken] = useState<string>('');
+  const [testLoading, setTestLoading] = useState(false);
+  const [testResult, setTestResult] = useState<any | null>(null);
 
   const refreshApiKeys = async () => {
     if (readOnlyMode || !companyId) return;
@@ -1218,6 +1221,52 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                                 >
                                   Fechar
                                 </button>
+                              </div>
+                              <div className="mt-3">
+                                <div className="text-xs text-[hsl(var(--muted-foreground))]">Testar endpoint público com uma chave</div>
+                                <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+                                  <div className="md:col-span-2">
+                                    <input
+                                      value={testToken}
+                                      onChange={(e) => setTestToken(e.target.value)}
+                                      placeholder="Cole a API Key aqui (ou deixe em branco para usar a última criada)"
+                                      className="w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))] font-mono"
+                                    />
+                                  </div>
+                                  <div>
+                                    <button
+                                      onClick={async () => {
+                                        const tokenToUse = testToken || createdToken || '';
+                                        if (!tokenToUse) return setError('Forneça uma chave para testar');
+                                        setTestLoading(true);
+                                        setTestResult(null);
+                                        try {
+                                          const res = await fetch(`${getSupabaseUrl()}/functions/v1/public-api/test`, {
+                                            method: 'POST',
+                                            headers: { 'content-type': 'application/json', 'x-api-key': tokenToUse },
+                                            body: JSON.stringify({}),
+                                          });
+                                          const json = await res.json();
+                                          setTestResult({ status: res.status, body: json });
+                                        } catch (e: any) {
+                                          setTestResult({ error: e?.message ?? String(e) });
+                                        } finally {
+                                          setTestLoading(false);
+                                        }
+                                      }}
+                                      disabled={testLoading}
+                                      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 disabled:opacity-60"
+                                    >
+                                      {testLoading ? 'Testando...' : 'Testar'}
+                                    </button>
+                                  </div>
+                                </div>
+                                {testResult ? (
+                                  <div className="mt-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-3 font-mono text-sm">
+                                    <div>Status: {String(testResult.status ?? testResult.error ?? '')}</div>
+                                    <pre className="mt-2">{JSON.stringify(testResult.body ?? testResult, null, 2)}</pre>
+                                  </div>
+                                ) : null}
                               </div>
                             </div>
                           ) : null}

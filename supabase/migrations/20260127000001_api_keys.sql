@@ -35,6 +35,17 @@ begin
 end;
 $$;
 
+-- validate token RPC: returns api_keys row if token matches hash
+create or replace function public.validate_api_key(p_token text)
+returns table(id uuid, company_id uuid, key_prefix text, status text)
+language sql security definer set search_path = public
+as $$
+  select id, company_id, key_prefix, status
+  from public.api_keys
+  where key_hash = digest(p_token, 'sha256')
+  limit 1;
+$$;
+
 -- Enable RLS on api_keys
 alter table public.api_keys enable row level security;
 
