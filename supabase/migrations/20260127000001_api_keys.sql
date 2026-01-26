@@ -27,11 +27,16 @@ begin
   -- token: 48 hex chars (~24 bytes) -> length 48
   token := encode(gen_random_bytes(24), 'hex');
   prefix := left(token, 8);
-  hash := digest(token, 'sha256'::text);
+  hash := digest(convert_to(token, 'UTF8'), 'sha256');
 
-  insert into public.api_keys (company_id, key_prefix, key_hash, name, created_by)
-  values (p_company_id, prefix, hash, p_name, auth.uid())
-  returning id into token; -- reuse variable
+  -- insert and keep token variable intact; store id into new_id
+  declare
+    new_id uuid;
+  begin
+    insert into public.api_keys (company_id, key_prefix, key_hash, name, created_by)
+    values (p_company_id, prefix, hash, p_name, auth.uid())
+    returning id into new_id;
+  end;
 
   return token; -- returns the plain token to caller (only at creation)
 end;
