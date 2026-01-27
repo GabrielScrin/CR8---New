@@ -3,6 +3,7 @@ import { Bot, MessageCircle, Paperclip, Plus, Search, Send, User as UserIcon } f
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { ChatMessage, ChatSession } from '../types';
 import { loadLocalAiSettings } from '../lib/aiLocal';
+import { useAIAgents } from '../hooks/useAIAgents';
 
 type ChatPlatform = 'whatsapp' | 'instagram' | 'web' | 'meta';
 
@@ -236,6 +237,9 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
   const [search, setSearch] = useState('');
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [messageInput, setMessageInput] = useState('');
+
+  // RAG / Multi-Agent Integration
+  const { defaultAgent } = useAIAgents();
 
   const [loading, setLoading] = useState(false);
   const [loadingMessages, setLoadingMessages] = useState(false);
@@ -689,6 +693,7 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
                 api_key: local.apiKey,
                 model: local.model,
                 access_token: accessToken,
+                agent_id: defaultAgent?.id, // Pass default agent ID for RAG
               }),
             });
 
@@ -781,6 +786,7 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
           api_key: local.apiKey,
           model: local.model,
           access_token: accessToken,
+          agent_id: defaultAgent?.id,
         }),
       });
 
@@ -934,9 +940,8 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
                   <button
                     key={session.id}
                     onClick={() => setActiveChatId(session.id)}
-                    className={`w-full text-left p-4 border-b border-[hsl(var(--border))] transition-colors ${
-                      isActive ? 'bg-[hsl(var(--secondary))]' : 'hover:bg-[hsl(var(--secondary)/0.6)]'
-                    }`}
+                    className={`w-full text-left p-4 border-b border-[hsl(var(--border))] transition-colors ${isActive ? 'bg-[hsl(var(--secondary))]' : 'hover:bg-[hsl(var(--secondary)/0.6)]'
+                      }`}
                   >
                     <div className="flex justify-between items-start gap-2">
                       <div className="min-w-0">
@@ -1080,11 +1085,10 @@ export const LiveChat: React.FC<{ companyId?: string; userId?: string }> = ({ co
                   return (
                     <div key={uiMsg.id} className={`flex ${isInbound ? 'justify-start' : 'justify-end'}`}>
                       <div
-                        className={`max-w-[70%] p-4 rounded-xl shadow-sm text-sm border ${
-                          isInbound
-                            ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] border-[hsl(var(--border))] rounded-tl-none'
-                            : 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] border-[hsl(var(--primary))] rounded-tr-none'
-                        }`}
+                        className={`max-w-[70%] p-4 rounded-xl shadow-sm text-sm border ${isInbound
+                          ? 'bg-[hsl(var(--card))] text-[hsl(var(--foreground))] border-[hsl(var(--border))] rounded-tl-none'
+                          : 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] border-[hsl(var(--primary))] rounded-tr-none'
+                          }`}
                       >
                         {uiMsg.content}
                         <div className={`text-[10px] mt-1 text-right ${isInbound ? 'text-[hsl(var(--muted-foreground))]' : 'text-[hsl(var(--primary-foreground)/0.8)]'}`}>

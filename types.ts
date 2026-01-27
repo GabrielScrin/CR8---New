@@ -129,3 +129,58 @@ export interface ChatSession {
   aiActive: boolean;
   tags: string[];
 }
+
+// =============================================================================
+// AI AGENTS TYPES
+// =============================================================================
+
+export type EmbeddingProvider = 'google' | 'openai' | 'voyage' | 'cohere';
+export type RerankProvider = 'cohere' | 'together';
+
+export interface AIAgent {
+  id: string;
+  name: string;
+  system_prompt: string;
+  model: string;
+  temperature: number;
+  max_tokens: number;
+  is_active: boolean;
+  is_default: boolean;
+  debounce_ms: number;
+  // RAG: Embedding config
+  embedding_provider: EmbeddingProvider | null;
+  embedding_model: string | null;
+  embedding_dimensions: number | null;
+  // RAG: Reranking config (opcional)
+  rerank_enabled: boolean | null;
+  rerank_provider: RerankProvider | null;
+  rerank_model: string | null;
+  rerank_top_k: number | null;
+  // RAG: Search config
+  rag_similarity_threshold: number | null;
+  rag_max_results: number | null;
+  // Handoff config
+  handoff_enabled: boolean;
+  handoff_instructions: string | null;
+  // Booking tool config
+  booking_tool_enabled: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export type KnowledgeFileIndexingStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'local_only';
+
+export interface AIKnowledgeFile {
+  id: string;
+  agent_id: string;
+  name: string;
+  mime_type: string;
+  size_bytes: number;
+  content: string | null;
+  external_file_id: string | null;
+  external_file_uri: string | null;
+  indexing_status: KnowledgeFileIndexingStatus;
+  chunks_count: number;
+  created_at: string;
+  updated_at: string;
+}
