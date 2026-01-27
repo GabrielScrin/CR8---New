@@ -313,21 +313,19 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
     }
   };
 
-  const SECTIONS = [
-    { key: 'company', label: 'Empresa e White Label' },
-    { key: 'whatsapp', label: 'WhatsApp' },
-    { key: 'financeiro', label: 'Financeiro' },
-    { key: 'conversoes', label: 'Conversões (Google Ads / Meta)' },
-    { key: 'auditoria', label: 'Auditoria e Relatório semanal' },
-    { key: 'equipe', label: 'Equipe' },
-    { key: 'integracoes', label: 'Integrações' },
-  ];
+
 
   const [selectedSection, setSelectedSection] = useState<string>(() =>
     initialSection && ['company', 'whatsapp', 'financeiro', 'conversoes', 'auditoria', 'equipe', 'integracoes'].includes(initialSection)
       ? initialSection
       : 'company'
   );
+
+  useEffect(() => {
+    if (initialSection && ['company', 'whatsapp', 'financeiro', 'conversoes', 'auditoria', 'equipe', 'integracoes'].includes(initialSection)) {
+      setSelectedSection(initialSection);
+    }
+  }, [initialSection]);
 
   const canViewIntegrations = useMemo(() => role === 'admin' || role === 'gestor', [role]);
 
@@ -1114,20 +1112,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
           <h1 className="text-3xl font-bold text-[hsl(var(--foreground))]">Configurações</h1>
           <p className="text-[hsl(var(--muted-foreground))] mt-1 text-sm">Ajuste branding, integrações e financeiro por empresa.</p>
 
-          <div className="mt-3 flex items-center gap-3">
-            <label className="text-xs text-[hsl(var(--muted-foreground))]">Seção</label>
-            <select
-              value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
-              className="rounded-md bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-            >
-              {SECTIONS.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
-                </option>
-              ))}
-            </select>
-          </div>
+
         </div>
         <button
           onClick={() => void save()}
