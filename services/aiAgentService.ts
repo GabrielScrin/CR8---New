@@ -5,10 +5,12 @@
 
 import { supabase } from '@/lib/supabase';
 import type { AIAgent, AIKnowledgeFile, EmbeddingProvider, RerankProvider } from '@/types';
+import { loadLocalAiSettings } from '@/lib/aiLocal';
 
-// =============================================================================
-// Types
-// =============================================================================
+// ... (Types)
+
+// ... (API Functions)
+
 
 export interface CreateAIAgentParams {
     name: string;
@@ -191,16 +193,7 @@ async function listKnowledgeFiles(agentId: string): Promise<AIKnowledgeFile[]> {
 }
 
 async function uploadKnowledgeFile(agentId: string, file: File, content: string): Promise<AIKnowledgeFile> {
-    // 1. Upload to Storage (Optional, if we want to keep original)
-    // For RAG, we mostly care about the content in the DB.
-    // But let's upload to bucket 'ai-knowledge' if it exists.
-
-    // Assuming bucket exists. If not, we skip or handle error.
     const path = `${agentId}/${Date.now()}_${file.name}`;
-    // const { error: storageError } = await supabase.storage.from('ai-knowledge').upload(path, file);
-    // if (storageError) console.warn('Storage upload failed, proceeding with DB insert only', storageError);
-
-    // 2. Insert into DB
     const { data, error } = await supabase
         .from('ai_knowledge_files')
         .insert([{
@@ -209,13 +202,26 @@ async function uploadKnowledgeFile(agentId: string, file: File, content: string)
             mime_type: file.type || 'text/plain',
             size_bytes: file.size,
             content: content,
-            // external_file_uri: path, // if storage used
-            indexing_status: 'pending', // Trigger background job
+            indexing_status: 'pending',
         }])
         .select()
         .single();
 
     if (error) throw new Error(error.message);
+
+    try {
+        const settings = loadLocalAiSettings();
+        const apiKey = settings?.apiKey;
+        if (apiKey) {
+            await supabase.functions.invoke('ai-knowledge-processor', {
+                body: { file_id: data.id, api_key: apiKey }
+            });
+        } else {
+            console.warn('No API Key found in local settings, skipping automatic indexing.');
+        }
+    } catch (e) {
+        console.error('Failed to trigger indexing:', e);
+    }
     return data;
 }
 
