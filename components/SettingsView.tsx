@@ -4,6 +4,7 @@ import { InboundSources } from './InboundSources';
 import { CalendarClock, RefreshCw, Save, Trash2, UserPlus, Send, Copy, Link2, X, Crown, Sparkles, Briefcase, Mail } from 'lucide-react';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { Role, labelRolePt, normalizeRole } from '../types';
+import { div } from 'framer-motion/client';
 
 type CompanyRow = {
   id: string;
