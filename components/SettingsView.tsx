@@ -207,11 +207,11 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
   const [confirmDialog, setConfirmDialog] = useState<
     | null
     | {
-        title: string;
-        message: string;
-        kind: 'revoke_invite' | 'remove_member';
-        id: string;
-      }
+      title: string;
+      message: string;
+      kind: 'revoke_invite' | 'remove_member';
+      id: string;
+    }
   >(null);
 
   const [weeklyLoading, setWeeklyLoading] = useState(false);
@@ -344,7 +344,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
       try {
         const h = (window.location.hash || '').replace('#', '');
         if (['api', 'webhooks', 'mcp'].includes(h)) setIntegrationsTab(h);
-      } catch {}
+      } catch { }
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -353,7 +353,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
   const setIntegrationsHash = (tab: string) => {
     try {
       window.location.hash = tab;
-    } catch {}
+    } catch { }
     setIntegrationsTab(tab);
   };
 
@@ -1144,224 +1144,224 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
         </div>
       )}
 
-        {selectedSection === 'integracoes' && (
-          <div className="cr8-card p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Integrações</h2>
-            <p className="text-xs text-[hsl(var(--muted-foreground))]">Centralize APIs públicas, Webhooks e o MCP Server.</p>
+      {selectedSection === 'integracoes' && (
+        <div className="cr8-card p-6 space-y-4">
+          <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Integrações</h2>
+          <p className="text-xs text-[hsl(var(--muted-foreground))]">Centralize APIs públicas, Webhooks e o MCP Server.</p>
 
-            {!canViewIntegrations ? (
-              <div className="text-sm text-[hsl(var(--muted-foreground))]">Aba disponível para admin e gestor.</div>
-            ) : (
-              <div>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setIntegrationsHash('api')}
-                    className={`px-3 py-1 rounded-md ${integrationsTab === 'api' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--secondary))]'}`}
-                  >
-                    API
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIntegrationsHash('webhooks')}
-                    className={`px-3 py-1 rounded-md ${integrationsTab === 'webhooks' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--secondary))]'}`}
-                  >
-                    Webhooks
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setIntegrationsHash('mcp')}
-                    className={`px-3 py-1 rounded-md ${integrationsTab === 'mcp' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--secondary))]'}`}
-                  >
-                    MCP
-                  </button>
-                </div>
+          {!canViewIntegrations ? (
+            <div className="text-sm text-[hsl(var(--muted-foreground))]">Aba disponível para admin e gestor.</div>
+          ) : (
+            <div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIntegrationsHash('api')}
+                  className={`px-3 py-1 rounded-md ${integrationsTab === 'api' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--secondary))]'}`}
+                >
+                  API
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIntegrationsHash('webhooks')}
+                  className={`px-3 py-1 rounded-md ${integrationsTab === 'webhooks' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--secondary))]'}`}
+                >
+                  Webhooks
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIntegrationsHash('mcp')}
+                  className={`px-3 py-1 rounded-md ${integrationsTab === 'mcp' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--secondary))]'}`}
+                >
+                  MCP
+                </button>
+              </div>
 
-                <div className="mt-4">
-                  {integrationsTab === 'api' && (
-                    <div>
-                      <h3 className="text-sm font-semibold">API Pública</h3>
-                      {role !== 'admin' ? (
-                        <div className="text-xs text-[hsl(var(--muted-foreground))]">Somente admins podem criar/gerenciar API Keys.</div>
-                      ) : (
-                        <div>
-                          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
-                            <div className="md:col-span-2">
-                              <label className="block text-xs text-[hsl(var(--muted-foreground))]">Nome da chave</label>
-                              <input
-                                value={newApiName}
-                                onChange={(e) => setNewApiName(e.target.value)}
-                                disabled={apiLoading}
-                                placeholder="ex: n8n integration"
-                                className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-                              />
-                            </div>
-                            <div>
+              <div className="mt-4">
+                {integrationsTab === 'api' && (
+                  <div>
+                    <h3 className="text-sm font-semibold">API Pública</h3>
+                    {role !== 'admin' ? (
+                      <div className="text-xs text-[hsl(var(--muted-foreground))]">Somente admins podem criar/gerenciar API Keys.</div>
+                    ) : (
+                      <div>
+                        <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+                          <div className="md:col-span-2">
+                            <label className="block text-xs text-[hsl(var(--muted-foreground))]">Nome da chave</label>
+                            <input
+                              value={newApiName}
+                              onChange={(e) => setNewApiName(e.target.value)}
+                              disabled={apiLoading}
+                              placeholder="ex: n8n integration"
+                              className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                            />
+                          </div>
+                          <div>
+                            <button
+                              onClick={() => void createApiKey()}
+                              disabled={apiLoading}
+                              className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 disabled:opacity-60"
+                            >
+                              Criar chave
+                            </button>
+                          </div>
+                        </div>
+
+                        {createdToken ? (
+                          <div className="mt-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-3">
+                            <div className="text-xs text-[hsl(var(--muted-foreground))]">Token (mostrado apenas uma vez)</div>
+                            <div className="mt-2 font-mono text-sm break-all">{createdToken}</div>
+                            <div className="mt-2 flex items-center gap-2">
                               <button
-                                onClick={() => void createApiKey()}
-                                disabled={apiLoading}
-                                className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 disabled:opacity-60"
+                                onClick={() => {
+                                  navigator.clipboard?.writeText(createdToken ?? '');
+                                }}
+                                className="inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm"
                               >
-                                Criar chave
+                                Copiar
+                              </button>
+                              <button
+                                onClick={() => setCreatedToken(null)}
+                                className="inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm"
+                              >
+                                Fechar
                               </button>
                             </div>
-                          </div>
-
-                          {createdToken ? (
-                            <div className="mt-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-3">
-                              <div className="text-xs text-[hsl(var(--muted-foreground))]">Token (mostrado apenas uma vez)</div>
-                              <div className="mt-2 font-mono text-sm break-all">{createdToken}</div>
-                              <div className="mt-2 flex items-center gap-2">
-                                <button
-                                  onClick={() => {
-                                    navigator.clipboard?.writeText(createdToken ?? '');
-                                  }}
-                                  className="inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm"
-                                >
-                                  Copiar
-                                </button>
-                                <button
-                                  onClick={() => setCreatedToken(null)}
-                                  className="inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm"
-                                >
-                                  Fechar
-                                </button>
-                              </div>
-                              <div className="mt-3">
-                                <div className="text-xs text-[hsl(var(--muted-foreground))]">Testar endpoint público com uma chave</div>
-                                <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
-                                  <div className="md:col-span-2">
-                                    <input
-                                      value={testToken}
-                                      onChange={(e) => setTestToken(e.target.value)}
-                                      placeholder="Cole a API Key aqui (ou deixe em branco para usar a última criada)"
-                                      className="w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))] font-mono"
-                                    />
-                                  </div>
-                                  <div>
-                                    <button
-                                      onClick={async () => {
-                                        const tokenToUse = testToken || createdToken || '';
-                                        if (!tokenToUse) return setError('Forneça uma chave para testar');
-                                        setTestLoading(true);
-                                        setTestResult(null);
-                                        try {
-                                          const res = await fetch(`${getSupabaseUrl()}/functions/v1/public-api/test`, {
-                                            method: 'POST',
-                                            headers: { 'content-type': 'application/json', 'x-api-key': tokenToUse },
-                                            body: JSON.stringify({}),
-                                          });
-                                          const json = await res.json();
-                                          setTestResult({ status: res.status, body: json });
-                                        } catch (e: any) {
-                                          setTestResult({ error: e?.message ?? String(e) });
-                                        } finally {
-                                          setTestLoading(false);
-                                        }
-                                      }}
-                                      disabled={testLoading}
-                                      className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 disabled:opacity-60"
-                                    >
-                                      {testLoading ? 'Testando...' : 'Testar'}
-                                    </button>
-                                  </div>
+                            <div className="mt-3">
+                              <div className="text-xs text-[hsl(var(--muted-foreground))]">Testar endpoint público com uma chave</div>
+                              <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2 items-end">
+                                <div className="md:col-span-2">
+                                  <input
+                                    value={testToken}
+                                    onChange={(e) => setTestToken(e.target.value)}
+                                    placeholder="Cole a API Key aqui (ou deixe em branco para usar a última criada)"
+                                    className="w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))] font-mono"
+                                  />
                                 </div>
-                                {testResult ? (
-                                  <div className="mt-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-3 font-mono text-sm">
-                                    <div>Status: {String(testResult.status ?? testResult.error ?? '')}</div>
-                                    <pre className="mt-2">{JSON.stringify(testResult.body ?? testResult, null, 2)}</pre>
-                                  </div>
-                                ) : null}
+                                <div>
+                                  <button
+                                    onClick={async () => {
+                                      const tokenToUse = testToken || createdToken || '';
+                                      if (!tokenToUse) return setError('Forneça uma chave para testar');
+                                      setTestLoading(true);
+                                      setTestResult(null);
+                                      try {
+                                        const res = await fetch(`${getSupabaseUrl()}/functions/v1/public-api/test`, {
+                                          method: 'POST',
+                                          headers: { 'content-type': 'application/json', 'x-api-key': tokenToUse },
+                                          body: JSON.stringify({}),
+                                        });
+                                        const json = await res.json();
+                                        setTestResult({ status: res.status, body: json });
+                                      } catch (e: any) {
+                                        setTestResult({ error: e?.message ?? String(e) });
+                                      } finally {
+                                        setTestLoading(false);
+                                      }
+                                    }}
+                                    disabled={testLoading}
+                                    className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 disabled:opacity-60"
+                                  >
+                                    {testLoading ? 'Testando...' : 'Testar'}
+                                  </button>
+                                </div>
                               </div>
-                            </div>
-                          ) : null}
-
-                          <div className="mt-4">
-                            <div className="text-xs text-[hsl(var(--muted-foreground))] mb-2">Chaves existentes</div>
-                            <div className="rounded-md border border-[hsl(var(--border))] overflow-auto">
-                              <table className="w-full text-sm">
-                                <thead className="bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))]">
-                                  <tr>
-                                    <th className="px-3 py-2 text-left">Prefixo</th>
-                                    <th className="px-3 py-2 text-left">Nome</th>
-                                    <th className="px-3 py-2 text-left">Status</th>
-                                    <th className="px-3 py-2 text-left">Último uso</th>
-                                    <th className="px-3 py-2 text-right">Ações</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {apiLoading ? (
-                                    <tr>
-                                      <td colSpan={5} className="px-3 py-3 text-[hsl(var(--muted-foreground))]">Carregando...</td>
-                                    </tr>
-                                  ) : apiKeys.length === 0 ? (
-                                    <tr>
-                                      <td colSpan={5} className="px-3 py-3 text-[hsl(var(--muted-foreground))]">Nenhuma chave.</td>
-                                    </tr>
-                                  ) : (
-                                    apiKeys.map((k) => (
-                                      <tr key={k.id} className="border-t border-[hsl(var(--border))]">
-                                        <td className="px-3 py-2 font-mono">{k.key_prefix}</td>
-                                        <td className="px-3 py-2">{k.name || '—'}</td>
-                                        <td className="px-3 py-2">{k.status || 'active'}</td>
-                                        <td className="px-3 py-2">{k.last_used_at ? new Date(k.last_used_at).toLocaleString('pt-BR') : '—'}</td>
-                                        <td className="px-3 py-2 text-right">
-                                          {k.status !== 'revoked' ? (
-                                            <button
-                                              onClick={() => void revokeApiKey(k.id)}
-                                              disabled={apiLoading}
-                                              className="inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm"
-                                            >
-                                              Revogar
-                                            </button>
-                                          ) : (
-                                            <button
-                                              onClick={() => void deleteApiKey(k.id)}
-                                              disabled={apiLoading}
-                                              className="inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm text-rose-500"
-                                            >
-                                              Excluir
-                                            </button>
-                                          )}
-                                        </td>
-                                      </tr>
-                                    ))
-                                  )}
-                                </tbody>
-                              </table>
+                              {testResult ? (
+                                <div className="mt-3 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-3 font-mono text-sm">
+                                  <div>Status: {String(testResult.status ?? testResult.error ?? '')}</div>
+                                  <pre className="mt-2">{JSON.stringify(testResult.body ?? testResult, null, 2)}</pre>
+                                </div>
+                              ) : null}
                             </div>
                           </div>
+                        ) : null}
+
+                        <div className="mt-4">
+                          <div className="text-xs text-[hsl(var(--muted-foreground))] mb-2">Chaves existentes</div>
+                          <div className="rounded-md border border-[hsl(var(--border))] overflow-auto">
+                            <table className="w-full text-sm">
+                              <thead className="bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))]">
+                                <tr>
+                                  <th className="px-3 py-2 text-left">Prefixo</th>
+                                  <th className="px-3 py-2 text-left">Nome</th>
+                                  <th className="px-3 py-2 text-left">Status</th>
+                                  <th className="px-3 py-2 text-left">Último uso</th>
+                                  <th className="px-3 py-2 text-right">Ações</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {apiLoading ? (
+                                  <tr>
+                                    <td colSpan={5} className="px-3 py-3 text-[hsl(var(--muted-foreground))]">Carregando...</td>
+                                  </tr>
+                                ) : apiKeys.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={5} className="px-3 py-3 text-[hsl(var(--muted-foreground))]">Nenhuma chave.</td>
+                                  </tr>
+                                ) : (
+                                  apiKeys.map((k) => (
+                                    <tr key={k.id} className="border-t border-[hsl(var(--border))]">
+                                      <td className="px-3 py-2 font-mono">{k.key_prefix}</td>
+                                      <td className="px-3 py-2">{k.name || '—'}</td>
+                                      <td className="px-3 py-2">{k.status || 'active'}</td>
+                                      <td className="px-3 py-2">{k.last_used_at ? new Date(k.last_used_at).toLocaleString('pt-BR') : '—'}</td>
+                                      <td className="px-3 py-2 text-right">
+                                        {k.status !== 'revoked' ? (
+                                          <button
+                                            onClick={() => void revokeApiKey(k.id)}
+                                            disabled={apiLoading}
+                                            className="inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm"
+                                          >
+                                            Revogar
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={() => void deleteApiKey(k.id)}
+                                            disabled={apiLoading}
+                                            className="inline-flex items-center gap-2 rounded-md border px-3 py-1 text-sm text-rose-500"
+                                          >
+                                            Excluir
+                                          </button>
+                                        )}
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
                         </div>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                  {integrationsTab === 'webhooks' && (
-                    <div>
-                      <h3 className="text-sm font-semibold">Webhooks (Inbound / Outbound)</h3>
-                      <div className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">Configuração de fontes inbound e endpoints de outbound, testes e auditoria.</div>
+                {integrationsTab === 'webhooks' && (
+                  <div>
+                    <h3 className="text-sm font-semibold">Webhooks (Inbound / Outbound)</h3>
+                    <div className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">Configuração de fontes inbound e endpoints de outbound, testes e auditoria.</div>
 
-                      {role !== 'admin' ? (
-                        <div className="mt-3 text-xs text-[hsl(var(--muted-foreground))]">Somente admins podem criar/gerenciar integrações de Webhooks.</div>
-                      ) : (
-                        <div className="mt-4 space-y-4">
-                          <InboundSources companyId={companyId} refreshTrigger={companyId} />
-                        </div>
-                      )}
-                    </div>
-                  )}
+                    {role !== 'admin' ? (
+                      <div className="mt-3 text-xs text-[hsl(var(--muted-foreground))]">Somente admins podem criar/gerenciar integrações de Webhooks.</div>
+                    ) : (
+                      <div className="mt-4 space-y-4">
+                        <InboundSources companyId={companyId} refreshTrigger={companyId} />
+                      </div>
+                    )}
+                  </div>
+                )}
 
-                  {integrationsTab === 'mcp' && (
-                    <div>
-                      <h3 className="text-sm font-semibold">MCP Server</h3>
-                      <div className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">Gerar/usar API Key e testar initialize + tools/list.</div>
-                    </div>
-                  )}
-                </div>
+                {integrationsTab === 'mcp' && (
+                  <div>
+                    <h3 className="text-sm font-semibold">MCP Server</h3>
+                    <div className="mt-2 text-xs text-[hsl(var(--muted-foreground))]">Gerar/usar API Key e testar initialize + tools/list.</div>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
+      )}
 
       {error && <div className="text-sm text-[hsl(var(--destructive))]">{error}</div>}
       {ok && <div className="text-sm text-emerald-300">{ok}</div>}
@@ -1394,7 +1394,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
               </div>
             </div>
           </div>
-        )}
+        </>
 
         <div className="cr8-card p-6 space-y-4">
             <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">White Label</h2>
@@ -1446,410 +1446,416 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
             </div>
           </div>
         </>
-      )}
+  )
+}
 
-      {selectedSection === 'whatsapp' && (
-        <div className="cr8-card p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">WhatsApp (Cloud API)</h2>
-        <p className="text-xs text-[hsl(var(--muted-foreground))]">
-          Para receber mensagens no Live Chat, configure o webhook na Meta com esta URL de callback:{' '}
-          <span className="font-mono">{webhookUrl}</span>
-        </p>
+{
+  selectedSection === 'whatsapp' && (
+    <div className="cr8-card p-6 space-y-4">
+      <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">WhatsApp (Cloud API)</h2>
+      <p className="text-xs text-[hsl(var(--muted-foreground))]">
+        Para receber mensagens no Live Chat, configure o webhook na Meta com esta URL de callback:{' '}
+        <span className="font-mono">{webhookUrl}</span>
+      </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">phone_number_id</label>
-            <input
-              value={whatsPhoneNumberId}
-              onChange={(e) => setWhatsPhoneNumberId(e.target.value)}
-              disabled={!canEditCompany}
-              placeholder="Ex: 1234567890"
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">WABA ID (opcional)</label>
-            <input
-              value={whatsWabaId}
-              onChange={(e) => setWhatsWabaId(e.target.value)}
-              disabled={!canEditCompany}
-              placeholder="Ex: 198..."
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
-            />
-          </div>
-        </div>
-        </div>
-      )}
-
-      {selectedSection === 'financeiro' && (
-        <div className="cr8-card p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Financeiro</h2>
-        <p className="text-xs text-[hsl(var(--muted-foreground))]">Controle de saldo de mídia e fee da agência (por empresa).</p>
-
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Moeda</label>
-            <input
-              value={currency}
-              onChange={(e) => setCurrency(e.target.value)}
-              disabled={!canEditCompany}
-              placeholder="BRL"
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Saldo de mídia</label>
-            <input
-              value={mediaBalance}
-              onChange={(e) => setMediaBalance(e.target.value)}
-              disabled={!canEditCompany}
-              placeholder="0"
-              inputMode="decimal"
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Fee (%)</label>
-            <input
-              value={feePercent}
-              onChange={(e) => setFeePercent(e.target.value)}
-              disabled={!canEditCompany}
-              placeholder="10"
-              inputMode="decimal"
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Fee fixo</label>
-            <input
-              value={feeFixed}
-              onChange={(e) => setFeeFixed(e.target.value)}
-              disabled={!canEditCompany}
-              placeholder="0"
-              inputMode="decimal"
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-            />
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-[hsl(var(--foreground))]">phone_number_id</label>
+          <input
+            value={whatsPhoneNumberId}
+            onChange={(e) => setWhatsPhoneNumberId(e.target.value)}
+            disabled={!canEditCompany}
+            placeholder="Ex: 1234567890"
+            className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+          />
         </div>
 
-        {financeLedgerAvailable ? (
-          <div className="pt-4 border-t border-[hsl(var(--border))] space-y-4">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-sm font-semibold text-[hsl(var(--foreground))]">Movimentos</h3>
-                <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
-                  Registre créditos e gastos (atualiza o saldo de mídia) e fees/ajustes (histórico).
-                </p>
-              </div>
-              <button
-                onClick={() => void refreshFinanceTransactions()}
-                disabled={financeLoading || readOnlyMode || !companyId}
-                className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] disabled:opacity-60"
-                title="Atualizar"
-              >
-                <RefreshCw className="h-4 w-4" />
-                Atualizar
-              </button>
-            </div>
-
-            {financeError ? <div className="text-sm text-red-400">{financeError}</div> : null}
-
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-              <div>
-                <label className="block text-xs font-medium text-[hsl(var(--muted-foreground))]">Tipo</label>
-                <select
-                  value={txnKind}
-                  onChange={(e) => setTxnKind(e.target.value as FinanceTransactionKind)}
-                  disabled={readOnlyMode || !canEditCompany}
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-                >
-                  <option value="media_credit">Crédito de mídia</option>
-                  <option value="media_spend">Gasto de mídia</option>
-                  <option value="adjustment">Ajuste</option>
-                  <option value="agency_fee">Fee da agência</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-[hsl(var(--muted-foreground))]">Valor</label>
-                <input
-                  value={txnAmount}
-                  onChange={(e) => setTxnAmount(e.target.value)}
-                  disabled={readOnlyMode || !canEditCompany}
-                  placeholder="Ex: 100,00"
-                  inputMode="decimal"
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-                />
-              </div>
-
-              <div className="md:col-span-2">
-                <label className="block text-xs font-medium text-[hsl(var(--muted-foreground))]">Obs (opcional)</label>
-                <div className="mt-2 flex gap-2">
-                  <input
-                    value={txnNote}
-                    onChange={(e) => setTxnNote(e.target.value)}
-                    disabled={readOnlyMode || !canEditCompany}
-                    placeholder="Ex: Recarga inicial / Ajuste"
-                    className="w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-                  />
-                  <button
-                    onClick={() => void applyTransaction()}
-                    disabled={txnSaving || readOnlyMode || !canEditCompany}
-                    className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] text-sm font-semibold hover:opacity-90 disabled:opacity-60"
-                    title="Registrar"
-                  >
-                    <Save className="h-4 w-4" />
-                    {txnSaving ? 'Salvando...' : 'Registrar'}
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-[hsl(var(--border))] overflow-auto max-h-80">
-              <table className="min-w-full text-sm">
-                <thead className="bg-[hsl(var(--card))] sticky top-0">
-                  <tr className="text-left text-[hsl(var(--muted-foreground))]">
-                    <th className="px-3 py-2 font-medium">Quando</th>
-                    <th className="px-3 py-2 font-medium">Tipo</th>
-                    <th className="px-3 py-2 font-medium">Valor</th>
-                    <th className="px-3 py-2 font-medium">Obs</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {financeTxns.length === 0 ? (
-                    <tr>
-                      <td colSpan={4} className="px-3 py-4 text-center text-[hsl(var(--muted-foreground))]">
-                        Sem movimentos ainda.
-                      </td>
-                    </tr>
-                  ) : (
-                    financeTxns.map((t) => (
-                      <tr key={t.id} className="border-t border-[hsl(var(--border))]">
-                        <td className="px-3 py-2 whitespace-nowrap text-[hsl(var(--foreground))]">
-                          {new Date(t.created_at).toLocaleString('pt-BR')}
-                        </td>
-                        <td className="px-3 py-2 whitespace-nowrap text-[hsl(var(--foreground))]">{labelTxnKind(t.kind)}</td>
-                        <td
-                          className={`px-3 py-2 whitespace-nowrap font-medium ${
-                            t.amount < 0 ? 'text-red-400' : 'text-emerald-400'
-                          }`}
-                        >
-                          {formatMoney(t.amount, t.currency || currency)}
-                        </td>
-                        <td className="px-3 py-2 text-[hsl(var(--muted-foreground))]">{t.note || '—'}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : (
-          <p className="text-xs text-[hsl(var(--muted-foreground))]">
-            Histórico de transações ainda não está habilitado neste banco (migration: phase5_finance_ledger).
-          </p>
-        )}
+        <div>
+          <label className="block text-sm font-medium text-[hsl(var(--foreground))]">WABA ID (opcional)</label>
+          <input
+            value={whatsWabaId}
+            onChange={(e) => setWhatsWabaId(e.target.value)}
+            disabled={!canEditCompany}
+            placeholder="Ex: 198..."
+            className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+          />
         </div>
-      )}
+      </div>
+    </div>
+  )
+}
 
-      {selectedSection === 'conversoes' && (
-        <div className="cr8-card p-6 space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Conversões (Google Ads / Meta)</h2>
-              <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-                Usa os click IDs capturados nos leads (ex: <span className="font-mono">gclid</span>) para enviar{' '}
-                <span className="font-medium">Offline Conversions</span>. Os segredos OAuth ficam no Supabase (Edge Secrets), não no banco.
-              </p>
-            </div>
+{
+  selectedSection === 'financeiro' && (
+    <div className="cr8-card p-6 space-y-4">
+      <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Financeiro</h2>
+      <p className="text-xs text-[hsl(var(--muted-foreground))]">Controle de saldo de mídia e fee da agência (por empresa).</p>
 
-            <button
-              onClick={() => void dispatchConversionsNow()}
-              disabled={dispatchingConversions || readOnlyMode || !companyId}
-              className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] text-sm font-semibold hover:opacity-90 disabled:opacity-60"
-              title="Despachar conversões pendentes (Google Ads)"
-            >
-              <Send className="h-4 w-4" />
-              {dispatchingConversions ? 'Enviando...' : 'Despachar agora'}
-            </button>
-          </div>
-
-        {dispatchConversionsMsg ? <div className="text-xs text-emerald-300">{dispatchConversionsMsg}</div> : null}
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Google Ads Customer ID</label>
-            <input
-              value={googleAdsCustomerId}
-              onChange={(e) => setGoogleAdsCustomerId(e.target.value)}
-              disabled={!canEditCompany}
-              placeholder="1234567890 (sem traços)"
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
-            />
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <div className="text-[11px] text-[hsl(var(--muted-foreground))]">Opcional: buscar as contas acessíveis e selecionar.</div>
-              <button
-                type="button"
-                onClick={() => void refreshGoogleCustomers()}
-                disabled={googleCustomersLoading || readOnlyMode || !companyId}
-                className="inline-flex items-center gap-2 px-2 py-1 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] text-xs hover:bg-[hsl(var(--accent))] disabled:opacity-60"
-                title="Buscar contas acessíveis no Google Ads"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${googleCustomersLoading ? 'animate-spin' : ''}`} />
-                {googleCustomersLoading ? 'Buscando...' : 'Buscar contas'}
-              </button>
-            </div>
-            {googleCustomersError ? <div className="mt-1 text-xs text-rose-300">{googleCustomersError}</div> : null}
-            {googleCustomers.length ? (
-              <select
-                value=""
-                onChange={(e) => {
-                  const raw = e.target.value || '';
-                  const id = raw.replace(/\\D/g, '');
-                  if (id) setGoogleAdsCustomerId(id);
-                }}
-                disabled={!canEditCompany}
-                className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-              >
-                <option value="">Selecionar conta...</option>
-                {googleCustomers.map((c) => (
-                  <option key={c.resource_name} value={c.id}>
-                    {(c.descriptive_name ? `${c.descriptive_name} — ` : '') + c.id}
-                  </option>
-                ))}
-              </select>
-            ) : null}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Login Customer ID (MCC)</label>
-            <input
-              value={googleAdsLoginCustomerId}
-              onChange={(e) => setGoogleAdsLoginCustomerId(e.target.value)}
-              disabled={!canEditCompany}
-              placeholder="Opcional (sem traços)"
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Currency Code</label>
-            <input
-              value={googleAdsCurrencyCode}
-              onChange={(e) => setGoogleAdsCurrencyCode(e.target.value)}
-              disabled={!canEditCompany}
-              placeholder="BRL"
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
-            />
-          </div>
-
-          <div className="md:col-span-3 flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <div className="text-xs text-[hsl(var(--muted-foreground))]">
-                Dica: clique em <span className="font-medium">Buscar ações</span> para listar as Conversion Actions desse Customer ID e só selecionar.
-              </div>
-              {googleActionsError ? <div className="mt-1 text-xs text-rose-300">{googleActionsError}</div> : null}
-            </div>
-            <button
-              onClick={() => void refreshGoogleConversionActions()}
-              disabled={googleActionsLoading || readOnlyMode || !companyId}
-              className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] text-sm hover:bg-[hsl(var(--accent))] disabled:opacity-60"
-              title="Buscar Conversion Actions no Google Ads"
-            >
-              <RefreshCw className={`h-4 w-4 ${googleActionsLoading ? 'animate-spin' : ''}`} />
-              {googleActionsLoading ? 'Buscando...' : 'Buscar ações'}
-            </button>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Conversion Action (Lead)</label>
-            <select
-              value={googleAdsConvLead}
-              onChange={(e) => setGoogleAdsConvLead(e.target.value)}
-              disabled={!canEditCompany}
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-            >
-              <option value="">Selecione (ou preencha manualmente)</option>
-              {googleActions.map((a) => (
-                <option key={a.resource_name} value={a.id || a.resource_name}>
-                  {(a.name || 'Sem nome') + ` — ${a.id}`}
-                </option>
-              ))}
-            </select>
-            <div className="mt-2 flex items-center justify-between gap-3">
-              <div className="text-[11px] text-[hsl(var(--muted-foreground))]">
-                Se preferir, você pode colar o resource name (ex.: <span className="font-mono">customers/123.../conversionActions/111</span>).
-              </div>
-              <button
-                type="button"
-                onClick={() => setGoogleActionsManual((v) => !v)}
-                className="text-[11px] text-[hsl(var(--primary))] hover:underline"
-              >
-                {googleActionsManual ? 'Ocultar manual' : 'Editar manual'}
-              </button>
-            </div>
-            {googleActionsManual ? (
-              <input
-                value={googleAdsConvLead}
-                onChange={(e) => setGoogleAdsConvLead(e.target.value)}
-                disabled={!canEditCompany}
-                placeholder="ID (ex: 123) ou resource name"
-                className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
-              />
-            ) : null}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Conversion Action (Compra)</label>
-            <select
-              value={googleAdsConvPurchase}
-              onChange={(e) => setGoogleAdsConvPurchase(e.target.value)}
-              disabled={!canEditCompany}
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
-            >
-              <option value="">(Opcional) Selecione</option>
-              {googleActions.map((a) => (
-                <option key={a.resource_name + ':purchase'} value={a.id || a.resource_name}>
-                  {(a.name || 'Sem nome') + ` — ${a.id}`}
-                </option>
-              ))}
-            </select>
-            {googleActionsManual ? (
-              <input
-                value={googleAdsConvPurchase}
-                onChange={(e) => setGoogleAdsConvPurchase(e.target.value)}
-                disabled={!canEditCompany}
-                placeholder="ID (ex: 456) ou resource name"
-                className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
-              />
-            ) : null}
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Meta Pixel ID (opcional)</label>
-            <input
-              value={metaPixelId}
-              onChange={(e) => setMetaPixelId(e.target.value)}
-              disabled={!canEditCompany}
-              placeholder="1234567890"
-              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
-            />
-            <p className="mt-2 text-[11px] text-[hsl(var(--muted-foreground))]">Usaremos isso para eventos da Meta (CAPI) em uma próxima etapa.</p>
-          </div>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Moeda</label>
+          <input
+            value={currency}
+            onChange={(e) => setCurrency(e.target.value)}
+            disabled={!canEditCompany}
+            placeholder="BRL"
+            className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+          />
         </div>
 
-        <div className="text-xs text-[hsl(var(--muted-foreground))]">
-          Dica: para enviar automaticamente, configure um Cron (Vercel Cron / QStash) chamando{' '}
-          <span className="font-mono">{getSupabaseUrl()}/functions/v1/conversions-dispatch</span> com{' '}
-          <span className="font-mono">{`{ company_id: "${companyId}" }`}</span>.
+        <div>
+          <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Saldo de mídia</label>
+          <input
+            value={mediaBalance}
+            onChange={(e) => setMediaBalance(e.target.value)}
+            disabled={!canEditCompany}
+            placeholder="0"
+            inputMode="decimal"
+            className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Fee (%)</label>
+          <input
+            value={feePercent}
+            onChange={(e) => setFeePercent(e.target.value)}
+            disabled={!canEditCompany}
+            placeholder="10"
+            inputMode="decimal"
+            className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Fee fixo</label>
+          <input
+            value={feeFixed}
+            onChange={(e) => setFeeFixed(e.target.value)}
+            disabled={!canEditCompany}
+            placeholder="0"
+            inputMode="decimal"
+            className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+          />
         </div>
       </div>
 
-      {selectedSection === 'auditoria' && (
+      {financeLedgerAvailable ? (
+        <div className="pt-4 border-t border-[hsl(var(--border))] space-y-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h3 className="text-sm font-semibold text-[hsl(var(--foreground))]">Movimentos</h3>
+              <p className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
+                Registre créditos e gastos (atualiza o saldo de mídia) e fees/ajustes (histórico).
+              </p>
+            </div>
+            <button
+              onClick={() => void refreshFinanceTransactions()}
+              disabled={financeLoading || readOnlyMode || !companyId}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] disabled:opacity-60"
+              title="Atualizar"
+            >
+              <RefreshCw className="h-4 w-4" />
+              Atualizar
+            </button>
+          </div>
+
+          {financeError ? <div className="text-sm text-red-400">{financeError}</div> : null}
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label className="block text-xs font-medium text-[hsl(var(--muted-foreground))]">Tipo</label>
+              <select
+                value={txnKind}
+                onChange={(e) => setTxnKind(e.target.value as FinanceTransactionKind)}
+                disabled={readOnlyMode || !canEditCompany}
+                className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+              >
+                <option value="media_credit">Crédito de mídia</option>
+                <option value="media_spend">Gasto de mídia</option>
+                <option value="adjustment">Ajuste</option>
+                <option value="agency_fee">Fee da agência</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-[hsl(var(--muted-foreground))]">Valor</label>
+              <input
+                value={txnAmount}
+                onChange={(e) => setTxnAmount(e.target.value)}
+                disabled={readOnlyMode || !canEditCompany}
+                placeholder="Ex: 100,00"
+                inputMode="decimal"
+                className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-xs font-medium text-[hsl(var(--muted-foreground))]">Obs (opcional)</label>
+              <div className="mt-2 flex gap-2">
+                <input
+                  value={txnNote}
+                  onChange={(e) => setTxnNote(e.target.value)}
+                  disabled={readOnlyMode || !canEditCompany}
+                  placeholder="Ex: Recarga inicial / Ajuste"
+                  className="w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                />
+                <button
+                  onClick={() => void applyTransaction()}
+                  disabled={txnSaving || readOnlyMode || !canEditCompany}
+                  className="shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+                  title="Registrar"
+                >
+                  <Save className="h-4 w-4" />
+                  {txnSaving ? 'Salvando...' : 'Registrar'}
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-[hsl(var(--border))] overflow-auto max-h-80">
+            <table className="min-w-full text-sm">
+              <thead className="bg-[hsl(var(--card))] sticky top-0">
+                <tr className="text-left text-[hsl(var(--muted-foreground))]">
+                  <th className="px-3 py-2 font-medium">Quando</th>
+                  <th className="px-3 py-2 font-medium">Tipo</th>
+                  <th className="px-3 py-2 font-medium">Valor</th>
+                  <th className="px-3 py-2 font-medium">Obs</th>
+                </tr>
+              </thead>
+              <tbody>
+                {financeTxns.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-4 text-center text-[hsl(var(--muted-foreground))]">
+                      Sem movimentos ainda.
+                    </td>
+                  </tr>
+                ) : (
+                  financeTxns.map((t) => (
+                    <tr key={t.id} className="border-t border-[hsl(var(--border))]">
+                      <td className="px-3 py-2 whitespace-nowrap text-[hsl(var(--foreground))]">
+                        {new Date(t.created_at).toLocaleString('pt-BR')}
+                      </td>
+                      <td className="px-3 py-2 whitespace-nowrap text-[hsl(var(--foreground))]">{labelTxnKind(t.kind)}</td>
+                      <td
+                        className={`px-3 py-2 whitespace-nowrap font-medium ${t.amount < 0 ? 'text-red-400' : 'text-emerald-400'
+                          }`}
+                      >
+                        {formatMoney(t.amount, t.currency || currency)}
+                      </td>
+                      <td className="px-3 py-2 text-[hsl(var(--muted-foreground))]">{t.note || '—'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : (
+        <p className="text-xs text-[hsl(var(--muted-foreground))]">
+          Histórico de transações ainda não está habilitado neste banco (migration: phase5_finance_ledger).
+        </p>
+      )}
+    </div>
+  )
+}
+
+{
+  selectedSection === 'conversoes' && (
+    <div className="cr8-card p-6 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Conversões (Google Ads / Meta)</h2>
+          <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
+            Usa os click IDs capturados nos leads (ex: <span className="font-mono">gclid</span>) para enviar{' '}
+            <span className="font-medium">Offline Conversions</span>. Os segredos OAuth ficam no Supabase (Edge Secrets), não no banco.
+          </p>
+        </div>
+
+        <button
+          onClick={() => void dispatchConversionsNow()}
+          disabled={dispatchingConversions || readOnlyMode || !companyId}
+          className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] text-sm font-semibold hover:opacity-90 disabled:opacity-60"
+          title="Despachar conversões pendentes (Google Ads)"
+        >
+          <Send className="h-4 w-4" />
+          {dispatchingConversions ? 'Enviando...' : 'Despachar agora'}
+        </button>
+      </div>
+
+      {dispatchConversionsMsg ? <div className="text-xs text-emerald-300">{dispatchConversionsMsg}</div> : null}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Google Ads Customer ID</label>
+          <input
+            value={googleAdsCustomerId}
+            onChange={(e) => setGoogleAdsCustomerId(e.target.value)}
+            disabled={!canEditCompany}
+            placeholder="1234567890 (sem traços)"
+            className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+          />
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <div className="text-[11px] text-[hsl(var(--muted-foreground))]">Opcional: buscar as contas acessíveis e selecionar.</div>
+            <button
+              type="button"
+              onClick={() => void refreshGoogleCustomers()}
+              disabled={googleCustomersLoading || readOnlyMode || !companyId}
+              className="inline-flex items-center gap-2 px-2 py-1 rounded-md border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] text-xs hover:bg-[hsl(var(--accent))] disabled:opacity-60"
+              title="Buscar contas acessíveis no Google Ads"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${googleCustomersLoading ? 'animate-spin' : ''}`} />
+              {googleCustomersLoading ? 'Buscando...' : 'Buscar contas'}
+            </button>
+          </div>
+          {googleCustomersError ? <div className="mt-1 text-xs text-rose-300">{googleCustomersError}</div> : null}
+          {googleCustomers.length ? (
+            <select
+              value=""
+              onChange={(e) => {
+                const raw = e.target.value || '';
+                const id = raw.replace(/\\D/g, '');
+                if (id) setGoogleAdsCustomerId(id);
+              }}
+              disabled={!canEditCompany}
+              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+            >
+              <option value="">Selecionar conta...</option>
+              {googleCustomers.map((c) => (
+                <option key={c.resource_name} value={c.id}>
+                  {(c.descriptive_name ? `${c.descriptive_name} — ` : '') + c.id}
+                </option>
+              ))}
+            </select>
+          ) : null}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Login Customer ID (MCC)</label>
+          <input
+            value={googleAdsLoginCustomerId}
+            onChange={(e) => setGoogleAdsLoginCustomerId(e.target.value)}
+            disabled={!canEditCompany}
+            placeholder="Opcional (sem traços)"
+            className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Currency Code</label>
+          <input
+            value={googleAdsCurrencyCode}
+            onChange={(e) => setGoogleAdsCurrencyCode(e.target.value)}
+            disabled={!canEditCompany}
+            placeholder="BRL"
+            className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+          />
+        </div>
+
+        <div className="md:col-span-3 flex items-end justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-xs text-[hsl(var(--muted-foreground))]">
+              Dica: clique em <span className="font-medium">Buscar ações</span> para listar as Conversion Actions desse Customer ID e só selecionar.
+            </div>
+            {googleActionsError ? <div className="mt-1 text-xs text-rose-300">{googleActionsError}</div> : null}
+          </div>
+          <button
+            onClick={() => void refreshGoogleConversionActions()}
+            disabled={googleActionsLoading || readOnlyMode || !companyId}
+            className="shrink-0 inline-flex items-center gap-2 px-3 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] text-[hsl(var(--foreground))] text-sm hover:bg-[hsl(var(--accent))] disabled:opacity-60"
+            title="Buscar Conversion Actions no Google Ads"
+          >
+            <RefreshCw className={`h-4 w-4 ${googleActionsLoading ? 'animate-spin' : ''}`} />
+            {googleActionsLoading ? 'Buscando...' : 'Buscar ações'}
+          </button>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Conversion Action (Lead)</label>
+          <select
+            value={googleAdsConvLead}
+            onChange={(e) => setGoogleAdsConvLead(e.target.value)}
+            disabled={!canEditCompany}
+            className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+          >
+            <option value="">Selecione (ou preencha manualmente)</option>
+            {googleActions.map((a) => (
+              <option key={a.resource_name} value={a.id || a.resource_name}>
+                {(a.name || 'Sem nome') + ` — ${a.id}`}
+              </option>
+            ))}
+          </select>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <div className="text-[11px] text-[hsl(var(--muted-foreground))]">
+              Se preferir, você pode colar o resource name (ex.: <span className="font-mono">customers/123.../conversionActions/111</span>).
+            </div>
+            <button
+              type="button"
+              onClick={() => setGoogleActionsManual((v) => !v)}
+              className="text-[11px] text-[hsl(var(--primary))] hover:underline"
+            >
+              {googleActionsManual ? 'Ocultar manual' : 'Editar manual'}
+            </button>
+          </div>
+          {googleActionsManual ? (
+            <input
+              value={googleAdsConvLead}
+              onChange={(e) => setGoogleAdsConvLead(e.target.value)}
+              disabled={!canEditCompany}
+              placeholder="ID (ex: 123) ou resource name"
+              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+            />
+          ) : null}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Conversion Action (Compra)</label>
+          <select
+            value={googleAdsConvPurchase}
+            onChange={(e) => setGoogleAdsConvPurchase(e.target.value)}
+            disabled={!canEditCompany}
+            className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+          >
+            <option value="">(Opcional) Selecione</option>
+            {googleActions.map((a) => (
+              <option key={a.resource_name + ':purchase'} value={a.id || a.resource_name}>
+                {(a.name || 'Sem nome') + ` — ${a.id}`}
+              </option>
+            ))}
+          </select>
+          {googleActionsManual ? (
+            <input
+              value={googleAdsConvPurchase}
+              onChange={(e) => setGoogleAdsConvPurchase(e.target.value)}
+              disabled={!canEditCompany}
+              placeholder="ID (ex: 456) ou resource name"
+              className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+            />
+          ) : null}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Meta Pixel ID (opcional)</label>
+          <input
+            value={metaPixelId}
+            onChange={(e) => setMetaPixelId(e.target.value)}
+            disabled={!canEditCompany}
+            placeholder="1234567890"
+            className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+          />
+          <p className="mt-2 text-[11px] text-[hsl(var(--muted-foreground))]">Usaremos isso para eventos da Meta (CAPI) em uma próxima etapa.</p>
+        </div>
+      </div>
+
+      <div className="text-xs text-[hsl(var(--muted-foreground))]">
+        Dica: para enviar automaticamente, configure um Cron (Vercel Cron / QStash) chamando{' '}
+        <span className="font-mono">{getSupabaseUrl()}/functions/v1/conversions-dispatch</span> com{' '}
+        <span className="font-mono">{`{ company_id: "${companyId}" }`}</span>.
+      </div>
+    </div>
+
+      {
+    selectedSection === 'auditoria' && (
         <div className="cr8-card p-6 space-y-4">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -2035,122 +2041,125 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
           </div>
         )}
         </div>
-      )}
+    )
+  }
 
-      {selectedSection === 'equipe' && canEditCompany && (
-        <div className="cr8-card p-6 space-y-4">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Equipe</h2>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">
-                Permissões por empresa (multi-tenant). Admin gerencia convites e membros.
-              </p>
-            </div>
-
-            {canManageIdentity ? (
-              <button
-                type="button"
-                onClick={() => void openInviteModal()}
-                className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-[hsl(var(--primary-foreground))] hover:opacity-90"
-              >
-                <Link2 className="h-4 w-4" />
-                Convidar
-              </button>
-            ) : null}
+  {
+    selectedSection === 'equipe' && canEditCompany && (
+      <div className="cr8-card p-6 space-y-4">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Equipe</h2>
+            <p className="text-xs text-[hsl(var(--muted-foreground))]">
+              Permissões por empresa (multi-tenant). Admin gerencia convites e membros.
+            </p>
           </div>
 
-          {membersError && <div className="text-sm text-[hsl(var(--destructive))]">{membersError}</div>}
-
-          {!canManageIdentity ? (
-            <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-4 text-sm text-[hsl(var(--muted-foreground))]">
-              Somente <span className="text-[hsl(var(--foreground))] font-semibold">admins</span> podem convidar, remover e alterar perfis.
-            </div>
-          ) : null}
-
           {canManageIdentity ? (
-            <div className="grid grid-cols-1 gap-6">
-              <div className="space-y-2">
-                <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Membros atuais</div>
-                <div className="rounded-lg border border-[hsl(var(--border))] overflow-hidden">
-                  <table className="w-full text-sm">
-                    <thead className="bg-[hsl(var(--secondary))]">
-                      <tr className="text-left text-[hsl(var(--muted-foreground))]">
-                        <th className="px-3 py-2">Usuário</th>
-                        <th className="px-3 py-2">Perfil</th>
-                        <th className="px-3 py-2 text-right">Ações</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {membersLoading ? (
-                        <tr>
-                          <td className="px-3 py-3 text-[hsl(var(--muted-foreground))]" colSpan={3}>
-                            Carregando...
-                          </td>
-                        </tr>
-                      ) : members.length === 0 ? (
-                        <tr>
-                          <td className="px-3 py-3 text-[hsl(var(--muted-foreground))]" colSpan={3}>
-                            Nenhum membro encontrado.
-                          </td>
-                        </tr>
-                      ) : (
-                        members.map((m) => (
-                          <tr key={m.user_id} className="border-t border-[hsl(var(--border))]">
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <img
-                                  src={m.avatar_url ?? 'https://via.placeholder.com/32'}
-                                  alt={m.full_name ?? m.email ?? 'user'}
-                                  className="h-7 w-7 rounded-full bg-[hsl(var(--muted))]"
-                                />
-                                <div className="min-w-0">
-                                  <div className="text-[hsl(var(--foreground))] truncate">
-                                    {m.full_name ?? '(sem nome)'}
-                                    {userId && m.user_id === userId ? (
-                                      <span className="ml-2 rounded border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] px-1.5 py-0.5 text-[10px] text-[hsl(var(--muted-foreground))]">
-                                        você
-                                      </span>
-                                    ) : null}
-                                  </div>
-                                  <div className="text-xs text-[hsl(var(--muted-foreground))] truncate">{m.email ?? ''}</div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-3 py-2">
-                              <select
-                                value={normalizeRole(m.member_role)}
-                                onChange={(e) => void updateMemberRole(m.user_id, e.target.value as Role)}
-                                disabled={saving || (userId && m.user_id === userId)}
-                                className="rounded-md bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-2 py-1 text-sm text-[hsl(var(--foreground))]"
-                              >
-                                <option value="cliente">cliente</option>
-                                <option value="vendedor">vendedor</option>
-                                <option value="gestor">gestor</option>
-                                <option value="admin">admin</option>
-                              </select>
-                            </td>
-                            <td className="px-3 py-2 text-right">
-                              <button
-                                onClick={() => void removeMember(m.user_id)}
-                                disabled={saving || (userId && m.user_id === userId)}
-                                className="inline-flex items-center gap-2 rounded-md border border-[hsl(var(--border))] px-3 py-1.5 text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] disabled:opacity-60"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                Remover
-                              </button>
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-                <p className="text-[11px] text-[hsl(var(--muted-foreground))]">O perfil é por empresa (multi-tenancy).</p>
-              </div>
-            </div>
+            <button
+              type="button"
+              onClick={() => void openInviteModal()}
+              className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-[hsl(var(--primary))] px-4 py-2 text-sm font-semibold text-[hsl(var(--primary-foreground))] hover:opacity-90"
+            >
+              <Link2 className="h-4 w-4" />
+              Convidar
+            </button>
           ) : null}
         </div>
-      )}
+
+        {membersError && <div className="text-sm text-[hsl(var(--destructive))]">{membersError}</div>}
+
+        {!canManageIdentity ? (
+          <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-4 text-sm text-[hsl(var(--muted-foreground))]">
+            Somente <span className="text-[hsl(var(--foreground))] font-semibold">admins</span> podem convidar, remover e alterar perfis.
+          </div>
+        ) : null}
+
+        {canManageIdentity ? (
+          <div className="grid grid-cols-1 gap-6">
+            <div className="space-y-2">
+              <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Membros atuais</div>
+              <div className="rounded-lg border border-[hsl(var(--border))] overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-[hsl(var(--secondary))]">
+                    <tr className="text-left text-[hsl(var(--muted-foreground))]">
+                      <th className="px-3 py-2">Usuário</th>
+                      <th className="px-3 py-2">Perfil</th>
+                      <th className="px-3 py-2 text-right">Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {membersLoading ? (
+                      <tr>
+                        <td className="px-3 py-3 text-[hsl(var(--muted-foreground))]" colSpan={3}>
+                          Carregando...
+                        </td>
+                      </tr>
+                    ) : members.length === 0 ? (
+                      <tr>
+                        <td className="px-3 py-3 text-[hsl(var(--muted-foreground))]" colSpan={3}>
+                          Nenhum membro encontrado.
+                        </td>
+                      </tr>
+                    ) : (
+                      members.map((m) => (
+                        <tr key={m.user_id} className="border-t border-[hsl(var(--border))]">
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <img
+                                src={m.avatar_url ?? 'https://via.placeholder.com/32'}
+                                alt={m.full_name ?? m.email ?? 'user'}
+                                className="h-7 w-7 rounded-full bg-[hsl(var(--muted))]"
+                              />
+                              <div className="min-w-0">
+                                <div className="text-[hsl(var(--foreground))] truncate">
+                                  {m.full_name ?? '(sem nome)'}
+                                  {userId && m.user_id === userId ? (
+                                    <span className="ml-2 rounded border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] px-1.5 py-0.5 text-[10px] text-[hsl(var(--muted-foreground))]">
+                                      você
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="text-xs text-[hsl(var(--muted-foreground))] truncate">{m.email ?? ''}</div>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-3 py-2">
+                            <select
+                              value={normalizeRole(m.member_role)}
+                              onChange={(e) => void updateMemberRole(m.user_id, e.target.value as Role)}
+                              disabled={saving || (userId && m.user_id === userId)}
+                              className="rounded-md bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-2 py-1 text-sm text-[hsl(var(--foreground))]"
+                            >
+                              <option value="cliente">cliente</option>
+                              <option value="vendedor">vendedor</option>
+                              <option value="gestor">gestor</option>
+                              <option value="admin">admin</option>
+                            </select>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <button
+                              onClick={() => void removeMember(m.user_id)}
+                              disabled={saving || (userId && m.user_id === userId)}
+                              className="inline-flex items-center gap-2 rounded-md border border-[hsl(var(--border))] px-3 py-1.5 text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--muted))] disabled:opacity-60"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                              Remover
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <p className="text-[11px] text-[hsl(var(--muted-foreground))]">O perfil é por empresa (multi-tenancy).</p>
+            </div>
+          </div>
+        ) : null}
+      </div>
+    )
+  }
 
       <ModalShell title="Gerar convite" open={inviteModalOpen} onClose={() => setInviteModalOpen(false)} maxWidthClassName="max-w-xl">
         <div className="space-y-5">
@@ -2404,6 +2413,6 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
         </div>
       </ModalShell>
 
-    </div>
+    </div >
   );
 };
