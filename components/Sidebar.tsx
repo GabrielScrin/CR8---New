@@ -1,15 +1,22 @@
 import React, { useState } from 'react';
-import { 
-  LayoutDashboard, 
-  Users, 
-  MessageSquare, 
-  BarChart2, 
-  Instagram, 
-  MessageCircle, 
-  Bot, 
-  Settings, 
+import {
+  LayoutDashboard,
+  Users,
+  MessageSquare,
+  BarChart2,
+  Instagram,
+  MessageCircle,
+  Bot,
+  Settings,
   FileText,
-  LogOut
+  LogOut,
+  ChevronRight,
+  ChevronDown,
+  Building2,
+  DollarSign,
+  Target,
+  ClipboardCheck,
+  Puzzle
 } from 'lucide-react';
 import { Role, isClientRole, labelRolePt, normalizeRole } from '../types';
 
@@ -40,13 +47,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, r
     isClientRole(role) ? menuItems.filter((item) => item.id === 'dashboard' || item.id === 'traffic') : menuItems;
 
   const SETTINGS_SUB = [
-    { id: 'company', label: 'Empresa e White Label' },
-    { id: 'whatsapp', label: 'WhatsApp' },
-    { id: 'financeiro', label: 'Financeiro' },
-    { id: 'conversoes', label: 'Conversões' },
-    { id: 'auditoria', label: 'Auditoria' },
-    { id: 'equipe', label: 'Equipe' },
-    { id: 'integracoes', label: 'Integrações' },
+    { id: 'company', label: 'Empresa e White Label', icon: Building2 },
+    { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+    { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
+    { id: 'conversoes', label: 'Conversões', icon: Target },
+    { id: 'auditoria', label: 'Auditoria', icon: ClipboardCheck },
+    { id: 'equipe', label: 'Equipe', icon: Users },
+    { id: 'integracoes', label: 'Integrações', icon: Puzzle },
   ];
 
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -70,11 +77,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, r
               <button
                 key={item.id}
                 onClick={() => setCurrentView(item.id)}
-                className={`w-full flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-                  currentView === item.id
+                className={`w-full flex items-center px-6 py-3 text-sm font-medium transition-colors ${currentView === item.id
                     ? 'bg-[hsl(var(--sidebar-primary))] text-[hsl(var(--sidebar-primary-foreground))] border-r-4 border-[hsl(var(--accent))]'
                     : 'text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-accent-foreground))]'
-                }`}
+                  }`}
               >
                 <item.icon className="w-5 h-5 mr-3" />
                 {item.label}
@@ -92,25 +98,29 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, r
                   setSettingsOpen((s) => !s);
                   setCurrentView('settings');
                 }}
-                className={`w-full flex items-center px-6 py-3 text-sm font-medium transition-colors ${
-                  settingsActive
+                className={`w-full flex items-center justify-between px-6 py-3 text-sm font-medium transition-colors ${settingsActive
                     ? 'bg-[hsl(var(--sidebar-primary))] text-[hsl(var(--sidebar-primary-foreground))] border-r-4 border-[hsl(var(--accent))]'
                     : 'text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-accent-foreground))]'
-                }`}
+                  }`}
               >
-                <item.icon className="w-5 h-5 mr-3" />
-                {item.label}
+                <div className="flex items-center">
+                  <item.icon className="w-5 h-5 mr-3" />
+                  {item.label}
+                </div>
+                {settingsOpen ? <ChevronDown className="w-4 h-4 opacity-70" /> : <ChevronRight className="w-4 h-4 opacity-70" />}
               </button>
               {settingsOpen && (
-                <div className="pl-12 pr-4">
+                <div className="pl-6 pr-4 mt-1 space-y-0.5">
                   {SETTINGS_SUB.map((s) => (
                     <button
                       key={s.id}
                       onClick={() => setCurrentView(`settings:${s.id}`)}
-                      className={`w-full text-left mt-1 mb-1 px-2 py-2 rounded text-sm ${
-                        currentView === `settings:${s.id}` ? 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-accent-foreground))]' : 'text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))]'
-                      }`}
+                      className={`w-full flex items-center px-8 py-2 rounded text-sm transition-colors ${currentView === `settings:${s.id}`
+                          ? 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-accent-foreground))] font-medium'
+                          : 'text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))] opacity-80 hover:opacity-100'
+                        }`}
                     >
+                      <s.icon className="w-4 h-4 mr-3 opacity-70" />
                       {s.label}
                     </button>
                   ))}
@@ -128,7 +138,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, r
             {labelRolePt(normalizeRole(role))}
           </span>
         </div>
-        <button 
+        <button
           onClick={onLogout}
           className="w-full flex items-center px-2 py-2 text-sm text-red-400 hover:bg-[hsl(var(--sidebar-accent))] rounded-md transition-colors"
         >
