@@ -6,7 +6,8 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { Bot, Sparkles, SlidersHorizontal, Database, Search, AlertCircle } from 'lucide-react'
+import { Bot, Sparkles, SlidersHorizontal, Database, Search } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -23,13 +24,13 @@ import {
     SelectValue,
 } from '@/components/ui/select'
 import {
-    Sheet,
-    SheetContent,
-    SheetDescription,
-    SheetHeader,
-    SheetTitle,
-    SheetFooter,
-} from '@/components/ui/sheet'
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from '@/components/ui/dialog'
 import {
     Collapsible,
     CollapsibleContent,
@@ -37,9 +38,11 @@ import {
 } from '@/components/ui/collapsible'
 import type { AIAgent, EmbeddingProvider, RerankProvider } from '@/types'
 import type { CreateAIAgentParams, UpdateAIAgentParams } from '@/services/aiAgentService'
-import { DEFAULT_MODEL_ID, AI_PROVIDERS, type AIProvider } from '@/lib/ai/model'
-import { EMBEDDING_PROVIDERS, DEFAULT_EMBEDDING_CONFIG } from '@/lib/ai/embeddings'
-import { RERANK_PROVIDERS } from '@/lib/ai/reranking'
+import { DEFAULT_MODEL_ID, AI_PROVIDERS } from '@/lib/ai/model'
+import { DEFAULT_EMBEDDING_CONFIG } from '@/lib/ai/embeddings'
+import { KnowledgeBaseSection } from './KnowledgeBaseSection'
+import { aiAgentService } from '@/services/aiAgentService'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 
 // Default handoff instructions
 const DEFAULT_HANDOFF_INSTRUCTIONS = `Só transfira para humano quando o cliente PEDIR EXPLICITAMENTE para falar com uma pessoa, humano ou atendente.
@@ -108,6 +111,39 @@ export function AIAgentForm({
 
     // RAG config expanded state
     const [ragConfigOpen, setRagConfigOpen] = useState(false)
+
+    // Knowledge files state
+    const queryClient = useQueryClient()
+    const { data: knowledgeFiles = [] } = useQuery({
+        queryKey: ['agent-knowledge', agent?.id],
+        queryFn: () => agent ? aiAgentService.listFiles(agent.id) : Promise.resolve([]),
+        enabled: !!agent && open
+    })
+
+    const uploadFileMutation = useMutation({
+        mutationFn: async (file: File) => {
+            if (!agent) return
+            // For now, we need to extract content or send the file.
+            // aiAgentService.uploadFile expects content as string.
+            // In a real scenario, we might want to send the actual File.
+            const reader = new FileReader()
+            const content = await new Promise<string>((resolve) => {
+                reader.onload = (e) => resolve(e.target?.result as string || '')
+                reader.readAsText(file)
+            })
+            return aiAgentService.uploadFile(agent.id, file, content)
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['agent-knowledge', agent?.id] })
+        }
+    })
+
+    const deleteFileMutation = useMutation({
+        mutationFn: (fileId: string) => aiAgentService.deleteFile(fileId),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ['agent-knowledge', agent?.id] })
+        }
+    })
 
     // Reset form when agent changes
     useEffect(() => {
@@ -192,71 +228,26 @@ export function AIAgentForm({
         await onSubmit(params)
     }
 
-    // Get models for selected embedding provider
-    const availableEmbeddingModels = EMBEDDING_PROVIDERS.find(p => p.id === embeddingProvider)?.models || []
-
-    // Handle provider change - auto-select first model and update dimensions
-    const handleEmbeddingProviderChange = (provider: EmbeddingProvider) => {
-        setEmbeddingProvider(provider)
-        const providerInfo = EMBEDDING_PROVIDERS.find(p => p.id === provider)
-        if (providerInfo && providerInfo.models.length > 0) {
-            setEmbeddingModel(providerInfo.models[0].id)
-            setEmbeddingDimensions(providerInfo.models[0].dimensions)
-        }
-    }
-
-    // Handle model change - auto-update dimensions
-    const handleEmbeddingModelChange = (modelId: string) => {
-        setEmbeddingModel(modelId)
-        const modelInfo = availableEmbeddingModels.find(m => m.id === modelId)
-        if (modelInfo) {
-            setEmbeddingDimensions(modelInfo.dimensions)
-        }
-    }
-
-    // Get models for selected reranking provider
-    const availableRerankModels = rerankProvider
-        ? RERANK_PROVIDERS.find(p => p.id === rerankProvider)?.models || []
-        : []
-
-    // Handle rerank provider change - auto-select first model
-    const handleRerankProviderChange = (provider: RerankProvider) => {
-        setRerankProvider(provider)
-        const providerInfo = RERANK_PROVIDERS.find(p => p.id === provider)
-        if (providerInfo && providerInfo.models.length > 0) {
-            setRerankModel(providerInfo.models[0].id)
-        }
-    }
-
-    // Handle rerank toggle
-    const handleRerankToggle = (enabled: boolean) => {
-        setRerankEnabled(enabled)
-        if (enabled && !rerankProvider) {
-            // Auto-select Cohere as default provider
-            handleRerankProviderChange('cohere')
-        }
-    }
-
     // Get selected model info
     const selectedModel = AI_PROVIDERS.flatMap(p => p.models).find((m) => m.id === model)
 
     return (
-        <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="flex h-full w-full flex-col gap-0 p-0 sm:max-w-lg">
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="flex max-h-[90vh] w-full max-w-2xl flex-col gap-0 p-0 overflow-hidden border-zinc-800 bg-[#0a0c10]/95 backdrop-blur-xl">
                 {/* Header fixo */}
-                <SheetHeader className="border-b border-zinc-800/50 bg-[#0a0c10]/40 px-6 py-6 backdrop-blur-md">
-                    <SheetTitle className="flex items-center gap-2 text-xl font-bold tracking-tight">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-500/10 border border-primary-500/20">
-                            <Bot className="h-6 w-6 text-primary-500" />
+                <DialogHeader className="border-b border-zinc-800/50 bg-[#0a0c10]/40 px-6 py-6 backdrop-blur-md">
+                    <DialogTitle className="flex items-center gap-3 text-2xl font-bold tracking-tight">
+                        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary-500/10 border border-primary-500/20 shadow-inner">
+                            <Bot className="h-7 w-7 text-primary-500" />
                         </div>
                         <span className="cr8-text-gradient">
-                            {isEditing ? 'Editar Agente' : 'Novo Agente IA'}
+                            {isEditing ? 'Editar Assistente' : 'Novo Assistente IA'}
                         </span>
-                    </SheetTitle>
-                    <SheetDescription className="text-zinc-400 mt-1">
-                        Configure o comportamento e a inteligência do seu assistente
-                    </SheetDescription>
-                </SheetHeader>
+                    </DialogTitle>
+                    <DialogDescription className="text-zinc-400 mt-1.5 text-sm">
+                        Configure o comportamento e a base de conhecimento do seu assistente
+                    </DialogDescription>
+                </DialogHeader>
 
                 {/* Conteúdo com scroll */}
                 <form
@@ -289,13 +280,13 @@ export function AIAgentForm({
                                         <SelectValue placeholder="Selecione um modelo" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {AI_PROVIDERS.map((provider) => (
+                                        {AI_PROVIDERS.map((provider: any) => (
                                             <SelectGroup key={provider.id}>
                                                 <SelectLabel className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
                                                     <span>{provider.icon}</span>
                                                     <span>{provider.name}</span>
                                                 </SelectLabel>
-                                                {provider.models.map((m, index) => (
+                                                {provider.models.map((m: any, index: number) => (
                                                     <SelectItem key={m.id} value={m.id}>
                                                         <div className="flex items-center gap-2">
                                                             <span>{m.name}</span>
@@ -328,7 +319,7 @@ export function AIAgentForm({
                             <Textarea
                                 id="systemPrompt"
                                 value={systemPrompt}
-                                onChange={(e) => setSystemPrompt(e.target.value)}
+                                onChange={(e: any) => setSystemPrompt(e.target.value)}
                                 placeholder="Descreva como o agente deve se comportar..."
                                 className="min-h-[180px] resize-none font-mono text-sm"
                                 required
@@ -338,15 +329,17 @@ export function AIAgentForm({
                             </p>
                         </div>
 
-                        {/* ═══════════════════════════════════════════════════════════════
-                SEÇÃO: Parâmetros Avançados
-            ═══════════════════════════════════════════════════════════════ */}
-                        <div className="space-y-4">
-                            <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
-                                <SlidersHorizontal className="h-4 w-4 text-zinc-500" />
-                                <span className="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
-                                    Parâmetros Avançados
-                                </span>
+                        <div className="space-y-6">
+                            <div className="relative py-2">
+                                <div className="absolute inset-0 flex items-center" aria-hidden="true">
+                                    <div className="w-full border-t border-zinc-800/80"></div>
+                                </div>
+                                <div className="relative flex justify-start">
+                                    <span className="bg-[#0a0c10] pr-4 text-[10px] font-bold uppercase tracking-[0.2em] text-zinc-500 flex items-center gap-2">
+                                        <SlidersHorizontal className="h-3.5 w-3.5" />
+                                        Parâmetros Avançados
+                                    </span>
+                                </div>
                             </div>
 
                             {/* Temperature */}
@@ -416,83 +409,34 @@ export function AIAgentForm({
                         </div>
 
                         {/* ═══════════════════════════════════════════════════════════════
-                SEÇÃO: Configuração RAG (Knowledge Base)
+                SEÇÃO: Knowledge Base (RAG)
             ═══════════════════════════════════════════════════════════════ */}
+                        {isEditing ? (
+                            <KnowledgeBaseSection
+                                files={knowledgeFiles}
+                                onUpload={async (file) => { await uploadFileMutation.mutateAsync(file) }}
+                                onDelete={async (id) => { await deleteFileMutation.mutateAsync(id) }}
+                                isUploading={uploadFileMutation.isPending}
+                            />
+                        ) : (
+                            <div className="p-6 rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/10 text-center">
+                                <Database className="h-8 w-8 text-zinc-700 mx-auto mb-2" />
+                                <p className="text-sm text-zinc-400">Salve o assistente primeiro para começar a adicionar documentos à base de conhecimento.</p>
+                            </div>
+                        )}
+
+                        {/* Configurações Técnicas de RAG (Opcional/Colapsável) */}
                         <Collapsible open={ragConfigOpen} onOpenChange={setRagConfigOpen}>
-                            <CollapsibleTrigger className="flex w-full items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/30 px-5 py-4 text-left transition-all hover:bg-zinc-800/40 hover:border-zinc-700" type="button">
-                                <div className="flex items-center gap-3">
-                                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                                        <Database className="h-5 w-5 text-emerald-500" />
-                                    </div>
-                                    <div>
-                                        <span className="text-sm font-semibold text-zinc-200">Base de Conhecimento (RAG)</span>
-                                        <p className="text-xs text-zinc-500">
-                                            {embeddingProvider === 'google' ? 'Google Gemini' : 'OpenAI'} • {embeddingDimensions}d
-                                        </p>
-                                    </div>
-                                </div>
-                                <Search className={`h-4 w-4 text-zinc-500 transition-transform duration-300 ${ragConfigOpen ? 'rotate-90 text-primary-500' : ''}`} />
+                            <CollapsibleTrigger className="flex w-full items-center justify-between px-2 py-1 text-left opacity-60 hover:opacity-100 transition-opacity" type="button">
+                                <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Configurações Avançadas de Busca</span>
+                                <Search className={cn("h-3 w-3 transition-transform", ragConfigOpen && "rotate-90")} />
                             </CollapsibleTrigger>
-                            <CollapsibleContent className="mt-3 space-y-5 rounded-2xl border border-zinc-800/50 bg-zinc-900/20 p-5 backdrop-blur-sm">
-                                {/* Embedding Provider */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="embeddingProvider" className="text-sm">
-                                        Provider de Embedding
-                                    </Label>
-                                    <Select
-                                        value={embeddingProvider}
-                                        onValueChange={(v) => handleEmbeddingProviderChange(v as EmbeddingProvider)}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Selecione um provider" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {EMBEDDING_PROVIDERS.map((p) => (
-                                                <SelectItem key={p.id} value={p.id}>
-                                                    <div className="flex items-center gap-2">
-                                                        <span>{p.name}</span>
-                                                    </div>
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                {/* Embedding Model */}
-                                <div className="space-y-2">
-                                    <Label htmlFor="embeddingModel" className="text-sm">
-                                        Modelo de Embedding
-                                    </Label>
-                                    <Select
-                                        value={embeddingModel}
-                                        onValueChange={handleEmbeddingModelChange}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Selecione um modelo" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {availableEmbeddingModels.map((m) => (
-                                                <SelectItem key={m.id} value={m.id}>
-                                                    <div className="flex items-center gap-2">
-                                                        <span>{m.name}</span>
-                                                        <span className="text-[10px] text-zinc-500">
-                                                            {m.dimensions}d • ${m.pricePerMillion}/1M
-                                                        </span>
-                                                    </div>
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                    <p className="text-[10px] text-zinc-500">
-                                        Dimensões: {embeddingDimensions} • Custo por 1M tokens
-                                    </p>
-                                </div>
-
+                            <CollapsibleContent className="space-y-6 pt-4">
                                 {/* Similarity Threshold */}
-                                <div className="space-y-2">
+                                <div className="space-y-4">
                                     <div className="flex items-center justify-between">
-                                        <Label className="text-sm">Threshold de Similaridade</Label>
-                                        <span className="rounded bg-zinc-800/50 text-zinc-300">
+                                        <Label className="text-sm text-zinc-400">Threshold de Similaridade</Label>
+                                        <span className="rounded-lg bg-zinc-800/50 border border-zinc-700/50 px-2.5 py-1 text-xs font-mono text-zinc-300">
                                             {ragSimilarityThreshold.toFixed(2)}
                                         </span>
                                     </div>
@@ -511,10 +455,10 @@ export function AIAgentForm({
                                 </div>
 
                                 {/* Max Results */}
-                                <div className="space-y-2">
+                                <div className="space-y-4">
                                     <div className="flex items-center justify-between">
-                                        <Label className="text-sm">Máximo de Resultados</Label>
-                                        <span className="rounded bg-zinc-800/50 text-zinc-300">
+                                        <Label className="text-sm text-zinc-400">Máximo de Resultados (Top K)</Label>
+                                        <span className="rounded-lg bg-zinc-800/50 border border-zinc-700/50 px-2.5 py-1 text-xs font-mono text-zinc-300">
                                             {ragMaxResults}
                                         </span>
                                     </div>
@@ -527,59 +471,9 @@ export function AIAgentForm({
                                         className="w-full"
                                     />
                                     <p className="text-[10px] text-zinc-500">
-                                        Quantidade de chunks retornados da knowledge base
+                                        Quantidade de fragmentos retornados da base de conhecimento
                                     </p>
                                 </div>
-
-                                {/* Divider */}
-                                <div className="border-t border-zinc-800/80" />
-
-                                {/* Reranking Toggle */}
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <Label htmlFor="rerankEnabled" className="text-sm">
-                                            Reranking (Avançado)
-                                        </Label>
-                                        <p className="text-[10px] text-zinc-500">
-                                            Melhora precisão em bases grandes (+200-500ms latência)
-                                        </p>
-                                    </div>
-                                    <Switch
-                                        id="rerankEnabled"
-                                        checked={rerankEnabled}
-                                        onCheckedChange={handleRerankToggle}
-                                    />
-                                </div>
-
-                                {/* Reranking Config (when enabled) */}
-                                {rerankEnabled && (
-                                    <div className="space-y-4 rounded-md border border-zinc-800/80 bg-[var(--ds-bg-surface)] p-3">
-                                        {/* Rerank Provider */}
-                                        <div className="space-y-2">
-                                            <Label className="text-sm">Provider de Reranking</Label>
-                                            <Select
-                                                value={rerankProvider || ''}
-                                                onValueChange={(v) => handleRerankProviderChange(v as RerankProvider)}
-                                            >
-                                                <SelectTrigger>
-                                                    <SelectValue placeholder="Selecione um provider" />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {RERANK_PROVIDERS.map((p) => (
-                                                        <SelectItem key={p.id} value={p.id}>
-                                                            {p.name}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        <div className="rounded-md bg-blue-500/10 p-2 text-[10px] text-blue-400">
-                                            Configure a API key do {rerankProvider === 'cohere' ? 'Cohere' : 'Together.ai'} nas
-                                            configurações para usar reranking.
-                                        </div>
-                                    </div>
-                                )}
                             </CollapsibleContent>
                         </Collapsible>
 
@@ -621,7 +515,7 @@ export function AIAgentForm({
                         </div>
                     </div>
 
-                    <SheetFooter className="border-t border-zinc-800/50 bg-[#0a0c10]/40 px-6 py-6 backdrop-blur-md mt-auto">
+                    <DialogFooter className="border-t border-zinc-800/50 bg-[#0a0c10]/40 px-6 py-6 backdrop-blur-md mt-auto">
                         <Button
                             type="submit"
                             disabled={isSubmitting}
@@ -632,9 +526,9 @@ export function AIAgentForm({
                                 {isSubmitting ? 'Salvando Assistente...' : 'Salvar Assistente'}
                             </div>
                         </Button>
-                    </SheetFooter>
+                    </DialogFooter>
                 </form>
-            </SheetContent>
-        </Sheet>
+            </DialogContent>
+        </Dialog>
     )
 }
