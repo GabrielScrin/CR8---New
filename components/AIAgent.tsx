@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { clearLocalAiSettings, defaultModelByProvider, loadLocalAiSettings, saveLocalAiSettings, type LlmProvider } from '../lib/aiLocal';
 import { useAIAgentsController, useAIAgentsGlobalToggle } from '../hooks/useAIAgents';
-import { AIAgentsSettingsView } from './features/ai-agents';
+import { AIAgentsSettingsView } from './features/ai-agents/AIAgentsSettingsView';
 import { ChevronDown, ChevronRight, AlertCircle } from 'lucide-react';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 
