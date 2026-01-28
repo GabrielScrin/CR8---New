@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { Bot, Sparkles, SlidersHorizontal, Database, Search } from 'lucide-react'
+import { Bot, Sparkles, SlidersHorizontal, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -43,6 +43,7 @@ import { DEFAULT_EMBEDDING_CONFIG } from '@/lib/ai/embeddings'
 import { KnowledgeBaseSection } from './KnowledgeBaseSection'
 import { aiAgentService } from '@/services/aiAgentService'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { loadLocalAiSettings } from '@/lib/aiLocal'
 
 // Default handoff instructions
 const DEFAULT_HANDOFF_INSTRUCTIONS = `Só transfira para humano quando o cliente PEDIR EXPLICITAMENTE para falar com uma pessoa, humano ou atendente.
@@ -52,22 +53,17 @@ Se o cliente estiver frustrado ou insatisfeito:
 2. Ofereça a OPÇÃO de falar com humano
 3. Só transfira se ele aceitar`
 
-// Default system prompt template (minimalista - baseado em padrões do Google)
-const DEFAULT_SYSTEM_PROMPT = `Você é a [nome], assistente virtual da [empresa].
-
-Você ajuda clientes com dúvidas sobre produtos e pedidos.
-
-Seja amigável e objetivo. Se não souber algo, diga que vai verificar.`
-
 export interface AIAgentFormProps {
+    userId?: string
     open: boolean
     onOpenChange: (open: boolean) => void
-    agent?: AIAgent | null
-    onSubmit: (params: CreateAIAgentParams | UpdateAIAgentParams) => Promise<void>
+    agent: AIAgent | null
+    onSubmit: (params: CreateAIAgentParams | UpdateAIAgentParams) => Promise<AIAgent | undefined>
     isSubmitting?: boolean
 }
 
 export function AIAgentForm({
+    userId,
     open,
     onOpenChange,
     agent,
@@ -76,18 +72,19 @@ export function AIAgentForm({
 }: AIAgentFormProps) {
     const isEditing = !!agent
 
-    // Form state
+    // Form states
     const [name, setName] = useState('')
     const [systemPrompt, setSystemPrompt] = useState('')
     const [model, setModel] = useState(DEFAULT_MODEL_ID)
     const [temperature, setTemperature] = useState(0.7)
-    const [maxTokens, setMaxTokens] = useState(1024)
+    const [maxTokens, setMaxTokens] = useState(2048)
     const [debounceMs, setDebounceMs] = useState(5000)
     const [isActive, setIsActive] = useState(true)
     const [isDefault, setIsDefault] = useState(false)
     const [handoffEnabled, setHandoffEnabled] = useState(true)
     const [handoffInstructions, setHandoffInstructions] = useState('')
     const [bookingToolEnabled, setBookingToolEnabled] = useState(false)
+    const [localPendingFiles, setLocalPendingFiles] = useState<File[]>([])
 
     // RAG: Embedding config
     // Cast handling for potential nulls from DB
@@ -145,16 +142,17 @@ export function AIAgentForm({
         }
     })
 
-    // Reset form when agent changes
+    // Load form data
     useEffect(() => {
         if (agent) {
             setName(agent.name)
             setSystemPrompt(agent.system_prompt)
             setModel(agent.model)
             setTemperature(agent.temperature)
-            setMaxTokens(agent.max_tokens)
-            setDebounceMs(agent.debounce_ms)
+            setMaxTokens(agent.max_tokens || 2048)
             setIsActive(agent.is_active)
+            setDebounceMs(agent.debounce_ms || 5000)
+            setLocalPendingFiles([])
             setIsDefault(agent.is_default)
             setHandoffEnabled(agent.handoff_enabled ?? true)
             setHandoffInstructions(agent.handoff_instructions || DEFAULT_HANDOFF_INSTRUCTIONS)
@@ -173,12 +171,13 @@ export function AIAgentForm({
         } else {
             // Reset to defaults for new agent
             setName('')
-            setSystemPrompt(DEFAULT_SYSTEM_PROMPT)
+            setSystemPrompt('Você é um assistente virtual gentil e prestativo.')
             setModel(DEFAULT_MODEL_ID)
             setTemperature(0.7)
-            setMaxTokens(1024)
-            setDebounceMs(5000)
+            setMaxTokens(2048)
             setIsActive(true)
+            setDebounceMs(5000)
+            setLocalPendingFiles([])
             setIsDefault(false)
             setHandoffEnabled(true)
             setHandoffInstructions(DEFAULT_HANDOFF_INSTRUCTIONS)
@@ -196,6 +195,14 @@ export function AIAgentForm({
             setRerankTopK(5)
         }
     }, [agent, open])
+
+    // Get active provider from local settings
+    const activeLocalSettings = loadLocalAiSettings(userId)
+
+    // Filter providers based on local settings
+    const filteredProviders = AI_PROVIDERS.filter(p =>
+        p.id === activeLocalSettings?.provider
+    )
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -225,7 +232,24 @@ export function AIAgentForm({
             rerank_top_k: rerankTopK,
         }
 
-        await onSubmit(params)
+        const savedAgent = await onSubmit(params)
+
+        if (savedAgent && localPendingFiles.length > 0) {
+            for (const file of localPendingFiles) {
+                try {
+                    const reader = new FileReader()
+                    const content = await new Promise<string>((resolve) => {
+                        reader.onload = (ev) => resolve(ev.target?.result as string || '')
+                        reader.readAsText(file)
+                    })
+                    await aiAgentService.uploadFile(savedAgent.id, file, content)
+                } catch (err) {
+                    console.error('Erro ao subir arquivo pendente:', err)
+                }
+            }
+        }
+
+        onOpenChange(false)
     }
 
     // Get selected model info
@@ -279,27 +303,33 @@ export function AIAgentForm({
                                     <SelectTrigger>
                                         <SelectValue placeholder="Selecione um modelo" />
                                     </SelectTrigger>
-                                    <SelectContent>
-                                        {AI_PROVIDERS.map((provider: any) => (
-                                            <SelectGroup key={provider.id}>
-                                                <SelectLabel className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
-                                                    <span>{provider.icon}</span>
-                                                    <span>{provider.name}</span>
-                                                </SelectLabel>
-                                                {provider.models.map((m: any, index: number) => (
-                                                    <SelectItem key={m.id} value={m.id}>
-                                                        <div className="flex items-center gap-2">
-                                                            <span>{m.name}</span>
-                                                            {index === 0 && provider.id === 'google' && (
-                                                                <span className="rounded bg-primary-500/20 px-1.5 py-0.5 text-[10px] font-medium text-primary-400">
-                                                                    Recomendado
-                                                                </span>
-                                                            )}
-                                                        </div>
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectGroup>
-                                        ))}
+                                    <SelectContent position="popper" align="start" className="z-[100]">
+                                        {filteredProviders.length === 0 ? (
+                                            <div className="p-2 text-xs text-zinc-500">
+                                                Nenhum provedor configurado. Configure uma API Key primeiro.
+                                            </div>
+                                        ) : (
+                                            filteredProviders.map((provider: any) => (
+                                                <SelectGroup key={provider.id}>
+                                                    <SelectLabel className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
+                                                        <span>{provider.icon}</span>
+                                                        <span>{provider.name}</span>
+                                                    </SelectLabel>
+                                                    {provider.models.map((m: any, index: number) => (
+                                                        <SelectItem key={m.id} value={m.id}>
+                                                            <div className="flex items-center gap-2 text-zinc-200">
+                                                                <span>{m.name}</span>
+                                                                {index === 0 && provider.id === 'google' && (
+                                                                    <span className="rounded bg-primary-500/20 px-1.5 py-0.5 text-[10px] font-medium text-primary-400">
+                                                                        Recomendado
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectGroup>
+                                            ))
+                                        )}
                                     </SelectContent>
                                 </Select>
                                 {selectedModel && (
@@ -321,7 +351,7 @@ export function AIAgentForm({
                                 value={systemPrompt}
                                 onChange={(e: any) => setSystemPrompt(e.target.value)}
                                 placeholder="Descreva como o agente deve se comportar..."
-                                className="min-h-[180px] resize-none font-mono text-sm"
+                                className="min-h-[180px] resize-none text-sm placeholder:text-zinc-600 border-zinc-800 bg-zinc-900/50"
                                 required
                             />
                             <p className="text-xs text-zinc-500">
@@ -411,19 +441,26 @@ export function AIAgentForm({
                         {/* ═══════════════════════════════════════════════════════════════
                 SEÇÃO: Knowledge Base (RAG)
             ═══════════════════════════════════════════════════════════════ */}
-                        {isEditing ? (
-                            <KnowledgeBaseSection
-                                files={knowledgeFiles}
-                                onUpload={async (file) => { await uploadFileMutation.mutateAsync(file) }}
-                                onDelete={async (id) => { await deleteFileMutation.mutateAsync(id) }}
-                                isUploading={uploadFileMutation.isPending}
-                            />
-                        ) : (
-                            <div className="p-6 rounded-2xl border border-dashed border-zinc-800 bg-zinc-900/10 text-center">
-                                <Database className="h-8 w-8 text-zinc-700 mx-auto mb-2" />
-                                <p className="text-sm text-zinc-400">Salve o assistente primeiro para começar a adicionar documentos à base de conhecimento.</p>
-                            </div>
-                        )}
+                        <KnowledgeBaseSection
+                            files={knowledgeFiles}
+                            pendingFiles={localPendingFiles}
+                            onUpload={async (file) => {
+                                if (isEditing) {
+                                    await uploadFileMutation.mutateAsync(file)
+                                } else {
+                                    setLocalPendingFiles(prev => [...prev, file])
+                                }
+                            }}
+                            onDelete={async (id) => {
+                                if (id.startsWith('local-')) {
+                                    const index = parseInt(id.split('-')[1])
+                                    setLocalPendingFiles(prev => prev.filter((_, i) => i !== index))
+                                } else {
+                                    await deleteFileMutation.mutateAsync(id)
+                                }
+                            }}
+                            isUploading={uploadFileMutation.isPending}
+                        />
 
                         {/* Configurações Técnicas de RAG (Opcional/Colapsável) */}
                         <Collapsible open={ragConfigOpen} onOpenChange={setRagConfigOpen}>

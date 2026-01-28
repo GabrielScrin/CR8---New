@@ -5,7 +5,7 @@
  * Agente padrão em destaque, outros colapsados
  */
 
-import React, { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { Bot, Plus, Loader2, AlertCircle, ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -34,6 +34,7 @@ import type { AIAgent } from '@/types'
 import type { CreateAIAgentParams, UpdateAIAgentParams } from '@/services/aiAgentService'
 
 export interface AIAgentsSettingsViewProps {
+    userId?: string
     agents: AIAgent[]
     isLoading: boolean
     error: Error | null
@@ -51,6 +52,7 @@ export interface AIAgentsSettingsViewProps {
 }
 
 export function AIAgentsSettingsView({
+    userId,
     agents,
     isLoading,
     error,
@@ -100,13 +102,14 @@ export function AIAgentsSettingsView({
 
     const handleFormSubmit = useCallback(
         async (params: CreateAIAgentParams | UpdateAIAgentParams) => {
+            let result: AIAgent
             if (editingAgent) {
-                await onUpdate(editingAgent.id, params as UpdateAIAgentParams)
+                result = await onUpdate(editingAgent.id, params as UpdateAIAgentParams)
             } else {
-                await onCreate(params as CreateAIAgentParams)
+                result = await onCreate(params as CreateAIAgentParams)
             }
-            setIsFormOpen(false)
             setEditingAgent(null)
+            return result
         },
         [editingAgent, onCreate, onUpdate]
     )
@@ -277,6 +280,7 @@ export function AIAgentsSettingsView({
 
             {/* Create/Edit form */}
             <AIAgentForm
+                userId={userId}
                 open={isFormOpen}
                 onOpenChange={setIsFormOpen}
                 agent={editingAgent}

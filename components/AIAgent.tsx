@@ -228,6 +228,7 @@ export const AIAgent: React.FC<AIAgentProps> = ({ companyId, userId }) => {
         </div>
 
         <AIAgentsSettingsView
+          userId={userId}
           agents={aiAgentsController.agents}
           isLoading={aiAgentsController.isLoading}
           error={aiAgentsController.error}

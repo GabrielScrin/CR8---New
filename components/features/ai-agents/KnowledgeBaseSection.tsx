@@ -8,6 +8,7 @@ import { cn } from '@/lib/utils'
 
 interface KnowledgeBaseSectionProps {
     files: AIKnowledgeFile[]
+    pendingFiles?: File[]
     onUpload: (file: File) => Promise<void>
     onDelete: (fileId: string) => Promise<void>
     isUploading?: boolean
@@ -15,6 +16,7 @@ interface KnowledgeBaseSectionProps {
 
 export function KnowledgeBaseSection({
     files,
+    pendingFiles = [],
     onUpload,
     onDelete,
     isUploading
@@ -90,52 +92,88 @@ export function KnowledgeBaseSection({
 
             {/* Documents List */}
             <div className="space-y-2">
-                {files.length === 0 ? (
+                {/* Render Pending Files (Local) */}
+                {pendingFiles.map((file, index) => (
+                    <div
+                        key={`pending-${index}`}
+                        className="flex items-center justify-between p-3 rounded-xl bg-zinc-800/30 border border-amber-500/30 group animate-in fade-in slide-in-from-left-2"
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-lg bg-amber-500/10">
+                                <FileText className="h-4 w-4 text-amber-500" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-zinc-100">{file.name}</p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                    <p className="text-[10px] text-zinc-500">
+                                        {(file.size / 1024).toFixed(1)} KB
+                                    </p>
+                                    <span className="h-1 w-1 rounded-full bg-zinc-700" />
+                                    <span className="flex items-center gap-1 text-[10px] font-medium text-amber-400">
+                                        <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                                        Aguardando salvamento
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onDelete(`local-${index}`)}
+                            className="opacity-0 group-hover:opacity-100 h-8 w-8 text-zinc-500 hover:text-red-400 hover:bg-red-400/10 transition-all"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </div>
+                ))}
+
+                {/* Render Persisted Files */}
+                {files.map((file) => (
+                    <div
+                        key={file.id}
+                        className="flex items-center justify-between p-4 rounded-xl border border-zinc-800/50 bg-zinc-900/30 hover:bg-zinc-800/40 transition-colors group"
+                    >
+                        <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-lg bg-zinc-800/50 flex items-center justify-center border border-zinc-700/50">
+                                <File className="h-4 w-4 text-zinc-400" />
+                            </div>
+                            <div>
+                                <p className="text-sm font-medium text-zinc-200 truncate max-w-[200px]">
+                                    {file.name}
+                                </p>
+                                <div className="flex items-center gap-2 mt-0.5">
+                                    <span className="text-[10px] text-zinc-500">
+                                        {(file.size_bytes / 1024).toFixed(1)} KB
+                                    </span>
+                                    <span className="text-[10px] text-zinc-700">•</span>
+                                    <span className={cn(
+                                        "text-[10px] flex items-center gap-1",
+                                        file.indexing_status === 'completed' ? "text-emerald-500" :
+                                            file.indexing_status === 'failed' ? "text-red-500" : "text-amber-500"
+                                    )}>
+                                        {file.indexing_status === 'completed' && <Sparkles className="h-2.5 w-2.5" />}
+                                        {file.indexing_status === 'completed' ? 'Indexado' :
+                                            file.indexing_status === 'failed' ? 'Falhou' : 'Processando'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => onDelete(file.id)}
+                            className="h-8 w-8 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
+                        >
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    </div>
+                ))}
+
+                {pendingFiles.length === 0 && files.length === 0 && (
                     <div className="text-center py-8 rounded-2xl border border-zinc-800/50 bg-zinc-900/10">
                         <FileText className="h-8 w-8 text-zinc-700 mx-auto mb-2 opacity-20" />
                         <p className="text-xs text-zinc-600">Nenhum documento anexado ainda</p>
                     </div>
-                ) : (
-                    files.map((file) => (
-                        <div
-                            key={file.id}
-                            className="flex items-center justify-between p-4 rounded-xl border border-zinc-800/50 bg-zinc-900/30 hover:bg-zinc-800/40 transition-colors group"
-                        >
-                            <div className="flex items-center gap-3">
-                                <div className="h-9 w-9 rounded-lg bg-zinc-800/50 flex items-center justify-center border border-zinc-700/50">
-                                    <File className="h-4 w-4 text-zinc-400" />
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium text-zinc-200 truncate max-w-[200px]">
-                                        {file.name}
-                                    </p>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="text-[10px] text-zinc-500">
-                                            {(file.size_bytes / 1024).toFixed(1)} KB
-                                        </span>
-                                        <span className="text-[10px] text-zinc-700">•</span>
-                                        <span className={cn(
-                                            "text-[10px] flex items-center gap-1",
-                                            file.indexing_status === 'completed' ? "text-emerald-500" :
-                                                file.indexing_status === 'failed' ? "text-red-500" : "text-amber-500"
-                                        )}>
-                                            {file.indexing_status === 'completed' && <Sparkles className="h-2.5 w-2.5" />}
-                                            {file.indexing_status === 'completed' ? 'Indexado' :
-                                                file.indexing_status === 'failed' ? 'Falhou' : 'Processando'}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => onDelete(file.id)}
-                                className="h-8 w-8 text-zinc-600 hover:text-red-500 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
-                            >
-                                <Trash2 className="h-4 w-4" />
-                            </Button>
-                        </div>
-                    ))
                 )}
             </div>
         </div>
