@@ -244,13 +244,17 @@ export function AIAgentForm({
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent className="flex h-full w-full flex-col gap-0 p-0 sm:max-w-lg">
                 {/* Header fixo */}
-                <SheetHeader className="border-b border-[var(--ds-border-default)] px-6 py-4">
-                    <SheetTitle className="flex items-center gap-2 text-lg">
-                        <Bot className="h-5 w-5 text-primary-400" />
-                        {isEditing ? 'Editar Agente' : 'Novo Agente IA'}
+                <SheetHeader className="border-b border-zinc-800/50 bg-[#0a0c10]/40 px-6 py-6 backdrop-blur-md">
+                    <SheetTitle className="flex items-center gap-2 text-xl font-bold tracking-tight">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-500/10 border border-primary-500/20">
+                            <Bot className="h-6 w-6 text-primary-500" />
+                        </div>
+                        <span className="cr8-text-gradient">
+                            {isEditing ? 'Editar Agente' : 'Novo Agente IA'}
+                        </span>
                     </SheetTitle>
-                    <SheetDescription>
-                        Configure o comportamento do agente de atendimento automático
+                    <SheetDescription className="text-zinc-400 mt-1">
+                        Configure o comportamento e a inteligência do seu assistente
                     </SheetDescription>
                 </SheetHeader>
 
@@ -308,7 +312,7 @@ export function AIAgentForm({
                                     </SelectContent>
                                 </Select>
                                 {selectedModel && (
-                                    <p className="text-xs text-[var(--ds-text-muted)]">{selectedModel.description}</p>
+                                    <p className="text-xs text-zinc-500 italic">{selectedModel.description}</p>
                                 )}
                             </div>
                         </div>
@@ -329,7 +333,7 @@ export function AIAgentForm({
                                 className="min-h-[180px] resize-none font-mono text-sm"
                                 required
                             />
-                            <p className="text-xs text-[var(--ds-text-muted)]">
+                            <p className="text-xs text-zinc-500">
                                 Dica: Defina quem é o agente, o que ele faz e como deve se comportar. Quanto mais claro, melhor.
                             </p>
                         </div>
@@ -338,18 +342,18 @@ export function AIAgentForm({
                 SEÇÃO: Parâmetros Avançados
             ═══════════════════════════════════════════════════════════════ */}
                         <div className="space-y-4">
-                            <div className="flex items-center gap-2 border-b border-[var(--ds-border-default)] pb-2">
-                                <SlidersHorizontal className="h-4 w-4 text-[var(--ds-text-muted)]" />
-                                <span className="text-sm font-medium text-[var(--ds-text-secondary)]">
+                            <div className="flex items-center gap-2 border-b border-zinc-800 pb-3">
+                                <SlidersHorizontal className="h-4 w-4 text-zinc-500" />
+                                <span className="text-sm font-semibold text-zinc-300 uppercase tracking-wider">
                                     Parâmetros Avançados
                                 </span>
                             </div>
 
                             {/* Temperature */}
-                            <div className="space-y-2">
+                            <div className="space-y-4 pt-2">
                                 <div className="flex items-center justify-between">
-                                    <Label className="text-sm">Temperature</Label>
-                                    <span className="rounded bg-[var(--ds-bg-surface)] px-2 py-0.5 text-xs font-mono text-[var(--ds-text-secondary)]">
+                                    <Label className="text-sm text-zinc-400">Temperature</Label>
+                                    <span className="rounded-lg bg-zinc-800/50 border border-zinc-700/50 px-2.5 py-1 text-xs font-mono text-primary-400">
                                         {temperature.toFixed(1)}
                                     </span>
                                 </div>
@@ -361,7 +365,7 @@ export function AIAgentForm({
                                     step={0.1}
                                     className="w-full"
                                 />
-                                <div className="flex justify-between text-[10px] text-[var(--ds-text-muted)]">
+                                <div className="flex justify-between text-[10px] text-zinc-500">
                                     <span>Focado</span>
                                     <span>Criativo</span>
                                 </div>
@@ -371,7 +375,7 @@ export function AIAgentForm({
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                     <Label className="text-sm">Max Tokens</Label>
-                                    <span className="rounded bg-[var(--ds-bg-surface)] px-2 py-0.5 text-xs font-mono text-[var(--ds-text-secondary)]">
+                                    <span className="rounded bg-zinc-800/50 text-zinc-300">
                                         {maxTokens}
                                     </span>
                                 </div>
@@ -383,7 +387,7 @@ export function AIAgentForm({
                                     step={128}
                                     className="w-full"
                                 />
-                                <div className="flex justify-between text-[10px] text-[var(--ds-text-muted)]">
+                                <div className="flex justify-between text-[10px] text-zinc-500">
                                     <span>Curto (256)</span>
                                     <span>Longo (4096)</span>
                                 </div>
@@ -393,7 +397,7 @@ export function AIAgentForm({
                             <div className="space-y-2">
                                 <div className="flex items-center justify-between">
                                     <Label className="text-sm">Debounce</Label>
-                                    <span className="rounded bg-[var(--ds-bg-surface)] px-2 py-0.5 text-xs font-mono text-[var(--ds-text-secondary)]">
+                                    <span className="rounded bg-zinc-800/50 text-zinc-300">
                                         {debounceMs / 1000}s
                                     </span>
                                 </div>
@@ -405,7 +409,7 @@ export function AIAgentForm({
                                     step={1000}
                                     className="w-full"
                                 />
-                                <p className="text-[10px] text-[var(--ds-text-muted)]">
+                                <p className="text-[10px] text-zinc-500">
                                     Aguarda mensagens consecutivas antes de responder
                                 </p>
                             </div>
@@ -415,19 +419,21 @@ export function AIAgentForm({
                 SEÇÃO: Configuração RAG (Knowledge Base)
             ═══════════════════════════════════════════════════════════════ */}
                         <Collapsible open={ragConfigOpen} onOpenChange={setRagConfigOpen}>
-                            <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-[var(--ds-border-default)] bg-[var(--ds-bg-elevated)] px-4 py-3 text-left transition-colors hover:bg-[var(--ds-bg-surface)]" type="button">
-                                <div className="flex items-center gap-2">
-                                    <Database className="h-4 w-4 text-primary-400" />
+                            <CollapsibleTrigger className="flex w-full items-center justify-between rounded-2xl border border-zinc-800 bg-zinc-900/30 px-5 py-4 text-left transition-all hover:bg-zinc-800/40 hover:border-zinc-700" type="button">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                                        <Database className="h-5 w-5 text-emerald-500" />
+                                    </div>
                                     <div>
-                                        <span className="text-sm font-medium">Configuração RAG</span>
-                                        <p className="text-xs text-[var(--ds-text-muted)]">
-                                            {embeddingProvider === 'google' ? 'Google Gemini' : 'OpenAI'} • {embeddingDimensions} dimensões
+                                        <span className="text-sm font-semibold text-zinc-200">Base de Conhecimento (RAG)</span>
+                                        <p className="text-xs text-zinc-500">
+                                            {embeddingProvider === 'google' ? 'Google Gemini' : 'OpenAI'} • {embeddingDimensions}d
                                         </p>
                                     </div>
                                 </div>
-                                <Search className={`h-4 w-4 text-[var(--ds-text-muted)] transition-transform ${ragConfigOpen ? 'rotate-90' : ''}`} />
+                                <Search className={`h-4 w-4 text-zinc-500 transition-transform duration-300 ${ragConfigOpen ? 'rotate-90 text-primary-500' : ''}`} />
                             </CollapsibleTrigger>
-                            <CollapsibleContent className="mt-3 space-y-4 rounded-lg border border-[var(--ds-border-default)] bg-[var(--ds-bg-elevated)] p-4">
+                            <CollapsibleContent className="mt-3 space-y-5 rounded-2xl border border-zinc-800/50 bg-zinc-900/20 p-5 backdrop-blur-sm">
                                 {/* Embedding Provider */}
                                 <div className="space-y-2">
                                     <Label htmlFor="embeddingProvider" className="text-sm">
@@ -469,7 +475,7 @@ export function AIAgentForm({
                                                 <SelectItem key={m.id} value={m.id}>
                                                     <div className="flex items-center gap-2">
                                                         <span>{m.name}</span>
-                                                        <span className="text-[10px] text-[var(--ds-text-muted)]">
+                                                        <span className="text-[10px] text-zinc-500">
                                                             {m.dimensions}d • ${m.pricePerMillion}/1M
                                                         </span>
                                                     </div>
@@ -477,7 +483,7 @@ export function AIAgentForm({
                                             ))}
                                         </SelectContent>
                                     </Select>
-                                    <p className="text-[10px] text-[var(--ds-text-muted)]">
+                                    <p className="text-[10px] text-zinc-500">
                                         Dimensões: {embeddingDimensions} • Custo por 1M tokens
                                     </p>
                                 </div>
@@ -486,7 +492,7 @@ export function AIAgentForm({
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">
                                         <Label className="text-sm">Threshold de Similaridade</Label>
-                                        <span className="rounded bg-[var(--ds-bg-surface)] px-2 py-0.5 text-xs font-mono text-[var(--ds-text-secondary)]">
+                                        <span className="rounded bg-zinc-800/50 text-zinc-300">
                                             {ragSimilarityThreshold.toFixed(2)}
                                         </span>
                                     </div>
@@ -498,7 +504,7 @@ export function AIAgentForm({
                                         step={0.05}
                                         className="w-full"
                                     />
-                                    <div className="flex justify-between text-[10px] text-[var(--ds-text-muted)]">
+                                    <div className="flex justify-between text-[10px] text-zinc-500">
                                         <span>Mais resultados</span>
                                         <span>Mais precisão</span>
                                     </div>
@@ -508,7 +514,7 @@ export function AIAgentForm({
                                 <div className="space-y-2">
                                     <div className="flex items-center justify-between">
                                         <Label className="text-sm">Máximo de Resultados</Label>
-                                        <span className="rounded bg-[var(--ds-bg-surface)] px-2 py-0.5 text-xs font-mono text-[var(--ds-text-secondary)]">
+                                        <span className="rounded bg-zinc-800/50 text-zinc-300">
                                             {ragMaxResults}
                                         </span>
                                     </div>
@@ -520,13 +526,13 @@ export function AIAgentForm({
                                         step={1}
                                         className="w-full"
                                     />
-                                    <p className="text-[10px] text-[var(--ds-text-muted)]">
+                                    <p className="text-[10px] text-zinc-500">
                                         Quantidade de chunks retornados da knowledge base
                                     </p>
                                 </div>
 
                                 {/* Divider */}
-                                <div className="border-t border-[var(--ds-border-default)]" />
+                                <div className="border-t border-zinc-800/80" />
 
                                 {/* Reranking Toggle */}
                                 <div className="flex items-center justify-between">
@@ -534,7 +540,7 @@ export function AIAgentForm({
                                         <Label htmlFor="rerankEnabled" className="text-sm">
                                             Reranking (Avançado)
                                         </Label>
-                                        <p className="text-[10px] text-[var(--ds-text-muted)]">
+                                        <p className="text-[10px] text-zinc-500">
                                             Melhora precisão em bases grandes (+200-500ms latência)
                                         </p>
                                     </div>
@@ -547,7 +553,7 @@ export function AIAgentForm({
 
                                 {/* Reranking Config (when enabled) */}
                                 {rerankEnabled && (
-                                    <div className="space-y-4 rounded-md border border-[var(--ds-border-default)] bg-[var(--ds-bg-surface)] p-3">
+                                    <div className="space-y-4 rounded-md border border-zinc-800/80 bg-[var(--ds-bg-surface)] p-3">
                                         {/* Rerank Provider */}
                                         <div className="space-y-2">
                                             <Label className="text-sm">Provider de Reranking</Label>
@@ -580,14 +586,14 @@ export function AIAgentForm({
                         {/* ═══════════════════════════════════════════════════════════════
                 SEÇÃO: Status
             ═══════════════════════════════════════════════════════════════ */}
-                        <div className="space-y-3 rounded-lg border border-[var(--ds-border-default)] bg-[var(--ds-bg-elevated)] p-4">
+                        <div className="space-y-4 rounded-2xl border border-zinc-800 bg-zinc-900/30 p-5">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <Label htmlFor="isActive" className="text-sm">
-                                        Agente ativo
+                                    <Label htmlFor="isActive" className="text-sm font-semibold text-zinc-200">
+                                        Agente Ativo
                                     </Label>
-                                    <p className="text-xs text-[var(--ds-text-muted)]">
-                                        Desativar impede uso em conversas
+                                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                                        Ative para permitir que responda conversas
                                     </p>
                                 </div>
                                 <Switch
@@ -597,15 +603,13 @@ export function AIAgentForm({
                                 />
                             </div>
 
-                            <div className="flex items-center justify-between border-t border-[var(--ds-border-default)] pt-3">
+                            <div className="flex items-center justify-between border-t border-zinc-800/50 pt-4">
                                 <div>
-                                    <Label htmlFor="isDefault" className="text-sm">
-                                        Definir como padrão
+                                    <Label htmlFor="isDefault" className="text-sm font-semibold text-zinc-200">
+                                        Agente Principal
                                     </Label>
-                                    <p className="text-xs text-[var(--ds-text-muted)]">
-                                        {isDefault
-                                            ? 'Este agente é usado em novas conversas'
-                                            : 'Usado automaticamente em novas conversas'}
+                                    <p className="text-[11px] text-zinc-500 mt-0.5">
+                                        Define como assistente padrão da empresa
                                     </p>
                                 </div>
                                 <Switch
@@ -617,11 +621,15 @@ export function AIAgentForm({
                         </div>
                     </div>
 
-                    <SheetFooter className="border-t border-[var(--ds-border-default)] px-6 py-4">
-                        <Button type="submit" disabled={isSubmitting} className="w-full">
+                    <SheetFooter className="border-t border-zinc-800/50 bg-[#0a0c10]/40 px-6 py-6 backdrop-blur-md mt-auto">
+                        <Button
+                            type="submit"
+                            disabled={isSubmitting}
+                            className="w-full h-12 text-base font-bold bg-primary-500 hover:bg-primary-600 shadow-lg shadow-primary-500/20 transition-all rounded-xl"
+                        >
                             <div className="flex items-center gap-2">
-                                <Search className="h-4 w-4" />
-                                {isSubmitting ? 'Salvando...' : 'Salvar Agente'}
+                                {isSubmitting ? <Sparkles className="h-5 w-5 animate-pulse" /> : <Bot className="h-5 w-5" />}
+                                {isSubmitting ? 'Salvando Assistente...' : 'Salvar Assistente'}
                             </div>
                         </Button>
                     </SheetFooter>
