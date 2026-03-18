@@ -12,6 +12,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [infoMsg, setInfoMsg] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignUp, setIsSignUp] = useState(false);
@@ -54,6 +55,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const handleFacebookLogin = async () => {
     if (!requireTerms()) return;
     setErrorMsg(null);
+    setInfoMsg(null);
     setIsLoading(true);
 
     if (!isBackendReady) {
@@ -95,6 +97,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
 
     setIsLoading(true);
     setErrorMsg(null);
+    setInfoMsg(null);
 
     if (!isBackendReady) {
       demoLogin();
@@ -116,6 +119,36 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
       // onAuthStateChange em App.tsx irá atualizar o estado do usuário
     } catch (error: any) {
       setErrorMsg(error.message);
+      setIsLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      setErrorMsg('Digite seu e-mail para receber o link de redefinição de senha.');
+      setInfoMsg(null);
+      return;
+    }
+
+    setIsLoading(true);
+    setErrorMsg(null);
+    setInfoMsg(null);
+
+    if (!isBackendReady) {
+      setErrorMsg('Recuperação de senha indisponível no modo demo.');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+        redirectTo: window.location.origin,
+      });
+      if (error) throw error;
+      setInfoMsg('Se o e-mail existir, enviaremos um link para redefinir sua senha.');
+    } catch (error: any) {
+      setErrorMsg(error.message || 'Não foi possível enviar o link de recuperação.');
+    } finally {
       setIsLoading(false);
     }
   };
@@ -143,6 +176,12 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </div>
         )}
 
+        {infoMsg && (
+          <div className="bg-emerald-500/10 text-emerald-300 p-3 rounded-lg text-sm border border-emerald-500/20">
+            {infoMsg}
+          </div>
+        )}
+
         <form onSubmit={handleEmailLogin} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-[hsl(var(--foreground))]">E-mail</label>
@@ -162,7 +201,19 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Senha</label>
+            <div className="flex items-center justify-between gap-3">
+              <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Senha</label>
+              {!isSignUp && (
+                <button
+                  type="button"
+                  onClick={handleForgotPassword}
+                  disabled={isLoading}
+                  className="text-sm font-medium text-indigo-600 hover:text-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  Esqueci minha senha
+                </button>
+              )}
+            </div>
             <div className="mt-1 relative rounded-md shadow-sm">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                 <Lock className="h-4 w-4 text-gray-400" />
