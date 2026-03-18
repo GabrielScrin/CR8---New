@@ -148,9 +148,32 @@ export default function App() {
       setLoadingSession(false);
     });
 
+    const handlePasswordRecovery = async () => {
+      const nextPassword = window.prompt('Digite sua nova senha. Ela precisa ter pelo menos 6 caracteres.');
+      if (nextPassword == null) return;
+
+      const cleanPassword = nextPassword.trim();
+      if (cleanPassword.length < 6) {
+        window.alert('A nova senha precisa ter no mínimo 6 caracteres.');
+        return;
+      }
+
+      const { error } = await supabase.auth.updateUser({ password: cleanPassword });
+      if (error) {
+        window.alert(error.message || 'Não foi possível atualizar sua senha.');
+        return;
+      }
+
+      window.alert('Senha atualizada com sucesso.');
+    };
+
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        void handlePasswordRecovery();
+      }
+
       if (session?.user) {
         void hydrateUser(session.user).then(setUser);
       } else {

@@ -141,9 +141,7 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
     }
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo: window.location.origin,
-      });
+      const { error } = await supabase.auth.resetPasswordForEmail(email.trim());
       if (error) throw error;
       setInfoMsg('Se o e-mail existir, enviaremos um link para redefinir sua senha.');
     } catch (error: any) {
