@@ -8,10 +8,7 @@ import {
   RefreshCw,
   Settings2,
   X,
-  ChevronUp,
-  ChevronDown,
-  Eye,
-  EyeOff,
+  Trash2,
   RotateCcw,
   Plus,
 } from 'lucide-react';
@@ -28,7 +25,13 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import { SortableContext, rectSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import {
+  SortableContext,
+  rectSortingStrategy,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
@@ -46,10 +49,10 @@ interface CRMProps {
 type ColumnColor = 'blue' | 'yellow' | 'purple' | 'green' | 'red' | 'cyan' | 'orange' | 'pink';
 
 type PipelineColumn = {
-  id: LeadStatus;
+  id: string;          // unique key; for default columns equals dbStatus
+  dbStatus: LeadStatus; // which DB status leads in this column have
   title: string;
   color: ColumnColor;
-  visible: boolean;
 };
 
 const COLOR_MAP: Record<ColumnColor, { dot: string; border: string; badge: string }> = {
@@ -64,11 +67,11 @@ const COLOR_MAP: Record<ColumnColor, { dot: string; border: string; badge: strin
 };
 
 const DEFAULT_COLUMNS: PipelineColumn[] = [
-  { id: 'new',       title: 'Novos Leads',       color: 'blue',   visible: true },
-  { id: 'contacted', title: 'Em Contato',         color: 'yellow', visible: true },
-  { id: 'proposal',  title: 'Proposta Enviada',   color: 'purple', visible: true },
-  { id: 'won',       title: 'Fechado / Ganho',    color: 'green',  visible: true },
-  { id: 'lost',      title: 'Perdido',            color: 'red',    visible: true },
+  { id: 'new',       dbStatus: 'new',       title: 'Novos Leads',     color: 'blue'   },
+  { id: 'contacted', dbStatus: 'contacted', title: 'Em Contato',      color: 'yellow' },
+  { id: 'proposal',  dbStatus: 'proposal',  title: 'Proposta',        color: 'purple' },
+  { id: 'won',       dbStatus: 'won',       title: 'Fechado / Ganho', color: 'green'  },
+  { id: 'lost',      dbStatus: 'lost',      title: 'Perdido',         color: 'red'    },
 ];
 
 const PIPELINE_STORAGE_KEY = (companyId?: string) => `cr8_pipeline_${companyId ?? 'default'}`;
@@ -77,22 +80,14 @@ const loadPipelineColumns = (companyId?: string): PipelineColumn[] => {
   try {
     const raw = localStorage.getItem(PIPELINE_STORAGE_KEY(companyId));
     if (!raw) return DEFAULT_COLUMNS;
-    const parsed: PipelineColumn[] = JSON.parse(raw);
-    // merge: keep DB-valid ids, fill missing from defaults
-    const all = DEFAULT_COLUMNS.map((def) => {
-      const saved = parsed.find((p) => p.id === def.id);
-      return saved ? { ...def, ...saved } : def;
-    });
-    // respect saved order
-    const order = parsed.map((p) => p.id);
-    return [...all].sort((a, b) => {
-      const ai = order.indexOf(a.id);
-      const bi = order.indexOf(b.id);
-      if (ai === -1 && bi === -1) return 0;
-      if (ai === -1) return 1;
-      if (bi === -1) return -1;
-      return ai - bi;
-    });
+    const parsed: any[] = JSON.parse(raw);
+    // Migrate old format (id was LeadStatus, no dbStatus field)
+    return parsed.map((p) => ({
+      id: p.id ?? p.dbStatus ?? 'new',
+      dbStatus: (p.dbStatus ?? p.id ?? 'new') as LeadStatus,
+      title: p.title ?? 'Etapa',
+      color: (p.color ?? 'blue') as ColumnColor,
+    }));
   } catch {
     return DEFAULT_COLUMNS;
   }
@@ -243,6 +238,85 @@ const KanbanColumn: React.FC<ColumnProps> = ({ id, column, leads }) => {
 // ── Pipeline Editor Modal ────────────────────────────────────────────────────
 
 const ALL_COLORS: ColumnColor[] = ['blue', 'yellow', 'purple', 'green', 'red', 'cyan', 'orange', 'pink'];
+const ALL_DB_STATUSES: { value: LeadStatus; label: string }[] = [
+  { value: 'new',       label: 'Novo' },
+  { value: 'contacted', label: 'Em Contato' },
+  { value: 'proposal',  label: 'Proposta' },
+  { value: 'won',       label: 'Ganho' },
+  { value: 'lost',      label: 'Perdido' },
+];
+
+// Sortable row inside PipelineEditor (separate DndContext from kanban board)
+const SortableEditorRow: React.FC<{
+  col: PipelineColumn;
+  canDelete: boolean;
+  onUpdate: (patch: Partial<PipelineColumn>) => void;
+  onDelete: () => void;
+}> = ({ col, canDelete, onUpdate, onDelete }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: col.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.45 : 1, zIndex: isDragging ? 50 : undefined };
+  const colorCls = COLOR_MAP[col.color];
+  const isCustom = !['new', 'contacted', 'proposal', 'won', 'lost'].includes(col.id);
+
+  return (
+    <div ref={setNodeRef} style={style}
+      className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl border bg-[hsl(var(--secondary))] border-[hsl(var(--border))] group"
+    >
+      {/* Drag handle */}
+      <button {...attributes} {...listeners}
+        className="cursor-grab active:cursor-grabbing p-1 text-[hsl(var(--muted-foreground))]/50 hover:text-[hsl(var(--muted-foreground))] transition-colors shrink-0"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+
+      {/* Color picker */}
+      <div className="relative group/color shrink-0">
+        <div className={`h-4 w-4 rounded-full cursor-pointer ${colorCls.dot} ring-1 ring-white/20`} />
+        <div className="absolute left-0 top-6 z-20 hidden group-hover/color:flex flex-wrap gap-1 p-2 rounded-xl bg-[hsl(var(--popover))] border border-[hsl(var(--border))] shadow-xl w-[116px]">
+          {ALL_COLORS.map((c) => (
+            <button key={c} onClick={() => onUpdate({ color: c })}
+              className={`h-5 w-5 rounded-full ${COLOR_MAP[c].dot} transition-transform hover:scale-110 ${col.color === c ? 'ring-2 ring-white/70' : ''}`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* Name input */}
+      <input
+        value={col.title}
+        onChange={(e) => onUpdate({ title: e.target.value })}
+        className="flex-1 min-w-0 bg-transparent text-sm font-medium text-[hsl(var(--foreground))] outline-none border-b border-transparent focus:border-[hsl(var(--primary))]/50 transition-colors"
+        placeholder="Nome da etapa"
+      />
+
+      {/* DB status selector (for custom columns) */}
+      {isCustom ? (
+        <select
+          value={col.dbStatus}
+          onChange={(e) => onUpdate({ dbStatus: e.target.value as LeadStatus })}
+          className="text-[10px] bg-[hsl(var(--muted))] border border-[hsl(var(--border))] rounded-md px-1.5 py-1 text-[hsl(var(--muted-foreground))] outline-none focus:border-[hsl(var(--primary))]/50 shrink-0"
+          title="Status no banco de dados"
+        >
+          {ALL_DB_STATUSES.map((s) => (
+            <option key={s.value} value={s.value}>{s.label}</option>
+          ))}
+        </select>
+      ) : (
+        <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground))]/50 shrink-0">{col.id}</span>
+      )}
+
+      {/* Delete */}
+      <button
+        onClick={onDelete}
+        disabled={!canDelete}
+        className="p-1.5 rounded-lg text-[hsl(var(--muted-foreground))]/40 hover:text-red-400 hover:bg-red-500/10 disabled:opacity-20 disabled:cursor-not-allowed transition-all shrink-0"
+        title="Excluir etapa"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+};
 
 interface PipelineEditorProps {
   columns: PipelineColumn[];
@@ -253,27 +327,46 @@ interface PipelineEditorProps {
 const PipelineEditor: React.FC<PipelineEditorProps> = ({ columns, onSave, onClose }) => {
   const [draft, setDraft] = useState<PipelineColumn[]>(columns);
 
-  const move = (idx: number, dir: -1 | 1) => {
-    const next = [...draft];
-    const target = idx + dir;
-    if (target < 0 || target >= next.length) return;
-    [next[idx], next[target]] = [next[target], next[idx]];
-    setDraft(next);
+  const editorSensors = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    setDraft((prev) => {
+      const oldIdx = prev.findIndex((c) => c.id === active.id);
+      const newIdx = prev.findIndex((c) => c.id === over.id);
+      return arrayMove(prev, oldIdx, newIdx);
+    });
   };
 
-  const update = (idx: number, patch: Partial<PipelineColumn>) => {
-    setDraft((prev) => prev.map((c, i) => (i === idx ? { ...c, ...patch } : c)));
+  const addColumn = () => {
+    const newCol: PipelineColumn = {
+      id: `custom_${Date.now()}`,
+      dbStatus: 'contacted',
+      title: 'Nova Etapa',
+      color: 'cyan',
+    };
+    setDraft((prev) => [...prev, newCol]);
   };
 
-  const reset = () => setDraft(DEFAULT_COLUMNS);
+  const deleteColumn = (id: string) => {
+    setDraft((prev) => prev.filter((c) => c.id !== id));
+  };
+
+  const update = (id: string, patch: Partial<PipelineColumn>) => {
+    setDraft((prev) => prev.map((c) => (c.id === id ? { ...c, ...patch } : c)));
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
       <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        initial={{ opacity: 0, scale: 0.96, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.95, y: 10 }}
-        transition={{ duration: 0.2 }}
+        exit={{ opacity: 0, scale: 0.96, y: 10 }}
+        transition={{ duration: 0.18 }}
         className="w-full max-w-lg cr8-card overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
@@ -281,96 +374,50 @@ const PipelineEditor: React.FC<PipelineEditorProps> = ({ columns, onSave, onClos
         <div className="flex items-center justify-between px-5 py-4 border-b border-[hsl(var(--border))]">
           <div>
             <h2 className="text-base font-bold text-[hsl(var(--foreground))]">Editar Pipeline</h2>
-            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">Renomeie, reordene ou oculte etapas</p>
+            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">Arraste para reordenar · clique no dot para mudar cor</p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors">
+          <button onClick={onClose}
+            className="p-1.5 rounded-lg hover:bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors">
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        {/* Columns list */}
-        <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto cr8-scroll">
-          {draft.map((col, idx) => {
-            const colorCls = COLOR_MAP[col.color];
-            return (
-              <div
-                key={col.id}
-                className={`flex items-center gap-3 p-3 rounded-xl border transition-colors ${
-                  col.visible ? 'bg-[hsl(var(--secondary))] border-[hsl(var(--border))]' : 'bg-transparent border-dashed border-[hsl(var(--border))]/50 opacity-50'
-                }`}
-              >
-                {/* Reorder */}
-                <div className="flex flex-col gap-0.5">
-                  <button
-                    onClick={() => move(idx, -1)}
-                    disabled={idx === 0}
-                    className="p-0.5 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] disabled:opacity-20 transition-colors"
-                  >
-                    <ChevronUp className="h-3.5 w-3.5" />
-                  </button>
-                  <button
-                    onClick={() => move(idx, 1)}
-                    disabled={idx === draft.length - 1}
-                    className="p-0.5 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] disabled:opacity-20 transition-colors"
-                  >
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  </button>
-                </div>
-
-                {/* Color dot picker */}
-                <div className="relative group/color">
-                  <div className={`h-5 w-5 rounded-full cursor-pointer border-2 border-white/20 ${colorCls.dot}`} title="Mudar cor" />
-                  <div className="absolute left-0 top-7 z-10 hidden group-hover/color:flex flex-wrap gap-1 p-2 rounded-xl bg-[hsl(var(--popover))] border border-[hsl(var(--border))] shadow-xl w-28">
-                    {ALL_COLORS.map((c) => (
-                      <button
-                        key={c}
-                        onClick={() => update(idx, { color: c })}
-                        className={`h-5 w-5 rounded-full ${COLOR_MAP[c].dot} ${col.color === c ? 'ring-2 ring-white/60' : ''} transition-all`}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                {/* Name input */}
-                <input
-                  value={col.title}
-                  onChange={(e) => update(idx, { title: e.target.value })}
-                  className="flex-1 bg-transparent text-sm font-medium text-[hsl(var(--foreground))] outline-none border-b border-transparent focus:border-[hsl(var(--primary))]/60 transition-colors placeholder:text-[hsl(var(--muted-foreground))]"
+        {/* Sortable list */}
+        <div className="p-4 space-y-1.5 max-h-[55vh] overflow-y-auto cr8-scroll">
+          <DndContext sensors={editorSensors} onDragEnd={handleDragEnd}>
+            <SortableContext items={draft.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+              {draft.map((col) => (
+                <SortableEditorRow
+                  key={col.id}
+                  col={col}
+                  canDelete={draft.length > 1}
+                  onUpdate={(patch) => update(col.id, patch)}
+                  onDelete={() => deleteColumn(col.id)}
                 />
+              ))}
+            </SortableContext>
+          </DndContext>
 
-                {/* Status ID badge */}
-                <span className="text-[10px] font-mono text-[hsl(var(--muted-foreground))] shrink-0">{col.id}</span>
-
-                {/* Visibility toggle */}
-                <button
-                  onClick={() => update(idx, { visible: !col.visible })}
-                  className={`p-1.5 rounded-lg transition-colors ${
-                    col.visible
-                      ? 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
-                      : 'text-[hsl(var(--muted-foreground))]/40 hover:text-[hsl(var(--foreground))]'
-                  }`}
-                  title={col.visible ? 'Ocultar coluna' : 'Mostrar coluna'}
-                >
-                  {col.visible ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-                </button>
-              </div>
-            );
-          })}
+          {/* Add column button */}
+          <button
+            onClick={addColumn}
+            className="w-full flex items-center gap-2 px-3 py-2.5 rounded-xl border-2 border-dashed border-[hsl(var(--border))] text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:border-[hsl(var(--primary))]/40 transition-all mt-1"
+          >
+            <Plus className="h-3.5 w-3.5" /> Adicionar etapa
+          </button>
         </div>
 
         {/* Footer */}
         <div className="flex items-center justify-between px-5 py-4 border-t border-[hsl(var(--border))] bg-[hsl(var(--background))]/40">
           <button
-            onClick={reset}
+            onClick={() => setDraft(DEFAULT_COLUMNS)}
             className="flex items-center gap-1.5 text-xs text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
           >
             <RotateCcw className="h-3.5 w-3.5" /> Restaurar padrão
           </button>
           <div className="flex items-center gap-2">
-            <button
-              onClick={onClose}
-              className="px-3.5 py-1.5 rounded-lg border border-[hsl(var(--border))] text-xs text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-colors"
-            >
+            <button onClick={onClose}
+              className="px-3.5 py-1.5 rounded-lg border border-[hsl(var(--border))] text-xs text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-colors">
               Cancelar
             </button>
             <button
@@ -404,11 +451,15 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
     setColumns(loadPipelineColumns(companyId));
   }, [companyId]);
 
-  const visibleColumns = useMemo(() => columns.filter((c) => c.visible), [columns]);
+  const visibleColumns = columns; // all columns are visible; deletion removes them from the list
 
-  const leadsByStatus = useMemo(() => {
-    const grouped: Record<LeadStatus, Lead[]> = { new: [], contacted: [], proposal: [], won: [], lost: [] };
-    for (const lead of leads) grouped[lead.status]?.push(lead);
+  // Group leads by dbStatus for each column
+  const leadsByDbStatus = useMemo(() => {
+    const grouped: Record<string, Lead[]> = {};
+    for (const lead of leads) {
+      if (!grouped[lead.status]) grouped[lead.status] = [];
+      grouped[lead.status].push(lead);
+    }
     return grouped;
   }, [leads]);
 
@@ -497,10 +548,13 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
 
     const leadId = active.id as string;
     const oldStatus = active.data.current?.lead.status as LeadStatus;
-    const newStatus: LeadStatus =
-      over.data.current?.type === 'Column'
-        ? (over.id as LeadStatus)
-        : (over.data.current?.lead.status as LeadStatus);
+    // Resolve target DB status from the destination column
+    const targetColId = over.data.current?.type === 'Column' ? (over.id as string) : null;
+    const targetColByLead = over.data.current?.lead?.status as LeadStatus | undefined;
+    const targetDbStatus = targetColId
+      ? (columns.find((c) => c.id === targetColId)?.dbStatus ?? targetColByLead)
+      : targetColByLead;
+    const newStatus: LeadStatus = targetDbStatus ?? oldStatus;
 
     if (oldStatus === newStatus) return;
 
@@ -579,7 +633,7 @@ export const CRM: React.FC<CRMProps> = ({ companyId }) => {
                     key={col.id}
                     id={col.id}
                     column={col}
-                    leads={leadsByStatus[col.id] ?? []}
+                    leads={leadsByDbStatus[col.dbStatus] ?? []}
                   />
                 ))}
               </SortableContext>

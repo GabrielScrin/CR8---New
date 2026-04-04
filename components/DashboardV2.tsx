@@ -144,6 +144,52 @@ const calcChangePct = (current: number, previous: number) => {
   return ((current - previous) / previous) * 100;
 };
 
+// ── Count-up animation hook ────────────────────────────────────────────────
+
+const useCountUp = (to: number | null, durationMs = 900): number => {
+  const [val, setVal] = useState(0);
+  useEffect(() => {
+    if (to == null || !Number.isFinite(to) || to === 0) {
+      setVal(to ?? 0);
+      return;
+    }
+    let startTime: number | null = null;
+    let rafId: number;
+    const tick = (now: number) => {
+      if (startTime === null) startTime = now;
+      const t = Math.min((now - startTime) / durationMs, 1);
+      const eased = 1 - Math.pow(1 - t, 3); // cubic ease-out
+      setVal(eased * to);
+      if (t < 1) rafId = requestAnimationFrame(tick);
+      else setVal(to);
+    };
+    setVal(0);
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [to]);
+  return val;
+};
+
+interface KpiAnimValueProps {
+  rawValue: number | null;
+  format: (n: number) => string;
+  loading: boolean;
+}
+
+const KpiAnimValue: React.FC<KpiAnimValueProps> = ({ rawValue, format, loading }) => {
+  const animated = useCountUp(rawValue ?? null);
+  if (loading || rawValue == null) {
+    return <div className="h-8 w-24 rounded-md animate-shimmer" />;
+  }
+  return (
+    <p className="text-[26px] font-extrabold tracking-tight text-[hsl(var(--foreground))] leading-none tabular-nums">
+      {format(animated)}
+    </p>
+  );
+};
+
+// ── Component ──────────────────────────────────────────────────────────────
+
 export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'agency' }) => {
   const backendReady = isSupabaseConfigured();
   const [period, setPeriod] = useState<Period>('7d');
@@ -671,25 +717,29 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
         {[
           {
             title: 'Gasto',
-            value: loading ? null : formatCurrency(spend, companyCurrency),
+            rawValue: spend,
+            format: (n: number) => formatCurrency(n, companyCurrency),
             change: spendChange,
             icon: <DollarSign className="h-4 w-4" />,
           },
           {
             title: 'Leads',
-            value: loading ? null : formatNumber(totalLeads),
+            rawValue: totalLeads,
+            format: (n: number) => formatNumber(Math.round(n)),
             change: totalLeadsChange,
             icon: <Users className="h-4 w-4" />,
           },
           {
             title: 'CPL médio',
-            value: loading ? null : formatCurrency(cpl, companyCurrency),
+            rawValue: cpl,
+            format: (n: number) => formatCurrency(n, companyCurrency),
             change: null,
             icon: <Activity className="h-4 w-4" />,
           },
           {
             title: 'Vendas (won)',
-            value: loading ? null : formatNumber(wonLeads),
+            rawValue: wonLeads,
+            format: (n: number) => formatNumber(Math.round(n)),
             change: wonLeadsChange,
             icon: <Megaphone className="h-4 w-4" />,
           },
@@ -716,13 +766,7 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
                 </span>
               </div>
 
-              {kpi.value == null ? (
-                <div className="h-8 w-24 rounded-md animate-shimmer" />
-              ) : (
-                <p className="text-[26px] font-extrabold tracking-tight text-[hsl(var(--foreground))] leading-none">
-                  {kpi.value}
-                </p>
-              )}
+              <KpiAnimValue rawValue={kpi.rawValue ?? null} format={kpi.format} loading={loading} />
 
               <div className="mt-2.5 flex items-center gap-1.5">
                 {showChange ? (
