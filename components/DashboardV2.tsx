@@ -605,12 +605,12 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
   ];
 
   const SectionHeader = ({ title, sub, badge }: { title: string; sub?: string; badge?: React.ReactNode }) => (
-    <div className=”flex items-center justify-between gap-3 mb-5”>
-      <div className=”flex items-center gap-3”>
-        <div className=”w-0.5 h-5 rounded-full bg-gradient-to-b from-[hsl(var(--primary))] to-[hsl(var(--accent))]” />
+    <div className="flex items-center justify-between gap-3 mb-5">
+      <div className="flex items-center gap-3">
+        <div className="w-0.5 h-5 rounded-full bg-gradient-to-b from-[hsl(var(--primary))] to-[hsl(var(--accent))]" />
         <div>
-          <h3 className=”text-[15px] font-bold tracking-tight text-[hsl(var(--foreground))]”>{title}</h3>
-          {sub && <p className=”text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5”>{sub}</p>}
+          <h3 className="text-[15px] font-bold tracking-tight text-[hsl(var(--foreground))]">{title}</h3>
+          {sub && <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5">{sub}</p>}
         </div>
       </div>
       {badge}
@@ -618,29 +618,29 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
   );
 
   return (
-    <div className=”space-y-5 pb-4”>
+    <div className="space-y-5 pb-4">
       {/* ── Header ── */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
-        className=”flex items-center justify-between gap-4”
+        className="flex items-center justify-between gap-4"
       >
         <div>
-          <h2 className=”text-2xl font-extrabold tracking-tight text-[hsl(var(--foreground))]”>
+          <h2 className="text-2xl font-extrabold tracking-tight text-[hsl(var(--foreground))]">
             {companyName ?? 'Dashboard'}
           </h2>
-          <p className=”text-xs text-[hsl(var(--muted-foreground))] mt-0.5”>
+          <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
             {companyName ? 'Visão geral · tráfego & CRM' : 'Visão geral das suas métricas'}
           </p>
           {errorMsg && (
-            <p className=”text-xs text-red-400 mt-1.5 flex items-center gap-1”>
-              <AlertTriangle className=”h-3 w-3 shrink-0” /> {errorMsg}
+            <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
+              <AlertTriangle className="h-3 w-3 shrink-0" /> {errorMsg}
             </p>
           )}
         </div>
 
-        <div className=”flex items-center gap-1.5 p-1 rounded-xl bg-[hsl(var(--secondary))] border border-[hsl(var(--border))]”>
+        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[hsl(var(--secondary))] border border-[hsl(var(--border))]">
           {(['24h', '7d', '30d'] as Period[]).map((p) => (
             <button
               key={p}
@@ -658,40 +658,40 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
       </motion.div>
 
       {!backendReady && (
-        <div className=”cr8-card p-4 border-dashed”>
-          <p className=”text-xs text-[hsl(var(--muted-foreground))]”>
-            Configure <code className=”text-[hsl(var(--primary))]”>VITE_SUPABASE_URL</code> e{' '}
-            <code className=”text-[hsl(var(--primary))]”>VITE_SUPABASE_ANON_KEY</code> para ver dados reais.
+        <div className="cr8-card p-4 border-dashed">
+          <p className="text-xs text-[hsl(var(--muted-foreground))]">
+            Configure <code className="text-[hsl(var(--primary))]">VITE_SUPABASE_URL</code> e{' '}
+            <code className="text-[hsl(var(--primary))]">VITE_SUPABASE_ANON_KEY</code> para ver dados reais.
           </p>
         </div>
       )}
 
       {/* ── KPI Cards ── */}
-      <div className=”grid gap-3 sm:grid-cols-2 xl:grid-cols-4”>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
           {
             title: 'Gasto',
             value: loading ? null : formatCurrency(spend, companyCurrency),
             change: spendChange,
-            icon: <DollarSign className=”h-4 w-4” />,
+            icon: <DollarSign className="h-4 w-4" />,
           },
           {
             title: 'Leads',
             value: loading ? null : formatNumber(totalLeads),
             change: totalLeadsChange,
-            icon: <Users className=”h-4 w-4” />,
+            icon: <Users className="h-4 w-4" />,
           },
           {
             title: 'CPL médio',
             value: loading ? null : formatCurrency(cpl, companyCurrency),
             change: null,
-            icon: <Activity className=”h-4 w-4” />,
+            icon: <Activity className="h-4 w-4" />,
           },
           {
             title: 'Vendas (won)',
             value: loading ? null : formatNumber(wonLeads),
             change: wonLeadsChange,
-            icon: <Megaphone className=”h-4 w-4” />,
+            icon: <Megaphone className="h-4 w-4" />,
           },
         ].map((kpi, index) => {
           const isPositive = (kpi.change ?? 0) >= 0;
@@ -702,13 +702,13 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
               initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.3, delay: index * 0.05 }}
-              className=”cr8-card p-4 relative overflow-hidden group cursor-default”
+              className="cr8-card p-4 relative overflow-hidden group cursor-default"
             >
               {/* top accent line */}
               <div className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${kpiAccents[index]} opacity-80`} />
 
-              <div className=”flex items-start justify-between gap-2 mb-3”>
-                <span className=”text-[11px] font-semibold uppercase tracking-widest text-[hsl(var(--muted-foreground))]”>
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <span className="text-[11px] font-semibold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">
                   {kpi.title}
                 </span>
                 <span className={`p-1.5 rounded-md bg-gradient-to-br ${kpiAccents[index]} bg-opacity-10 text-white`}>
@@ -717,14 +717,14 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
               </div>
 
               {kpi.value == null ? (
-                <div className=”h-8 w-24 rounded-md animate-shimmer” />
+                <div className="h-8 w-24 rounded-md animate-shimmer" />
               ) : (
-                <p className=”text-[26px] font-extrabold tracking-tight text-[hsl(var(--foreground))] leading-none”>
+                <p className="text-[26px] font-extrabold tracking-tight text-[hsl(var(--foreground))] leading-none">
                   {kpi.value}
                 </p>
               )}
 
-              <div className=”mt-2.5 flex items-center gap-1.5”>
+              <div className="mt-2.5 flex items-center gap-1.5">
                 {showChange ? (
                   <span
                     className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-md ${
@@ -733,15 +733,15 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
                         : 'bg-red-500/15 text-red-400'
                     }`}
                   >
-                    {isPositive ? <ArrowUpRight className=”h-3 w-3” /> : <ArrowDownRight className=”h-3 w-3” />}
+                    {isPositive ? <ArrowUpRight className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
                     {formatPct(kpi.change)}
                   </span>
                 ) : null}
                 {showChange && (
-                  <span className=”text-[11px] text-[hsl(var(--muted-foreground))]”>vs anterior</span>
+                  <span className="text-[11px] text-[hsl(var(--muted-foreground))]">vs anterior</span>
                 )}
                 {!showChange && kpi.change == null && (
-                  <span className=”text-[11px] text-[hsl(var(--muted-foreground))]”>período: {PERIOD_LABEL[period]}</span>
+                  <span className="text-[11px] text-[hsl(var(--muted-foreground))]">período: {PERIOD_LABEL[period]}</span>
                 )}
               </div>
             </motion.div>
@@ -750,50 +750,50 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
       </div>
 
       {/* ── Chart + Top Campaigns ── */}
-      <div className=”grid gap-4 lg:grid-cols-3”>
+      <div className="grid gap-4 lg:grid-cols-3">
         <motion.div
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.12 }}
-          className=”cr8-card p-5 lg:col-span-2”
+          className="cr8-card p-5 lg:col-span-2"
         >
           <SectionHeader
-            title=”Gasto vs Leads”
+            title="Gasto vs Leads"
             sub={`Período: ${PERIOD_LABEL[period]}${metaAdAccountId ? ` · ${metaAdAccountId}` : ''}`}
           />
 
           {loading ? (
-            <div className=”h-[280px] w-full rounded-lg animate-shimmer” />
+            <div className="h-[280px] w-full rounded-lg animate-shimmer" />
           ) : !hasSeriesData ? (
-            <div className=”h-[280px] flex flex-col items-center justify-center gap-2 text-[hsl(var(--muted-foreground))]”>
-              <Activity className=”h-8 w-8 opacity-20” />
-              <span className=”text-sm”>Sem dados para o período</span>
+            <div className="h-[280px] flex flex-col items-center justify-center gap-2 text-[hsl(var(--muted-foreground))]">
+              <Activity className="h-8 w-8 opacity-20" />
+              <span className="text-sm">Sem dados para o período</span>
             </div>
           ) : (
-            <div className=”h-[280px]”>
-              <ResponsiveContainer width=”100%” height=”100%”>
+            <div className="h-[280px]">
+              <ResponsiveContainer width="100%" height="100%">
                 <LineChart data={series} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
                   <defs>
-                    <linearGradient id=”spendGrad” x1=”0” y1=”0” x2=”1” y2=”0”>
-                      <stop offset=”0%” stopColor=”hsl(220 100% 52%)” />
-                      <stop offset=”100%” stopColor=”hsl(240 80% 65%)” />
+                    <linearGradient id="spendGrad" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="hsl(220 100% 52%)" />
+                      <stop offset="100%" stopColor="hsl(240 80% 65%)" />
                     </linearGradient>
-                    <linearGradient id=”leadsGrad” x1=”0” y1=”0” x2=”1” y2=”0”>
-                      <stop offset=”0%” stopColor=”hsl(153 75% 43%)” />
-                      <stop offset=”100%” stopColor=”hsl(180 70% 50%)” />
+                    <linearGradient id="leadsGrad" x1="0" y1="0" x2="1" y2="0">
+                      <stop offset="0%" stopColor="hsl(153 75% 43%)" />
+                      <stop offset="100%" stopColor="hsl(180 70% 50%)" />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid strokeDasharray=”3 3” stroke=”hsl(var(--border))” vertical={false} opacity={0.5} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} opacity={0.5} />
                   <XAxis
-                    dataKey=”label”
-                    stroke=”hsl(var(--muted-foreground))”
+                    dataKey="label"
+                    stroke="hsl(var(--muted-foreground))"
                     fontSize={11}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
-                    yAxisId=”left”
-                    stroke=”hsl(var(--muted-foreground))”
+                    yAxisId="left"
+                    stroke="hsl(var(--muted-foreground))"
                     fontSize={11}
                     tickLine={false}
                     axisLine={false}
@@ -801,9 +801,9 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
                     width={72}
                   />
                   <YAxis
-                    yAxisId=”right”
-                    orientation=”right”
-                    stroke=”hsl(var(--muted-foreground))”
+                    yAxisId="right"
+                    orientation="right"
+                    stroke="hsl(var(--muted-foreground))"
                     fontSize={11}
                     tickLine={false}
                     axisLine={false}
@@ -828,7 +828,7 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
                     }}
                   />
                   <Legend
-                    verticalAlign=”top”
+                    verticalAlign="top"
                     height={28}
                     formatter={(v: any) => (
                       <span style={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))' }}>
@@ -837,19 +837,19 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
                     )}
                   />
                   <Line
-                    yAxisId=”left”
-                    type=”monotone”
-                    dataKey=”spend”
-                    stroke=”url(#spendGrad)”
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="spend"
+                    stroke="url(#spendGrad)"
                     strokeWidth={2.5}
                     dot={false}
                     activeDot={{ r: 5, strokeWidth: 0 }}
                   />
                   <Line
-                    yAxisId=”right”
-                    type=”monotone”
-                    dataKey=”leads”
-                    stroke=”url(#leadsGrad)”
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="leads"
+                    stroke="url(#leadsGrad)"
                     strokeWidth={2.5}
                     dot={false}
                     activeDot={{ r: 5, strokeWidth: 0 }}
@@ -864,45 +864,45 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.18 }}
-          className=”cr8-card p-5”
+          className="cr8-card p-5"
         >
-          <SectionHeader title=”Top Campanhas” sub=”Meta Ads” />
+          <SectionHeader title="Top Campanhas" sub="Meta Ads" />
 
           {loading ? (
-            <div className=”space-y-2.5”>
+            <div className="space-y-2.5">
               {[...Array(5)].map((_, i) => (
-                <div key={i} className=”h-11 w-full rounded-lg animate-shimmer” />
+                <div key={i} className="h-11 w-full rounded-lg animate-shimmer" />
               ))}
             </div>
           ) : topCampaigns.length === 0 ? (
-            <div className=”flex flex-col items-center justify-center gap-2 py-10 text-[hsl(var(--muted-foreground))]”>
-              <Megaphone className=”h-6 w-6 opacity-20” />
-              <span className=”text-xs”>Sem campanhas com gasto</span>
+            <div className="flex flex-col items-center justify-center gap-2 py-10 text-[hsl(var(--muted-foreground))]">
+              <Megaphone className="h-6 w-6 opacity-20" />
+              <span className="text-xs">Sem campanhas com gasto</span>
             </div>
           ) : (
             <motion.div
               variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
-              initial=”hidden”
-              animate=”visible”
-              className=”space-y-1.5”
+              initial="hidden"
+              animate="visible"
+              className="space-y-1.5"
             >
               {topCampaigns.map((c, idx) => (
                 <motion.div
                   key={c.id}
                   variants={{ hidden: { opacity: 0, x: -12 }, visible: { opacity: 1, x: 0 } }}
                   transition={{ duration: 0.25 }}
-                  className=”flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))] hover:border-[hsl(var(--primary))]/30 transition-colors group”
+                  className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))] hover:border-[hsl(var(--primary))]/30 transition-colors group"
                 >
-                  <span className=”text-[10px] font-black text-[hsl(var(--muted-foreground))] w-4 shrink-0 group-hover:text-[hsl(var(--primary))] transition-colors”>
+                  <span className="text-[10px] font-black text-[hsl(var(--muted-foreground))] w-4 shrink-0 group-hover:text-[hsl(var(--primary))] transition-colors">
                     {idx + 1}
                   </span>
-                  <div className=”flex-1 min-w-0”>
-                    <p className=”text-xs font-semibold truncate text-[hsl(var(--foreground))]”>{c.name}</p>
-                    <p className=”text-[10px] text-[hsl(var(--muted-foreground))] truncate mt-0.5”>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold truncate text-[hsl(var(--foreground))]">{c.name}</p>
+                    <p className="text-[10px] text-[hsl(var(--muted-foreground))] truncate mt-0.5">
                       {formatNumber(c.results)} resultados
                     </p>
                   </div>
-                  <p className=”text-xs font-bold text-[hsl(var(--foreground))] shrink-0”>
+                  <p className="text-xs font-bold text-[hsl(var(--foreground))] shrink-0">
                     {formatCurrency(c.spend, companyCurrency)}
                   </p>
                 </motion.div>
@@ -918,19 +918,19 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.2 }}
-          className=”cr8-card p-5”
+          className="cr8-card p-5"
         >
           <SectionHeader
-            title=”Financeiro”
-            sub=”Saldo de mídia e fee por empresa”
+            title="Financeiro"
+            sub="Saldo de mídia e fee por empresa"
             badge={
-              <span className=”text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] border border-[hsl(var(--border))]”>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] border border-[hsl(var(--border))]">
                 {companyCurrency || 'BRL'}
               </span>
             }
           />
 
-          <div className=”grid gap-3 md:grid-cols-3”>
+          <div className="grid gap-3 md:grid-cols-3">
             {[
               {
                 label: 'Saldo de mídia',
@@ -941,7 +941,7 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
               {
                 label: 'Fee estimado',
                 value: loading ? null : feeEstimate ? formatCurrency(feeEstimate.total, companyCurrency) : '-',
-                hint: `${companyFeePercent != null && Number.isFinite(companyFeePercent) ? `${companyFeePercent}%` : '—'}${companyFeeFixed != null && Number.isFinite(companyFeeFixed) ? ` + ${formatCurrency(companyFeeFixed, companyCurrency)}` : ''}`,
+                hint: `${companyFeePercent != null && Number.isFinite(companyFeePercent) ? `${companyFeePercent}%` : '--'}${companyFeeFixed != null && Number.isFinite(companyFeeFixed) ? ` + ${formatCurrency(companyFeeFixed, companyCurrency)}` : ''}`,
                 color: 'from-purple-500/10 to-transparent',
               },
               {
@@ -955,17 +955,17 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
                 key={item.label}
                 className={`rounded-xl border border-[hsl(var(--border))] bg-gradient-to-br ${item.color} bg-[hsl(var(--secondary))] p-4`}
               >
-                <p className=”text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted-foreground))]”>
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">
                   {item.label}
                 </p>
                 {item.value == null ? (
-                  <div className=”h-7 w-28 rounded-md animate-shimmer mt-2” />
+                  <div className="h-7 w-28 rounded-md animate-shimmer mt-2" />
                 ) : (
-                  <p className=”text-xl font-extrabold text-[hsl(var(--foreground))] mt-1.5 tracking-tight”>
+                  <p className="text-xl font-extrabold text-[hsl(var(--foreground))] mt-1.5 tracking-tight">
                     {item.value}
                   </p>
                 )}
-                <p className=”text-[10px] text-[hsl(var(--muted-foreground))] mt-1”>{item.hint}</p>
+                <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-1">{item.hint}</p>
               </div>
             ))}
           </div>
@@ -974,29 +974,29 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
 
       {/* ── Top Canais + Últimos Leads ── */}
       {variant !== 'client' && (
-        <div className=”grid gap-4 lg:grid-cols-2”>
+        <div className="grid gap-4 lg:grid-cols-2">
           <motion.div
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.22 }}
-            className=”cr8-card p-5”
+            className="cr8-card p-5"
           >
-            <SectionHeader title=”Top Canais” sub={`Leads no período · ${PERIOD_LABEL[period]}`} />
+            <SectionHeader title="Top Canais" sub={`Leads no período · ${PERIOD_LABEL[period]}`} />
 
             {loading ? (
-              <div className=”space-y-2.5”>
+              <div className="space-y-2.5">
                 {[...Array(5)].map((_, i) => (
-                  <div key={i} className=”h-10 w-full rounded-lg animate-shimmer” />
+                  <div key={i} className="h-10 w-full rounded-lg animate-shimmer" />
                 ))}
               </div>
             ) : topChannels.length === 0 ? (
-              <p className=”text-sm text-[hsl(var(--muted-foreground))] py-6 text-center”>Nenhum lead no período.</p>
+              <p className="text-sm text-[hsl(var(--muted-foreground))] py-6 text-center">Nenhum lead no período.</p>
             ) : (
               <motion.div
                 variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
-                initial=”hidden”
-                animate=”visible”
-                className=”space-y-1.5”
+                initial="hidden"
+                animate="visible"
+                className="space-y-1.5"
               >
                 {topChannels.map((c, idx) => {
                   const ui = sourceUi[c.source] ?? sourceUi.manual;
@@ -1007,28 +1007,28 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
                       key={c.source}
                       variants={{ hidden: { opacity: 0, x: -12 }, visible: { opacity: 1, x: 0 } }}
                       transition={{ duration: 0.25 }}
-                      className=”flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))]”
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))]"
                     >
-                      <span className=”text-[10px] font-black text-[hsl(var(--muted-foreground))] w-3 shrink-0”>
+                      <span className="text-[10px] font-black text-[hsl(var(--muted-foreground))] w-3 shrink-0">
                         {idx + 1}
                       </span>
                       <div className={`h-7 w-7 rounded-lg flex items-center justify-center text-xs shrink-0 ${ui.color}`}>
                         {ui.icon}
                       </div>
-                      <div className=”flex-1 min-w-0”>
-                        <p className=”text-xs font-semibold text-[hsl(var(--foreground))]”>{ui.label}</p>
-                        <div className=”w-full bg-[hsl(var(--muted))] rounded-full h-1 mt-1 overflow-hidden”>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold text-[hsl(var(--foreground))]">{ui.label}</p>
+                        <div className="w-full bg-[hsl(var(--muted))] rounded-full h-1 mt-1 overflow-hidden">
                           <motion.div
                             initial={{ width: 0 }}
                             animate={{ width: `${pct}%` }}
                             transition={{ duration: 0.6, delay: idx * 0.05 }}
-                            className=”bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--accent))] h-1”
+                            className="bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--accent))] h-1"
                           />
                         </div>
                       </div>
-                      <div className=”text-right shrink-0”>
-                        <p className=”text-xs font-bold text-[hsl(var(--foreground))]”>{formatNumber(c.count)}</p>
-                        <p className=”text-[10px] text-[hsl(var(--muted-foreground))]”>{pct.toFixed(0)}%</p>
+                      <div className="text-right shrink-0">
+                        <p className="text-xs font-bold text-[hsl(var(--foreground))]">{formatNumber(c.count)}</p>
+                        <p className="text-[10px] text-[hsl(var(--muted-foreground))]">{pct.toFixed(0)}%</p>
                       </div>
                     </motion.div>
                   );
@@ -1041,27 +1041,27 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.26 }}
-            className=”cr8-card p-5”
+            className="cr8-card p-5"
           >
             <SectionHeader
-              title=”Últimos Leads”
-              badge={<span className=”text-[10px] text-[hsl(var(--muted-foreground))]”>CRM & Vendas</span>}
+              title="Últimos Leads"
+              badge={<span className="text-[10px] text-[hsl(var(--muted-foreground))]">CRM & Vendas</span>}
             />
 
             {loading ? (
-              <div className=”space-y-2.5”>
+              <div className="space-y-2.5">
                 {[...Array(4)].map((_, i) => (
-                  <div key={i} className=”h-10 w-full rounded-lg animate-shimmer” />
+                  <div key={i} className="h-10 w-full rounded-lg animate-shimmer" />
                 ))}
               </div>
             ) : recentLeads.length === 0 ? (
-              <p className=”text-sm text-[hsl(var(--muted-foreground))] py-6 text-center”>Nenhum lead ainda.</p>
+              <p className="text-sm text-[hsl(var(--muted-foreground))] py-6 text-center">Nenhum lead ainda.</p>
             ) : (
               <motion.div
                 variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
-                initial=”hidden”
-                animate=”visible”
-                className=”space-y-1.5”
+                initial="hidden"
+                animate="visible"
+                className="space-y-1.5"
               >
                 {recentLeads.map((l) => {
                   const src = normalizeLeadSource(l.source);
@@ -1071,18 +1071,18 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
                       key={l.id}
                       variants={{ hidden: { opacity: 0, x: -12 }, visible: { opacity: 1, x: 0 } }}
                       transition={{ duration: 0.25 }}
-                      className=”flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))] hover:border-[hsl(var(--primary))]/30 transition-colors group”
+                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))] hover:border-[hsl(var(--primary))]/30 transition-colors group"
                     >
                       <div className={`h-7 w-7 rounded-lg flex items-center justify-center text-xs shrink-0 ${ui.color}`}>
                         {ui.icon}
                       </div>
-                      <div className=”flex-1 min-w-0”>
-                        <p className=”text-xs font-semibold truncate text-[hsl(var(--foreground))]”>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-semibold truncate text-[hsl(var(--foreground))]">
                           {l.name || '(sem nome)'}
                         </p>
-                        <p className=”text-[10px] text-[hsl(var(--muted-foreground))] truncate”>{ui.label}</p>
+                        <p className="text-[10px] text-[hsl(var(--muted-foreground))] truncate">{ui.label}</p>
                       </div>
-                      <span className=”text-[10px] text-[hsl(var(--muted-foreground))] whitespace-nowrap”>
+                      <span className="text-[10px] text-[hsl(var(--muted-foreground))] whitespace-nowrap">
                         {timeAgoPt(l.created_at)}
                       </span>
                     </motion.div>
@@ -1100,13 +1100,13 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
           initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.4, delay: 0.3 }}
-          className=”cr8-card p-5”
+          className="cr8-card p-5"
         >
           <SectionHeader
-            title=”Alertas”
+            title="Alertas"
             badge={
               alertCounts.total > 0 ? (
-                <span className=”h-5 min-w-5 px-1.5 rounded-full bg-red-500/20 text-red-300 text-[10px] font-bold flex items-center justify-center border border-red-500/20”>
+                <span className="h-5 min-w-5 px-1.5 rounded-full bg-red-500/20 text-red-300 text-[10px] font-bold flex items-center justify-center border border-red-500/20">
                   {alertCounts.total}
                 </span>
               ) : undefined
@@ -1114,13 +1114,13 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
           />
 
           {loading ? (
-            <div className=”space-y-2.5”>
+            <div className="space-y-2.5">
               {[...Array(3)].map((_, i) => (
-                <div key={i} className=”h-12 w-full rounded-lg animate-shimmer” />
+                <div key={i} className="h-12 w-full rounded-lg animate-shimmer" />
               ))}
             </div>
           ) : (
-            <div className=”space-y-1.5”>
+            <div className="space-y-1.5">
               {alerts.map((a) => (
                 <div
                   key={a.id}
@@ -1134,12 +1134,12 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
                           : 'bg-emerald-500/8 border-emerald-500/25'
                   }`}
                 >
-                  <span className=”mt-0.5 shrink-0”>
+                  <span className="mt-0.5 shrink-0">
                     <AlertIcon type={a.type} />
                   </span>
-                  <div className=”flex-1 min-w-0”>
-                    <p className=”text-xs font-semibold text-[hsl(var(--foreground))]”>{a.title}</p>
-                    <p className=”text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5”>{a.description}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-[hsl(var(--foreground))]">{a.title}</p>
+                    <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5">{a.description}</p>
                   </div>
                 </div>
               ))}
@@ -1149,11 +1149,11 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
       )}
 
       {/* ── Footer note ── */}
-      <div className=”px-1 flex items-center justify-between gap-4 text-[10px] text-[hsl(var(--muted-foreground))]”>
-        <span>CPL = Gasto ÷ Leads · “Resultados” Meta considera leads + conversas</span>
+      <div className="px-1 flex items-center justify-between gap-4 text-[10px] text-[hsl(var(--muted-foreground))]">
+        <span>CPL = Gasto ÷ Leads · "Resultados" Meta considera leads + conversas</span>
         <span>
           Receita (won):{' '}
-          <span className=”text-[hsl(var(--foreground))] font-semibold”>{formatCurrency(revenue, companyCurrency)}</span>
+          <span className="text-[hsl(var(--foreground))] font-semibold">{formatCurrency(revenue, companyCurrency)}</span>
           {revenueChange != null && Number.isFinite(revenueChange) ? ` (${formatPct(revenueChange)} vs anterior)` : ''}
         </span>
       </div>
