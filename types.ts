@@ -15,6 +15,41 @@ export const normalizeRole = (role: unknown): Role => {
 
 export const isClientRole = (role: Role | null | undefined) => role === 'cliente' || role === 'empresa';
 
+export const isVendorRole = (role: Role | null | undefined) => role === 'vendedor';
+
+// Views each role is allowed to navigate to
+export const getAllowedViews = (role: Role): Set<string> => {
+  const r = normalizeRole(role);
+  if (r === 'admin' || r === 'gestor') {
+    return new Set(['dashboard', 'traffic', 'crm', 'livechat', 'contacts', 'forms', 'instagram', 'whatsapp', 'ai', 'settings']);
+  }
+  if (r === 'vendedor') {
+    return new Set(['dashboard', 'crm', 'livechat', 'contacts', 'forms', 'whatsapp', 'ai', 'settings']);
+  }
+  // cliente / empresa
+  return new Set(['dashboard', 'traffic']);
+};
+
+// Settings sections each role is allowed to see
+export const getAllowedSettingsSections = (role: Role): Set<string> => {
+  const r = normalizeRole(role);
+  if (r === 'admin' || r === 'gestor') {
+    return new Set(['company', 'whatsapp', 'financeiro', 'conversoes', 'auditoria', 'equipe', 'integracoes']);
+  }
+  if (r === 'vendedor') {
+    return new Set(['equipe']);
+  }
+  return new Set();
+};
+
+export const roleConfig = {
+  admin:    { label: 'Admin',    badgeClass: 'bg-red-500/15 text-red-400 border-red-500/25' },
+  gestor:   { label: 'Gestor',   badgeClass: 'bg-orange-500/15 text-orange-400 border-orange-500/25' },
+  vendedor: { label: 'Vendedor', badgeClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/25' },
+  cliente:  { label: 'Cliente',  badgeClass: 'bg-blue-500/15 text-blue-400 border-blue-500/25' },
+  empresa:  { label: 'Cliente',  badgeClass: 'bg-blue-500/15 text-blue-400 border-blue-500/25' },
+} satisfies Record<Role, { label: string; badgeClass: string }>;
+
 export const labelRolePt = (role: Role) => {
   const r = normalizeRole(role);
   switch (r) {

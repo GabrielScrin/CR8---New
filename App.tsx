@@ -13,7 +13,7 @@ import { QuizForms } from './components/QuizForms';
 import { PublicQuiz } from './components/PublicQuiz';
 import { WhatsApp } from './components/WhatsApp';
 import { Join } from './components/Join';
-import { Role, User, isClientRole, normalizeRole } from './types';
+import { Role, User, isClientRole, getAllowedViews, normalizeRole } from './types';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { loadSelectedCompanyId, saveSelectedCompanyId } from './lib/companySelection';
 
@@ -67,13 +67,12 @@ export default function App() {
   const [currentView, setCurrentView] = useState('dashboard');
   const [loadingSession, setLoadingSession] = useState(() => !publicQuizId && !joinToken);
 
-  // Keep hooks unconditional: enforce client-portal view restrictions via an effect,
-  // even during the loading/login/setup renders.
+  // Enforce view access restrictions based on role
   useEffect(() => {
     if (!user) return;
-    if (!isClientRole(user.role)) return;
-    const allowed = new Set(['dashboard', 'traffic']);
-    if (!allowed.has(currentView)) setCurrentView('dashboard');
+    const allowed = getAllowedViews(user.role);
+    const viewBase = currentView.split(':')[0];
+    if (!allowed.has(viewBase)) setCurrentView('dashboard');
   }, [currentView, user?.role]);
 
   useEffect(() => {

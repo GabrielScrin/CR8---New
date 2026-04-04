@@ -10,15 +10,15 @@ import {
   Settings,
   FileText,
   LogOut,
-  ChevronRight,
   ChevronDown,
   Building2,
   DollarSign,
   Target,
   ClipboardCheck,
-  Puzzle
+  Puzzle,
+  UserCog,
 } from 'lucide-react';
-import { Role, isClientRole, labelRolePt, normalizeRole } from '../types';
+import { Role, getAllowedViews, getAllowedSettingsSections, normalizeRole, roleConfig } from '../types';
 
 interface SidebarProps {
   currentView: string;
@@ -29,121 +29,187 @@ interface SidebarProps {
   onLogout: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentView, setCurrentView, role, companyName, companyLogoUrl, onLogout }) => {
-  const menuItems = [
-    { id: 'dashboard', label: 'Dashboard Geral', icon: LayoutDashboard },
-    { id: 'crm', label: 'CRM & Vendas', icon: Users },
-    { id: 'contacts', label: 'Contatos & Leads', icon: FileText },
-    { id: 'livechat', label: 'Live Chat', icon: MessageSquare },
-    { id: 'forms', label: 'Quiz & Forms', icon: FileText }, // Reusing icon for simplicity
-    { id: 'instagram', label: 'Instagram', icon: Instagram },
-    { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
-    { id: 'ai', label: 'Agente IA', icon: Bot },
-    { id: 'traffic', label: 'Análise de Tráfego', icon: BarChart2 },
-    { id: 'settings', label: 'Configurações', icon: Settings },
-  ];
+// All navigation items with section grouping
+type NavItem = { id: string; label: string; icon: React.ElementType; group: string };
 
-  const filteredMenuItems =
-    isClientRole(role) ? menuItems.filter((item) => item.id === 'dashboard' || item.id === 'traffic') : menuItems;
+const ALL_NAV_ITEMS: NavItem[] = [
+  { id: 'dashboard', label: 'Dashboard',        icon: LayoutDashboard, group: 'principal' },
+  { id: 'traffic',   label: 'Trafego',           icon: BarChart2,       group: 'principal' },
+  { id: 'crm',       label: 'CRM & Vendas',      icon: Users,           group: 'comercial' },
+  { id: 'contacts',  label: 'Contatos',          icon: FileText,        group: 'comercial' },
+  { id: 'livechat',  label: 'Live Chat',         icon: MessageSquare,   group: 'comunicacao' },
+  { id: 'whatsapp',  label: 'WhatsApp',          icon: MessageCircle,   group: 'comunicacao' },
+  { id: 'instagram', label: 'Instagram',         icon: Instagram,       group: 'comunicacao' },
+  { id: 'forms',     label: 'Quiz & Forms',      icon: FileText,        group: 'ferramentas' },
+  { id: 'ai',        label: 'Agente IA',         icon: Bot,             group: 'ferramentas' },
+];
 
-  const SETTINGS_SUB = [
-    { id: 'company', label: 'Empresa e White Label', icon: Building2 },
-    { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
-    { id: 'financeiro', label: 'Financeiro', icon: DollarSign },
-    { id: 'conversoes', label: 'Conversões', icon: Target },
-    { id: 'auditoria', label: 'Auditoria', icon: ClipboardCheck },
-    { id: 'equipe', label: 'Equipe', icon: Users },
-    { id: 'integracoes', label: 'Integrações', icon: Puzzle },
-  ];
+const GROUP_LABELS: Record<string, string> = {
+  principal:   'Visao Geral',
+  comercial:   'Comercial',
+  comunicacao: 'Comunicacao',
+  ferramentas: 'Ferramentas',
+};
 
+const ALL_SETTINGS_SUBS = [
+  { id: 'company',     label: 'Empresa',       icon: Building2 },
+  { id: 'whatsapp',    label: 'WhatsApp',      icon: MessageCircle },
+  { id: 'financeiro',  label: 'Financeiro',    icon: DollarSign },
+  { id: 'conversoes',  label: 'Conversoes',    icon: Target },
+  { id: 'auditoria',   label: 'Auditoria',     icon: ClipboardCheck },
+  { id: 'equipe',      label: 'Equipe',        icon: UserCog },
+  { id: 'integracoes', label: 'Integracoes',   icon: Puzzle },
+];
+
+export const Sidebar: React.FC<SidebarProps> = ({
+  currentView,
+  setCurrentView,
+  role,
+  companyName,
+  companyLogoUrl,
+  onLogout,
+}) => {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  const normalizedRole = normalizeRole(role);
+  const allowedViews = getAllowedViews(normalizedRole);
+  const allowedSettings = getAllowedSettingsSections(normalizedRole);
+  const { label: roleLabel, badgeClass } = roleConfig[normalizedRole];
+
+  // Filter and group nav items
+  const visibleItems = ALL_NAV_ITEMS.filter((item) => allowedViews.has(item.id));
+  const visibleSettings = ALL_SETTINGS_SUBS.filter((s) => allowedSettings.has(s.id));
+  const showSettings = allowedViews.has('settings');
+
+  // Build groups in order
+  const groups = ['principal', 'comercial', 'comunicacao', 'ferramentas'];
+  const itemsByGroup: Record<string, NavItem[]> = {};
+  for (const item of visibleItems) {
+    if (!itemsByGroup[item.group]) itemsByGroup[item.group] = [];
+    itemsByGroup[item.group].push(item);
+  }
+
+  const settingsActive = currentView === 'settings' || currentView.startsWith('settings:');
+
   return (
-    <div className="h-screen w-64 bg-[hsl(var(--sidebar-background))] text-[hsl(var(--foreground))] flex flex-col fixed left-0 top-0 shadow-xl z-50 border-r border-[hsl(var(--sidebar-border))]">
-      <div className="p-6 flex items-center space-x-3 border-b border-[hsl(var(--sidebar-border))]">
-        <div className="w-8 h-8 rounded-lg bg-transparent flex items-center justify-center overflow-hidden ring-1 ring-[hsl(var(--sidebar-border))]">
-          <img src={companyLogoUrl || '/cr8-logo.svg'} alt="CR8" className="w-8 h-8 object-contain" />
+    <div className="h-screen w-64 flex flex-col fixed left-0 top-0 z-50 border-r border-[hsl(var(--sidebar-border))]"
+         style={{ background: 'linear-gradient(180deg, hsl(220 20% 8%) 0%, hsl(220 18% 7%) 100%)' }}>
+
+      {/* Logo */}
+      <div className="px-5 py-5 flex items-center gap-3 border-b border-[hsl(var(--sidebar-border))]">
+        <div className="h-8 w-8 rounded-xl bg-[hsl(var(--primary))]/10 border border-[hsl(var(--primary))]/30 flex items-center justify-center overflow-hidden shrink-0">
+          <img src={companyLogoUrl || '/cr8-logo.svg'} alt="CR8" className="h-7 w-7 object-contain" />
         </div>
         <div className="min-w-0">
-          <div className="text-xl font-bold tracking-tight leading-tight">CR8</div>
-          {companyName && <div className="text-xs text-[hsl(var(--sidebar-foreground))] opacity-80 truncate">{companyName}</div>}
+          <div className="text-[15px] font-extrabold tracking-tight leading-none">CR8</div>
+          {companyName && (
+            <div className="text-[11px] text-[hsl(var(--sidebar-foreground))]/60 truncate mt-0.5">{companyName}</div>
+          )}
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-4 space-y-1">
-        {filteredMenuItems.map((item) => {
-          if (item.id !== 'settings') {
-            return (
-              <button
-                key={item.id}
-                onClick={() => setCurrentView(item.id)}
-                className={`w-full flex items-center px-6 py-3 text-sm font-medium transition-colors ${currentView === item.id
-                    ? 'bg-[hsl(var(--sidebar-primary))] text-[hsl(var(--sidebar-primary-foreground))] border-r-4 border-[hsl(var(--accent))]'
-                    : 'text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-accent-foreground))]'
-                  }`}
-              >
-                <item.icon className="w-5 h-5 mr-3" />
-                {item.label}
-              </button>
-            );
-          }
-
-          // settings parent button with dropdown
-          const settingsActive = currentView === 'settings' || currentView.startsWith('settings:');
+      {/* Navigation */}
+      <nav className="flex-1 overflow-y-auto py-3 cr8-scroll">
+        {groups.map((group) => {
+          const items = itemsByGroup[group];
+          if (!items || items.length === 0) return null;
           return (
-            <div key={item.id} className="w-full">
-              <button
-                onClick={() => {
-                  // toggle dropdown visibility; also set view to base settings
-                  setSettingsOpen((s) => !s);
-                  setCurrentView('settings');
-                }}
-                className={`w-full flex items-center justify-between px-6 py-3 text-sm font-medium transition-colors ${settingsActive
-                    ? 'bg-[hsl(var(--sidebar-primary))] text-[hsl(var(--sidebar-primary-foreground))] border-r-4 border-[hsl(var(--accent))]'
-                    : 'text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))] hover:text-[hsl(var(--sidebar-accent-foreground))]'
-                  }`}
-              >
-                <div className="flex items-center">
-                  <item.icon className="w-5 h-5 mr-3" />
-                  {item.label}
-                </div>
-                {settingsOpen ? <ChevronDown className="w-4 h-4 opacity-70" /> : <ChevronRight className="w-4 h-4 opacity-70" />}
-              </button>
-              {settingsOpen && (
-                <div className="pl-6 pr-4 mt-1 space-y-0.5">
-                  {SETTINGS_SUB.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => setCurrentView(`settings:${s.id}`)}
-                      className={`w-full flex items-center px-8 py-2 rounded text-sm transition-colors ${currentView === `settings:${s.id}`
-                          ? 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-accent-foreground))] font-medium'
-                          : 'text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))] opacity-80 hover:opacity-100'
-                        }`}
-                    >
-                      <s.icon className="w-4 h-4 mr-3 opacity-70" />
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div key={group} className="mb-3">
+              <p className="px-5 mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[hsl(var(--sidebar-foreground))]/35 select-none">
+                {GROUP_LABELS[group]}
+              </p>
+              {items.map((item) => {
+                const isActive = currentView === item.id;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => setCurrentView(item.id)}
+                    className={`w-full flex items-center gap-3 px-4 mx-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+                      isActive
+                        ? 'bg-[hsl(var(--sidebar-primary))] text-white shadow-sm shadow-[hsl(var(--primary))]/20'
+                        : 'text-[hsl(var(--sidebar-foreground))]/70 hover:text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))]'
+                    }`}
+                    style={{ width: 'calc(100% - 8px)' }}
+                  >
+                    <item.icon className={`h-4 w-4 shrink-0 ${isActive ? 'opacity-100' : 'opacity-60'}`} />
+                    {item.label}
+                    {isActive && (
+                      <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[hsl(var(--accent))]" />
+                    )}
+                  </button>
+                );
+              })}
             </div>
           );
         })}
+
+        {/* Settings */}
+        {showSettings && (
+          <div className="mb-3">
+            <p className="px-5 mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[hsl(var(--sidebar-foreground))]/35 select-none">
+              Sistema
+            </p>
+            <button
+              onClick={() => {
+                setSettingsOpen((s) => !s);
+                setCurrentView('settings');
+              }}
+              className={`w-full flex items-center gap-3 px-4 mx-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 ${
+                settingsActive
+                  ? 'bg-[hsl(var(--sidebar-primary))] text-white shadow-sm shadow-[hsl(var(--primary))]/20'
+                  : 'text-[hsl(var(--sidebar-foreground))]/70 hover:text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))]'
+              }`}
+              style={{ width: 'calc(100% - 8px)' }}
+            >
+              <Settings className={`h-4 w-4 shrink-0 ${settingsActive ? 'opacity-100' : 'opacity-60'}`} />
+              <span className="flex-1 text-left">Configuracoes</span>
+              <ChevronDown
+                className={`h-3.5 w-3.5 shrink-0 opacity-60 transition-transform duration-200 ${settingsOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            {settingsOpen && visibleSettings.length > 0 && (
+              <div className="mt-1 ml-3 pl-4 border-l border-[hsl(var(--sidebar-border))] space-y-0.5">
+                {visibleSettings.map((s) => {
+                  const isActive = currentView === `settings:${s.id}`;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => setCurrentView(`settings:${s.id}`)}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                        isActive
+                          ? 'bg-[hsl(var(--sidebar-accent))] text-[hsl(var(--sidebar-accent-foreground))]'
+                          : 'text-[hsl(var(--sidebar-foreground))]/60 hover:text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))]'
+                      }`}
+                    >
+                      <s.icon className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </nav>
 
-      <div className="p-4 border-t border-[hsl(var(--sidebar-border))]">
-        <div className="flex items-center mb-4 px-2">
-          <div className="w-2 h-2 rounded-full bg-[hsl(var(--accent))] mr-2"></div>
-          <span className="text-xs text-[hsl(var(--sidebar-foreground))] uppercase tracking-wider">
-            {labelRolePt(normalizeRole(role))}
+      {/* Footer: role badge + logout */}
+      <div className="px-4 pb-4 pt-3 border-t border-[hsl(var(--sidebar-border))]">
+        <div className="flex items-center justify-between mb-3">
+          <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full border uppercase tracking-widest ${badgeClass}`}>
+            {roleLabel}
           </span>
+          <div className="flex items-center gap-1">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[10px] text-[hsl(var(--sidebar-foreground))]/40">online</span>
+          </div>
         </div>
         <button
           onClick={onLogout}
-          className="w-full flex items-center px-2 py-2 text-sm text-red-400 hover:bg-[hsl(var(--sidebar-accent))] rounded-md transition-colors"
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs text-red-400/80 hover:text-red-400 hover:bg-red-500/10 transition-all"
         >
-          <LogOut className="w-4 h-4 mr-3" />
-          Sair
+          <LogOut className="h-3.5 w-3.5" />
+          Sair da conta
         </button>
       </div>
     </div>
