@@ -596,31 +596,59 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
     return <Activity className="h-4 w-4 text-emerald-300 mt-0.5" />;
   };
 
+  // Accent color strip per KPI index
+  const kpiAccents = [
+    'from-[hsl(var(--primary))] to-[hsl(220_80%_65%)]',
+    'from-[hsl(var(--accent))] to-[hsl(160_70%_55%)]',
+    'from-purple-500 to-violet-400',
+    'from-emerald-500 to-teal-400',
+  ];
+
+  const SectionHeader = ({ title, sub, badge }: { title: string; sub?: string; badge?: React.ReactNode }) => (
+    <div className=”flex items-center justify-between gap-3 mb-5”>
+      <div className=”flex items-center gap-3”>
+        <div className=”w-0.5 h-5 rounded-full bg-gradient-to-b from-[hsl(var(--primary))] to-[hsl(var(--accent))]” />
+        <div>
+          <h3 className=”text-[15px] font-bold tracking-tight text-[hsl(var(--foreground))]”>{title}</h3>
+          {sub && <p className=”text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5”>{sub}</p>}
+        </div>
+      </div>
+      {badge}
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
+    <div className=”space-y-5 pb-4”>
+      {/* ── Header ── */}
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35 }}
-        className="flex items-start justify-between gap-4"
+        transition={{ duration: 0.3 }}
+        className=”flex items-center justify-between gap-4”
       >
         <div>
-          <h2 className="text-3xl font-extrabold text-[hsl(var(--foreground))]">Dashboard</h2>
-          <p className="text-sm text-[hsl(var(--muted-foreground))] mt-1">
-            {companyName ? `Visão geral de ${companyName}` : 'Visão geral das suas métricas'}
+          <h2 className=”text-2xl font-extrabold tracking-tight text-[hsl(var(--foreground))]”>
+            {companyName ?? 'Dashboard'}
+          </h2>
+          <p className=”text-xs text-[hsl(var(--muted-foreground))] mt-0.5”>
+            {companyName ? 'Visão geral · tráfego & CRM' : 'Visão geral das suas métricas'}
           </p>
-          {errorMsg && <p className="text-sm text-red-400 mt-2">{errorMsg}</p>}
+          {errorMsg && (
+            <p className=”text-xs text-red-400 mt-1.5 flex items-center gap-1”>
+              <AlertTriangle className=”h-3 w-3 shrink-0” /> {errorMsg}
+            </p>
+          )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className=”flex items-center gap-1.5 p-1 rounded-xl bg-[hsl(var(--secondary))] border border-[hsl(var(--border))]”>
           {(['24h', '7d', '30d'] as Period[]).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all duration-200 ${
                 period === p
-                  ? 'bg-[hsl(var(--primary))] text-white border-[hsl(var(--primary))]'
-                  : 'bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))]'
+                  ? 'bg-[hsl(var(--primary))] text-white shadow-sm shadow-[hsl(var(--primary))]/30'
+                  : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
               }`}
             >
               {PERIOD_LABEL[p]}
@@ -630,42 +658,40 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
       </motion.div>
 
       {!backendReady && (
-        <div className="cr8-card p-6">
-          <p className="text-sm text-[hsl(var(--muted-foreground))]">
-            Configure `VITE_SUPABASE_URL` e `VITE_SUPABASE_ANON_KEY` para ver dados reais.
+        <div className=”cr8-card p-4 border-dashed”>
+          <p className=”text-xs text-[hsl(var(--muted-foreground))]”>
+            Configure <code className=”text-[hsl(var(--primary))]”>VITE_SUPABASE_URL</code> e{' '}
+            <code className=”text-[hsl(var(--primary))]”>VITE_SUPABASE_ANON_KEY</code> para ver dados reais.
           </p>
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* ── KPI Cards ── */}
+      <div className=”grid gap-3 sm:grid-cols-2 xl:grid-cols-4”>
         {[
           {
-            title: `Gasto (${PERIOD_LABEL[period]})`,
-            value: loading ? '...' : formatCurrency(spend, companyCurrency),
+            title: 'Gasto',
+            value: loading ? null : formatCurrency(spend, companyCurrency),
             change: spendChange,
-            icon: <DollarSign className="h-5 w-5 text-white" />,
-            iconBg: 'bg-[hsl(var(--primary))]',
+            icon: <DollarSign className=”h-4 w-4” />,
           },
           {
-            title: `Leads (${PERIOD_LABEL[period]})`,
-            value: loading ? '...' : formatNumber(totalLeads),
+            title: 'Leads',
+            value: loading ? null : formatNumber(totalLeads),
             change: totalLeadsChange,
-            icon: <Users className="h-5 w-5 text-white" />,
-            iconBg: 'bg-[hsl(var(--accent))]',
+            icon: <Users className=”h-4 w-4” />,
           },
           {
-            title: `CPL médio (${PERIOD_LABEL[period]})`,
-            value: loading ? '...' : formatCurrency(cpl, companyCurrency),
+            title: 'CPL médio',
+            value: loading ? null : formatCurrency(cpl, companyCurrency),
             change: null,
-            icon: <Activity className="h-5 w-5 text-white" />,
-            iconBg: 'bg-purple-600',
+            icon: <Activity className=”h-4 w-4” />,
           },
           {
-            title: `Vendas (won) (${PERIOD_LABEL[period]})`,
-            value: loading ? '...' : formatNumber(wonLeads),
+            title: 'Vendas (won)',
+            value: loading ? null : formatNumber(wonLeads),
             change: wonLeadsChange,
-            icon: <Megaphone className="h-5 w-5 text-white" />,
-            iconBg: 'bg-emerald-600',
+            icon: <Megaphone className=”h-4 w-4” />,
           },
         ].map((kpi, index) => {
           const isPositive = (kpi.change ?? 0) >= 0;
@@ -673,106 +699,127 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
           return (
             <motion.div
               key={kpi.title}
-              initial={{ opacity: 0, y: 16 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: index * 0.06 }}
-              whileHover={{ scale: 1.03, transition: { duration: 0.2 } }}
-              layout
-              className="cr8-card p-5 relative overflow-hidden"
+              transition={{ duration: 0.3, delay: index * 0.05 }}
+              className=”cr8-card p-4 relative overflow-hidden group cursor-default”
             >
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">{kpi.title}</p>
-                  <p className="text-3xl font-extrabold mt-2 text-[hsl(var(--foreground))]">{kpi.value}</p>
-                </div>
-                <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${kpi.iconBg}`}>{kpi.icon}</div>
+              {/* top accent line */}
+              <div className={`absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r ${kpiAccents[index]} opacity-80`} />
+
+              <div className=”flex items-start justify-between gap-2 mb-3”>
+                <span className=”text-[11px] font-semibold uppercase tracking-widest text-[hsl(var(--muted-foreground))]”>
+                  {kpi.title}
+                </span>
+                <span className={`p-1.5 rounded-md bg-gradient-to-br ${kpiAccents[index]} bg-opacity-10 text-white`}>
+                  {kpi.icon}
+                </span>
               </div>
 
-              <div className="mt-2 text-sm flex items-center gap-1 text-[hsl(var(--muted-foreground))]">
+              {kpi.value == null ? (
+                <div className=”h-8 w-24 rounded-md animate-shimmer” />
+              ) : (
+                <p className=”text-[26px] font-extrabold tracking-tight text-[hsl(var(--foreground))] leading-none”>
+                  {kpi.value}
+                </p>
+              )}
+
+              <div className=”mt-2.5 flex items-center gap-1.5”>
                 {showChange ? (
                   <span
-                    className={`inline-flex items-center gap-1 font-semibold ${
-                      isPositive ? 'text-emerald-400' : 'text-red-400'
+                    className={`inline-flex items-center gap-0.5 text-[11px] font-bold px-1.5 py-0.5 rounded-md ${
+                      isPositive
+                        ? 'bg-emerald-500/15 text-emerald-400'
+                        : 'bg-red-500/15 text-red-400'
                     }`}
                   >
-                    {isPositive ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}
+                    {isPositive ? <ArrowUpRight className=”h-3 w-3” /> : <ArrowDownRight className=”h-3 w-3” />}
                     {formatPct(kpi.change)}
                   </span>
-                ) : (
-                  <span>&nbsp;</span>
+                ) : null}
+                {showChange && (
+                  <span className=”text-[11px] text-[hsl(var(--muted-foreground))]”>vs anterior</span>
                 )}
-                {showChange && <span>vs período anterior</span>}
+                {!showChange && kpi.change == null && (
+                  <span className=”text-[11px] text-[hsl(var(--muted-foreground))]”>período: {PERIOD_LABEL[period]}</span>
+                )}
               </div>
-
-              <div className={`absolute bottom-0 left-0 right-0 h-1 ${kpi.iconBg} opacity-70`} />
             </motion.div>
           );
         })}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      {/* ── Chart + Top Campaigns ── */}
+      <div className=”grid gap-4 lg:grid-cols-3”>
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.15 }}
-          whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
-          layout
-          className="cr8-card p-5 lg:col-span-2"
+          transition={{ duration: 0.4, delay: 0.12 }}
+          className=”cr8-card p-5 lg:col-span-2”
         >
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-[hsl(var(--foreground))]">Gasto vs Leads</h3>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Período: {PERIOD_LABEL[period]}</p>
-            </div>
-            {metaAdAccountId && (
-              <span className="text-xs text-[hsl(var(--muted-foreground))]">Conta: {metaAdAccountId}</span>
-            )}
-          </div>
+          <SectionHeader
+            title=”Gasto vs Leads”
+            sub={`Período: ${PERIOD_LABEL[period]}${metaAdAccountId ? ` · ${metaAdAccountId}` : ''}`}
+          />
 
           {loading ? (
-            <div className="h-[320px] w-full rounded-lg animate-pulse bg-[hsl(var(--muted))]" />
+            <div className=”h-[280px] w-full rounded-lg animate-shimmer” />
           ) : !hasSeriesData ? (
-            <div className="h-[320px] flex items-center justify-center text-sm text-[hsl(var(--muted-foreground))]">
-              Sem dados para o período
+            <div className=”h-[280px] flex flex-col items-center justify-center gap-2 text-[hsl(var(--muted-foreground))]”>
+              <Activity className=”h-8 w-8 opacity-20” />
+              <span className=”text-sm”>Sem dados para o período</span>
             </div>
           ) : (
-            <div className="h-[320px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={series} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+            <div className=”h-[280px]”>
+              <ResponsiveContainer width=”100%” height=”100%”>
+                <LineChart data={series} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id=”spendGrad” x1=”0” y1=”0” x2=”1” y2=”0”>
+                      <stop offset=”0%” stopColor=”hsl(220 100% 52%)” />
+                      <stop offset=”100%” stopColor=”hsl(240 80% 65%)” />
+                    </linearGradient>
+                    <linearGradient id=”leadsGrad” x1=”0” y1=”0” x2=”1” y2=”0”>
+                      <stop offset=”0%” stopColor=”hsl(153 75% 43%)” />
+                      <stop offset=”100%” stopColor=”hsl(180 70% 50%)” />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray=”3 3” stroke=”hsl(var(--border))” vertical={false} opacity={0.5} />
                   <XAxis
-                    dataKey="label"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
+                    dataKey=”label”
+                    stroke=”hsl(var(--muted-foreground))”
+                    fontSize={11}
                     tickLine={false}
                     axisLine={false}
                   />
                   <YAxis
-                    yAxisId="left"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
+                    yAxisId=”left”
+                    stroke=”hsl(var(--muted-foreground))”
+                    fontSize={11}
                     tickLine={false}
                     axisLine={false}
                     tickFormatter={(v: any) => formatCurrency(Number(v) || 0, companyCurrency)}
+                    width={72}
                   />
                   <YAxis
-                    yAxisId="right"
-                    orientation="right"
-                    stroke="hsl(var(--muted-foreground))"
-                    fontSize={12}
+                    yAxisId=”right”
+                    orientation=”right”
+                    stroke=”hsl(var(--muted-foreground))”
+                    fontSize={11}
                     tickLine={false}
                     axisLine={false}
                     allowDecimals={false}
                     tickFormatter={(v: any) => formatNumber(Number(v) || 0)}
+                    width={36}
                   />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: 'hsl(var(--popover))',
                       border: '1px solid hsl(var(--border))',
                       borderRadius: '10px',
-                      boxShadow: '0 8px 20px rgba(0,0,0,0.45)',
+                      boxShadow: '0 12px 28px rgba(0,0,0,0.5)',
+                      fontSize: '12px',
                     }}
-                    labelStyle={{ color: 'hsl(var(--popover-foreground))' }}
+                    labelStyle={{ color: 'hsl(var(--popover-foreground))', fontWeight: 600 }}
                     formatter={(value: any, name: string) => {
                       const n = Number(value) || 0;
                       if (name === 'spend') return [formatCurrency(n, companyCurrency), 'Gasto'];
@@ -780,24 +827,32 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
                       return [n, name];
                     }}
                   />
-                  <Legend verticalAlign="top" height={24} formatter={(v: any) => (v === 'spend' ? 'Gasto' : 'Leads')} />
-                  <Line
-                    yAxisId="left"
-                    type="monotone"
-                    dataKey="spend"
-                    stroke="hsl(var(--primary))"
-                    strokeWidth={2}
-                    dot={false}
-                    activeDot={{ r: 4 }}
+                  <Legend
+                    verticalAlign=”top”
+                    height={28}
+                    formatter={(v: any) => (
+                      <span style={{ fontSize: '11px', color: 'hsl(var(--muted-foreground))' }}>
+                        {v === 'spend' ? 'Gasto' : 'Leads'}
+                      </span>
+                    )}
                   />
                   <Line
-                    yAxisId="right"
-                    type="monotone"
-                    dataKey="leads"
-                    stroke="hsl(var(--accent))"
-                    strokeWidth={2}
+                    yAxisId=”left”
+                    type=”monotone”
+                    dataKey=”spend”
+                    stroke=”url(#spendGrad)”
+                    strokeWidth={2.5}
                     dot={false}
-                    activeDot={{ r: 4 }}
+                    activeDot={{ r: 5, strokeWidth: 0 }}
+                  />
+                  <Line
+                    yAxisId=”right”
+                    type=”monotone”
+                    dataKey=”leads”
+                    stroke=”url(#leadsGrad)”
+                    strokeWidth={2.5}
+                    dot={false}
+                    activeDot={{ r: 5, strokeWidth: 0 }}
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -806,53 +861,50 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
         </motion.div>
 
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.2 }}
-          whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
-          layout
-          className="cr8-card p-5"
+          transition={{ duration: 0.4, delay: 0.18 }}
+          className=”cr8-card p-5”
         >
-          <h3 className="text-lg font-bold text-[hsl(var(--foreground))] mb-4">Top campanhas (Meta)</h3>
+          <SectionHeader title=”Top Campanhas” sub=”Meta Ads” />
+
           {loading ? (
-            <div className="space-y-3">
+            <div className=”space-y-2.5”>
               {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-12 w-full rounded-lg animate-pulse bg-[hsl(var(--muted))]" />
+                <div key={i} className=”h-11 w-full rounded-lg animate-shimmer” />
               ))}
             </div>
           ) : topCampaigns.length === 0 ? (
-            <p className="text-sm text-[hsl(var(--muted-foreground))]">Sem campanhas com gasto no período.</p>
+            <div className=”flex flex-col items-center justify-center gap-2 py-10 text-[hsl(var(--muted-foreground))]”>
+              <Megaphone className=”h-6 w-6 opacity-20” />
+              <span className=”text-xs”>Sem campanhas com gasto</span>
+            </div>
           ) : (
             <motion.div
-              variants={{
-                visible: { transition: { staggerChildren: 0.05 } },
-              }}
-              initial="hidden"
-              animate="visible"
-              className="space-y-2"
+              variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
+              initial=”hidden”
+              animate=”visible”
+              className=”space-y-1.5”
             >
               {topCampaigns.map((c, idx) => (
                 <motion.div
                   key={c.id}
-                  variants={{
-                    hidden: { opacity: 0, x: -20 },
-                    visible: { opacity: 1, x: 0 },
-                  }}
-                  transition={{ duration: 0.3 }}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] transition-colors"
+                  variants={{ hidden: { opacity: 0, x: -12 }, visible: { opacity: 1, x: 0 } }}
+                  transition={{ duration: 0.25 }}
+                  className=”flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))] hover:border-[hsl(var(--primary))]/30 transition-colors group”
                 >
-                  <div className="h-8 w-8 rounded-lg bg-[hsl(var(--primary))]/20 text-[hsl(var(--primary))] flex items-center justify-center text-xs font-bold">
-                    #{idx + 1}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold truncate text-[hsl(var(--foreground))]">{c.name}</p>
-                    <p className="text-xs text-[hsl(var(--muted-foreground))] truncate">
-                      Resultados: {formatNumber(c.results)} • {c.objective || '—'}
+                  <span className=”text-[10px] font-black text-[hsl(var(--muted-foreground))] w-4 shrink-0 group-hover:text-[hsl(var(--primary))] transition-colors”>
+                    {idx + 1}
+                  </span>
+                  <div className=”flex-1 min-w-0”>
+                    <p className=”text-xs font-semibold truncate text-[hsl(var(--foreground))]”>{c.name}</p>
+                    <p className=”text-[10px] text-[hsl(var(--muted-foreground))] truncate mt-0.5”>
+                      {formatNumber(c.results)} resultados
                     </p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-sm font-bold text-[hsl(var(--foreground))]">{formatCurrency(c.spend, companyCurrency)}</p>
-                  </div>
+                  <p className=”text-xs font-bold text-[hsl(var(--foreground))] shrink-0”>
+                    {formatCurrency(c.spend, companyCurrency)}
+                  </p>
                 </motion.div>
               ))}
             </motion.div>
@@ -860,218 +912,234 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
         </motion.div>
       </div>
 
+      {/* ── Financeiro (agency only) ── */}
       {variant !== 'client' && (
         <motion.div
-          initial={{ opacity: 0, y: 20 }}
+          initial={{ opacity: 0, y: 18 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.22 }}
-          whileHover={{ scale: 1.01, transition: { duration: 0.2 } }}
-          layout
-          className="cr8-card p-5"
+          transition={{ duration: 0.4, delay: 0.2 }}
+          className=”cr8-card p-5”
         >
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <div>
-              <h3 className="text-lg font-bold text-[hsl(var(--foreground))]">Financeiro</h3>
-              <p className="text-xs text-[hsl(var(--muted-foreground))]">Saldo de mídia e fee (por empresa)</p>
-            </div>
-            <span className="text-xs text-[hsl(var(--muted-foreground))]">Moeda: {companyCurrency || 'BRL'}</span>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-4">
-              <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Saldo de mídia</div>
-              <div className="mt-2 text-2xl font-extrabold text-[hsl(var(--foreground))]">
-                {loading ? '...' : formatCurrency(companyMediaBalance, companyCurrency)}
-              </div>
-              <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">Defina em Configurações → Financeiro.</div>
-            </div>
-
-            <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-4">
-              <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Fee (estimado)</div>
-              <div className="mt-2 text-2xl font-extrabold text-[hsl(var(--foreground))]">
-                {loading ? '...' : feeEstimate ? formatCurrency(feeEstimate.total, companyCurrency) : '-'}
-              </div>
-              <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">
-                {companyFeePercent != null && Number.isFinite(companyFeePercent) ? `${companyFeePercent}%` : '—'}
-                {companyFeeFixed != null && Number.isFinite(companyFeeFixed) ? ` + ${formatCurrency(companyFeeFixed, companyCurrency)}` : ''}
-              </div>
-            </div>
-
-            <div className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] p-4">
-              <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))]">Saldo pós-gasto</div>
-              <div className="mt-2 text-2xl font-extrabold text-[hsl(var(--foreground))]">
-                {loading ? '...' : formatCurrency(mediaBalanceAfter, companyCurrency)}
-              </div>
-              <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">Saldo de mídia − gasto do período.</div>
-            </div>
-          </div>
-        </motion.div>
-      )}
-
-      {variant !== 'client' && (
-        <div className="grid gap-6 lg:grid-cols-2">
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.25 }}
-          whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
-          layout
-          className="cr8-card p-5"
-        >
-          <h3 className="text-lg font-bold text-[hsl(var(--foreground))] mb-4">Top canais</h3>
-          {loading ? (
-            <div className="space-y-3">
-              {[...Array(5)].map((_, i) => (
-                <div key={i} className="h-12 w-full rounded-lg animate-pulse bg-[hsl(var(--muted))]" />
-              ))}
-            </div>
-          ) : topChannels.length === 0 ? (
-            <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhum lead no período.</p>
-          ) : (
-            <motion.div
-              variants={{
-                visible: { transition: { staggerChildren: 0.05 } },
-              }}
-              initial="hidden"
-              animate="visible"
-              className="space-y-2"
-            >
-              {topChannels.map((c, idx) => {
-                const ui = sourceUi[c.source] ?? sourceUi.manual;
-                const total = topChannels.reduce((sum, it) => sum + it.count, 0) || 0;
-                const pct = total ? (c.count / total) * 100 : 0;
-                return (
-                  <motion.div
-                    key={c.source}
-                    variants={{
-                      hidden: { opacity: 0, x: -20 },
-                      visible: { opacity: 1, x: 0 },
-                    }}
-                    transition={{ duration: 0.3 }}
-                    className="flex items-center gap-3 p-3 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))]"
-                  >
-                    <div className="h-8 w-8 rounded-lg bg-[hsl(var(--primary))]/20 text-[hsl(var(--primary))] flex items-center justify-center text-xs font-bold">
-                      #{idx + 1}
-                    </div>
-                    <div className={`h-9 w-9 rounded-full flex items-center justify-center ${ui.color}`}>{ui.icon}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold text-[hsl(var(--foreground))]">{ui.label}</p>
-                      <div className="w-full bg-[hsl(var(--muted))] rounded-full h-1.5 mt-1 overflow-hidden">
-                        <div className="bg-[hsl(var(--primary))] h-1.5" style={{ width: `${pct}%` }} />
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-[hsl(var(--foreground))]">{formatNumber(c.count)}</p>
-                      <p className="text-xs text-[hsl(var(--muted-foreground))]">{pct.toFixed(0)}%</p>
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </motion.div>
-          )}
-        </motion.div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.3 }}
-          whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
-          layout
-          className="cr8-card p-5"
-        >
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <h3 className="text-lg font-bold text-[hsl(var(--foreground))]">Últimos leads</h3>
-            <span className="text-xs text-[hsl(var(--muted-foreground))]">CRM & Vendas</span>
-          </div>
-
-          {loading ? (
-            <div className="space-y-3">
-              {[...Array(4)].map((_, i) => (
-                <div key={i} className="h-12 w-full rounded-lg animate-pulse bg-[hsl(var(--muted))]" />
-              ))}
-            </div>
-          ) : recentLeads.length === 0 ? (
-            <p className="text-sm text-[hsl(var(--muted-foreground))]">Nenhum lead ainda.</p>
-          ) : (
-            <motion.div
-              variants={{
-                visible: { transition: { staggerChildren: 0.05 } },
-              }}
-              initial="hidden"
-              animate="visible"
-              className="space-y-2"
-            >
-              {recentLeads.map((l) => {
-                const src = normalizeLeadSource(l.source);
-                const ui = sourceUi[src] ?? sourceUi.manual;
-                return (
-                  <motion.div
-                    key={l.id}
-                    variants={{
-                      hidden: { opacity: 0, x: -20 },
-                      visible: { opacity: 1, x: 0 },
-                    }}
-                    transition={{ duration: 0.3 }}
-                    className="flex items-center gap-3 p-3 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))] hover:bg-[hsl(var(--muted))] transition-colors"
-                  >
-                    <div className={`h-9 w-9 rounded-full flex items-center justify-center ${ui.color}`}>{ui.icon}</div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold truncate text-[hsl(var(--foreground))]">{l.name || '(sem nome)'}</p>
-                      <p className="text-xs text-[hsl(var(--muted-foreground))] truncate">{ui.label}</p>
-                    </div>
-                    <div className="text-xs text-[hsl(var(--muted-foreground))] whitespace-nowrap">{timeAgoPt(l.created_at)}</div>
-                  </motion.div>
-                );
-              })}
-            </motion.div>
-          )}
-        </motion.div>
-      </div>
-      )}
-
-      {variant !== 'client' && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, delay: 0.35 }}
-          whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
-          layout
-          className="cr8-card p-5"
-        >
-          <div className="flex items-center justify-between gap-3 mb-4">
-            <h3 className="text-lg font-bold text-[hsl(var(--foreground))]">Alertas</h3>
-            {alertCounts.total > 0 && (
-              <span className="h-6 min-w-6 px-2 rounded-full bg-red-500/20 text-red-200 text-xs flex items-center justify-center font-bold">
-                {alertCounts.total}
+          <SectionHeader
+            title=”Financeiro”
+            sub=”Saldo de mídia e fee por empresa”
+            badge={
+              <span className=”text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))] border border-[hsl(var(--border))]”>
+                {companyCurrency || 'BRL'}
               </span>
-            )}
+            }
+          />
+
+          <div className=”grid gap-3 md:grid-cols-3”>
+            {[
+              {
+                label: 'Saldo de mídia',
+                value: loading ? null : formatCurrency(companyMediaBalance, companyCurrency),
+                hint: 'Defina em Configurações → Financeiro',
+                color: 'from-[hsl(var(--primary))]/10 to-transparent',
+              },
+              {
+                label: 'Fee estimado',
+                value: loading ? null : feeEstimate ? formatCurrency(feeEstimate.total, companyCurrency) : '-',
+                hint: `${companyFeePercent != null && Number.isFinite(companyFeePercent) ? `${companyFeePercent}%` : '—'}${companyFeeFixed != null && Number.isFinite(companyFeeFixed) ? ` + ${formatCurrency(companyFeeFixed, companyCurrency)}` : ''}`,
+                color: 'from-purple-500/10 to-transparent',
+              },
+              {
+                label: 'Saldo pós-gasto',
+                value: loading ? null : formatCurrency(mediaBalanceAfter, companyCurrency),
+                hint: 'Saldo de mídia − gasto do período',
+                color: 'from-emerald-500/10 to-transparent',
+              },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className={`rounded-xl border border-[hsl(var(--border))] bg-gradient-to-br ${item.color} bg-[hsl(var(--secondary))] p-4`}
+              >
+                <p className=”text-[10px] font-semibold uppercase tracking-widest text-[hsl(var(--muted-foreground))]”>
+                  {item.label}
+                </p>
+                {item.value == null ? (
+                  <div className=”h-7 w-28 rounded-md animate-shimmer mt-2” />
+                ) : (
+                  <p className=”text-xl font-extrabold text-[hsl(var(--foreground))] mt-1.5 tracking-tight”>
+                    {item.value}
+                  </p>
+                )}
+                <p className=”text-[10px] text-[hsl(var(--muted-foreground))] mt-1”>{item.hint}</p>
+              </div>
+            ))}
           </div>
+        </motion.div>
+      )}
+
+      {/* ── Top Canais + Últimos Leads ── */}
+      {variant !== 'client' && (
+        <div className=”grid gap-4 lg:grid-cols-2”>
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.22 }}
+            className=”cr8-card p-5”
+          >
+            <SectionHeader title=”Top Canais” sub={`Leads no período · ${PERIOD_LABEL[period]}`} />
+
+            {loading ? (
+              <div className=”space-y-2.5”>
+                {[...Array(5)].map((_, i) => (
+                  <div key={i} className=”h-10 w-full rounded-lg animate-shimmer” />
+                ))}
+              </div>
+            ) : topChannels.length === 0 ? (
+              <p className=”text-sm text-[hsl(var(--muted-foreground))] py-6 text-center”>Nenhum lead no período.</p>
+            ) : (
+              <motion.div
+                variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
+                initial=”hidden”
+                animate=”visible”
+                className=”space-y-1.5”
+              >
+                {topChannels.map((c, idx) => {
+                  const ui = sourceUi[c.source] ?? sourceUi.manual;
+                  const total = topChannels.reduce((sum, it) => sum + it.count, 0) || 0;
+                  const pct = total ? (c.count / total) * 100 : 0;
+                  return (
+                    <motion.div
+                      key={c.source}
+                      variants={{ hidden: { opacity: 0, x: -12 }, visible: { opacity: 1, x: 0 } }}
+                      transition={{ duration: 0.25 }}
+                      className=”flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))]”
+                    >
+                      <span className=”text-[10px] font-black text-[hsl(var(--muted-foreground))] w-3 shrink-0”>
+                        {idx + 1}
+                      </span>
+                      <div className={`h-7 w-7 rounded-lg flex items-center justify-center text-xs shrink-0 ${ui.color}`}>
+                        {ui.icon}
+                      </div>
+                      <div className=”flex-1 min-w-0”>
+                        <p className=”text-xs font-semibold text-[hsl(var(--foreground))]”>{ui.label}</p>
+                        <div className=”w-full bg-[hsl(var(--muted))] rounded-full h-1 mt-1 overflow-hidden”>
+                          <motion.div
+                            initial={{ width: 0 }}
+                            animate={{ width: `${pct}%` }}
+                            transition={{ duration: 0.6, delay: idx * 0.05 }}
+                            className=”bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--accent))] h-1”
+                          />
+                        </div>
+                      </div>
+                      <div className=”text-right shrink-0”>
+                        <p className=”text-xs font-bold text-[hsl(var(--foreground))]”>{formatNumber(c.count)}</p>
+                        <p className=”text-[10px] text-[hsl(var(--muted-foreground))]”>{pct.toFixed(0)}%</p>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </motion.div>
+            )}
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, delay: 0.26 }}
+            className=”cr8-card p-5”
+          >
+            <SectionHeader
+              title=”Últimos Leads”
+              badge={<span className=”text-[10px] text-[hsl(var(--muted-foreground))]”>CRM & Vendas</span>}
+            />
+
+            {loading ? (
+              <div className=”space-y-2.5”>
+                {[...Array(4)].map((_, i) => (
+                  <div key={i} className=”h-10 w-full rounded-lg animate-shimmer” />
+                ))}
+              </div>
+            ) : recentLeads.length === 0 ? (
+              <p className=”text-sm text-[hsl(var(--muted-foreground))] py-6 text-center”>Nenhum lead ainda.</p>
+            ) : (
+              <motion.div
+                variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
+                initial=”hidden”
+                animate=”visible”
+                className=”space-y-1.5”
+              >
+                {recentLeads.map((l) => {
+                  const src = normalizeLeadSource(l.source);
+                  const ui = sourceUi[src] ?? sourceUi.manual;
+                  return (
+                    <motion.div
+                      key={l.id}
+                      variants={{ hidden: { opacity: 0, x: -12 }, visible: { opacity: 1, x: 0 } }}
+                      transition={{ duration: 0.25 }}
+                      className=”flex items-center gap-3 px-3 py-2.5 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))] hover:border-[hsl(var(--primary))]/30 transition-colors group”
+                    >
+                      <div className={`h-7 w-7 rounded-lg flex items-center justify-center text-xs shrink-0 ${ui.color}`}>
+                        {ui.icon}
+                      </div>
+                      <div className=”flex-1 min-w-0”>
+                        <p className=”text-xs font-semibold truncate text-[hsl(var(--foreground))]”>
+                          {l.name || '(sem nome)'}
+                        </p>
+                        <p className=”text-[10px] text-[hsl(var(--muted-foreground))] truncate”>{ui.label}</p>
+                      </div>
+                      <span className=”text-[10px] text-[hsl(var(--muted-foreground))] whitespace-nowrap”>
+                        {timeAgoPt(l.created_at)}
+                      </span>
+                    </motion.div>
+                  );
+                })}
+              </motion.div>
+            )}
+          </motion.div>
+        </div>
+      )}
+
+      {/* ── Alertas ── */}
+      {variant !== 'client' && (
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.4, delay: 0.3 }}
+          className=”cr8-card p-5”
+        >
+          <SectionHeader
+            title=”Alertas”
+            badge={
+              alertCounts.total > 0 ? (
+                <span className=”h-5 min-w-5 px-1.5 rounded-full bg-red-500/20 text-red-300 text-[10px] font-bold flex items-center justify-center border border-red-500/20”>
+                  {alertCounts.total}
+                </span>
+              ) : undefined
+            }
+          />
 
           {loading ? (
-            <div className="space-y-3">
+            <div className=”space-y-2.5”>
               {[...Array(3)].map((_, i) => (
-                <div key={i} className="h-14 w-full rounded-lg animate-pulse bg-[hsl(var(--muted))]" />
+                <div key={i} className=”h-12 w-full rounded-lg animate-shimmer” />
               ))}
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className=”space-y-1.5”>
               {alerts.map((a) => (
                 <div
                   key={a.id}
-                  className={`flex items-start gap-3 p-3 rounded-lg border ${
+                  className={`flex items-start gap-3 px-3 py-2.5 rounded-lg border ${
                     a.type === 'error'
-                      ? 'bg-red-500/10 border-red-500/20'
+                      ? 'bg-red-500/8 border-red-500/25'
                       : a.type === 'warning'
-                        ? 'bg-yellow-500/10 border-yellow-500/20'
+                        ? 'bg-yellow-500/8 border-yellow-500/25'
                         : a.type === 'info'
-                          ? 'bg-blue-500/10 border-blue-500/20'
-                          : 'bg-emerald-500/10 border-emerald-500/20'
+                          ? 'bg-blue-500/8 border-blue-500/25'
+                          : 'bg-emerald-500/8 border-emerald-500/25'
                   }`}
                 >
-                  <AlertIcon type={a.type} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-[hsl(var(--foreground))]">{a.title}</p>
-                    <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{a.description}</p>
+                  <span className=”mt-0.5 shrink-0”>
+                    <AlertIcon type={a.type} />
+                  </span>
+                  <div className=”flex-1 min-w-0”>
+                    <p className=”text-xs font-semibold text-[hsl(var(--foreground))]”>{a.title}</p>
+                    <p className=”text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5”>{a.description}</p>
                   </div>
                 </div>
               ))}
@@ -1080,14 +1148,14 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
         </motion.div>
       )}
 
-      <div className="cr8-card p-4 text-xs text-[hsl(var(--muted-foreground))]">
-        <div>CPL = Gasto / Leads do período. “Resultados” (Meta) considera Leads + Conversas como lead.</div>
-        <div className="mt-1">
-          Receita (won): <span className="text-[hsl(var(--foreground))] font-semibold">{formatCurrency(revenue, companyCurrency)}</span>
-          {revenueChange != null && Number.isFinite(revenueChange) ? (
-            <span className="ml-2">({formatPct(revenueChange)} vs período anterior)</span>
-          ) : null}
-        </div>
+      {/* ── Footer note ── */}
+      <div className=”px-1 flex items-center justify-between gap-4 text-[10px] text-[hsl(var(--muted-foreground))]”>
+        <span>CPL = Gasto ÷ Leads · “Resultados” Meta considera leads + conversas</span>
+        <span>
+          Receita (won):{' '}
+          <span className=”text-[hsl(var(--foreground))] font-semibold”>{formatCurrency(revenue, companyCurrency)}</span>
+          {revenueChange != null && Number.isFinite(revenueChange) ? ` (${formatPct(revenueChange)} vs anterior)` : ''}
+        </span>
       </div>
     </div>
   );
