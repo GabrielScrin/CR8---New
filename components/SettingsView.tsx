@@ -1983,8 +1983,8 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
             ) : (
               <div className="space-y-3">
                 {weeklyReports.map((r) => {
-                  const created = Number(r?.metrics?.leads?.created ?? 0) || 0;
-                  const won = Number(r?.metrics?.leads?.won ?? 0) || 0;
+                  const created = Number(r?.metrics?.business?.crm_leads ?? r?.metrics?.business?.crmLeads ?? r?.metrics?.leads?.created ?? 0) || 0;
+                  const won = Number(r?.metrics?.business?.won ?? r?.metrics?.leads?.won ?? 0) || 0;
                   const inbound = Number(r?.metrics?.messages?.inbound ?? 0) || 0;
                   const outbound = Number(r?.metrics?.messages?.outbound ?? 0) || 0;
 

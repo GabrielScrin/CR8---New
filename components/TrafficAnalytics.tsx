@@ -69,6 +69,40 @@ type CreativeAnalysisRow = {
   created_at: string;
 };
 
+type PlatformBuckets = {
+  messagesStarted: number;
+  leadForms: number;
+  siteLeads: number;
+  businessLeads: number;
+  profileVisits: number;
+  followers: number;
+  videoViews: number;
+  thruplays: number;
+  purchases: number;
+};
+
+type ReportMediaSummary = {
+  invest: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  linkClicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  frequency: number;
+};
+
+type ReportPlatformSummary = PlatformBuckets;
+
+type ReportBusinessSummary = {
+  crmLeads: number;
+  won: number;
+  revenue: number;
+  pendingFollowup: number;
+  leadSignals: number;
+};
+
 const DEFAULT_PRESET_ID = '__default__';
 const DEFAULT_PRESET_NAME = 'Padrão';
 
@@ -164,9 +198,11 @@ const svgAvatarDataUrl = (text: string, fg = '#111827', bg = '#E5E7EB') => {
   return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 };
 
+const normalizeActionType = (actionType: unknown) => String(actionType ?? '').trim().toLowerCase();
+
 const extractActionSum = (actions: any[] | undefined, matcher: (actionType: string) => boolean) => {
   if (!Array.isArray(actions)) return undefined;
-  const matches = actions.filter((a) => typeof a?.action_type === 'string' && matcher(a.action_type));
+  const matches = actions.filter((a) => matcher(normalizeActionType(a?.action_type)));
   if (matches.length === 0) return undefined;
   return matches.reduce((sum, a) => sum + parseNumber(a.value), 0);
 };
@@ -176,14 +212,29 @@ const extractActionTotal = (actions: any[] | undefined) => {
   return actions.reduce((sum, a) => sum + parseNumber(a?.value), 0);
 };
 
-const extractLeadsFromActions = (actions: any[] | undefined) =>
-  extractActionSum(actions, (t) => t.includes('lead') || t === 'onsite_conversion.lead_grouped' || t === 'omni_lead');
+const extractLeadFormsFromActions = (actions: any[] | undefined) =>
+  extractActionSum(
+    actions,
+    (t) =>
+      t === 'lead' ||
+      t === 'onsite_conversion.lead_grouped' ||
+      t.includes('lead_grouped') ||
+      t.includes('lead_form'),
+  );
 
-const extractContactsFromActions = (actions: any[] | undefined) =>
-  extractActionSum(actions, (t) => t === 'contact' || t === 'omni_contact');
-
-const extractCustomConversionsFromActions = (actions: any[] | undefined) =>
-  extractActionSum(actions, (t) => t.startsWith('offsite_conversion.custom') || t.startsWith('omni_custom') || t === 'omni_complete_registration');
+const extractSiteLeadsFromActions = (actions: any[] | undefined) =>
+  extractActionSum(
+    actions,
+    (t) =>
+      t === 'contact' ||
+      t === 'omni_contact' ||
+      t === 'omni_lead' ||
+      t === 'omni_complete_registration' ||
+      t.startsWith('offsite_conversion.custom') ||
+      t.startsWith('omni_custom') ||
+      t.includes('fb_pixel_lead') ||
+      (t.startsWith('offsite_conversion.') && t.includes('lead')),
+  );
 
 const extractPurchasesFromActions = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t === 'purchase' || t.endsWith('.purchase') || t.includes('purchase'));
@@ -218,22 +269,42 @@ const extractVideo15sFromActions = (actions: any[] | undefined) =>
 
 const normalizeObjective = (objective: unknown) => String(objective ?? '').trim().toUpperCase();
 
-const resolvePrimaryResult = (row: any, computed: { leads?: number; purchases?: number; conversations?: number; linkClicks?: number; clicks?: number; video3s?: number }) => {
+const resolvePrimaryResult = (row: any, computed: {
+  leadForms?: number;
+  siteLeads?: number;
+  messagesStarted?: number;
+  purchases?: number;
+  profileVisits?: number;
+  followers?: number;
+  linkClicks?: number;
+  clicks?: number;
+  video3s?: number;
+  thruplays?: number;
+}) => {
   const objective = normalizeObjective(row?.objective ?? row?.campaign_objective ?? row?.objective_name ?? row?.campaign?.objective);
 
   const pick = (value: number | undefined, label: string) => ({ value: typeof value === 'number' ? value : undefined, label });
 
-  if (objective.includes('LEAD')) return pick(computed.leads, 'Leads');
-  if (objective.includes('MESSAGE')) return pick(computed.conversations, 'Leads');
-  if (objective.includes('VIDEO')) return pick(computed.video3s, 'Views 3s');
-  if (objective.includes('TRAFFIC')) return pick(computed.linkClicks ?? computed.clicks, 'Cliques no link');
-  if (objective.includes('CONVERS') || objective.includes('SALE') || objective.includes('PURCHASE')) return pick(computed.purchases, 'Compras');
+  if (objective.includes('LEAD')) return pick(computed.leadForms ?? computed.siteLeads ?? computed.messagesStarted, 'Leads');
+  if (objective.includes('MESSAGE')) return pick(computed.messagesStarted, 'Mensagens iniciadas');
+  if (objective.includes('VIDEO')) return pick(computed.thruplays ?? computed.video3s, computed.thruplays ? 'ThruPlays' : 'Views 3s');
+  if (objective.includes('TRAFFIC')) return pick(computed.profileVisits ?? computed.linkClicks ?? computed.clicks, computed.profileVisits ? 'Visitas ao perfil' : 'Cliques no link');
+  if (objective.includes('ENGAGEMENT') || objective.includes('AWARENESS')) {
+    return pick(computed.followers ?? computed.profileVisits ?? computed.video3s, computed.followers ? 'Seguidores' : computed.profileVisits ? 'Visitas ao perfil' : 'Views 3s');
+  }
+  if (objective.includes('CONVERS') || objective.includes('SALE') || objective.includes('PURCHASE')) {
+    return pick(computed.purchases ?? computed.siteLeads ?? computed.leadForms, computed.purchases ? 'Compras' : 'Conversões');
+  }
 
-  if ((computed.leads ?? 0) > 0) return pick(computed.leads, 'Leads');
   if ((computed.purchases ?? 0) > 0) return pick(computed.purchases, 'Compras');
-  if ((computed.conversations ?? 0) > 0) return pick(computed.conversations, 'Conversas');
+  if ((computed.messagesStarted ?? 0) > 0) return pick(computed.messagesStarted, 'Mensagens iniciadas');
+  if ((computed.siteLeads ?? 0) > 0) return pick(computed.siteLeads, 'Conversões');
+  if ((computed.leadForms ?? 0) > 0) return pick(computed.leadForms, 'Lead Forms');
+  if ((computed.followers ?? 0) > 0) return pick(computed.followers, 'Seguidores');
+  if ((computed.profileVisits ?? 0) > 0) return pick(computed.profileVisits, 'Visitas ao perfil');
   if ((computed.linkClicks ?? 0) > 0) return pick(computed.linkClicks, 'Cliques no link');
   if ((computed.clicks ?? 0) > 0) return pick(computed.clicks, 'Cliques');
+  if ((computed.thruplays ?? 0) > 0) return pick(computed.thruplays, 'ThruPlays');
   if ((computed.video3s ?? 0) > 0) return pick(computed.video3s, 'Views 3s');
   return pick(undefined, 'Resultados');
 };
@@ -241,6 +312,29 @@ const resolvePrimaryResult = (row: any, computed: { leads?: number; purchases?: 
 const extractRoas = (purchaseRoas: any[] | undefined) => {
   if (!Array.isArray(purchaseRoas) || purchaseRoas.length === 0) return undefined;
   return purchaseRoas.reduce((sum, r) => sum + parseNumber(r.value), 0);
+};
+
+const buildPlatformBuckets = (row: { actions?: any[]; video_thruplay_watched_actions?: any[] }): PlatformBuckets => {
+  const leadForms = extractLeadFormsFromActions(row.actions) ?? 0;
+  const messagesStarted = extractMessagingConversationsFromActions(row.actions) ?? 0;
+  const siteLeads = extractSiteLeadsFromActions(row.actions) ?? 0;
+  const profileVisits = extractProfileVisitsFromActions(row.actions) ?? 0;
+  const followers = extractFollowersFromActions(row.actions) ?? 0;
+  const videoViews = extractVideo3sFromActions(row.actions) ?? 0;
+  const thruplays = extractVideo15sFromActions(row.actions) ?? extractActionTotal(row.video_thruplay_watched_actions) ?? 0;
+  const purchases = extractPurchasesFromActions(row.actions) ?? 0;
+
+  return {
+    leadForms,
+    messagesStarted,
+    siteLeads,
+    businessLeads: leadForms + messagesStarted + siteLeads,
+    profileVisits,
+    followers,
+    videoViews,
+    thruplays,
+    purchases,
+  };
 };
 
 export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId }) => {
@@ -337,8 +431,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
   const fixedColumnsSuffix: TableColumn[] = useMemo(
     () => [
-      { key: 'leads', label: 'Leads', render: (r) => (r.leads ?? '-') },
-      { key: 'cpa', label: 'CPL', render: (r) => (r.cpa != null ? formatCurrency(r.cpa) : '-') },
+      { key: 'leads', label: 'Leads negocio', render: (r) => (r.leads ?? '-') },
+      { key: 'cpa', label: 'Custo/lead', render: (r) => (r.cpa != null ? formatCurrency(r.cpa) : '-') },
       { key: 'hookRate', label: 'Hook Rate', render: (r) => (r.hookRate != null ? formatPercent(r.hookRate, 0) : '-') },
       { key: 'holdRate', label: 'Hold Rate', render: (r) => (r.holdRate != null ? formatPercent(r.holdRate, 0) : '-') },
       {
@@ -504,6 +598,332 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       }
     }
     return out;
+  };
+
+  const buildInsightsFilters = () => {
+    const filters: any[] = [];
+    const campaignIds = selectedCampaignIds.length ? selectedCampaignIds : campaignFilterId ? [campaignFilterId] : [];
+    const adsetIds = selectedAdsetIds.length ? selectedAdsetIds : adsetFilterId ? [adsetFilterId] : [];
+
+    if (selectedLevel === 'ad' && adsetIds.length) {
+      filters.push({ field: 'adset.id', operator: 'IN', value: adsetIds });
+    }
+    if (selectedLevel !== 'campaign' && campaignIds.length) {
+      filters.push({ field: 'campaign.id', operator: 'IN', value: campaignIds });
+    }
+
+    return filters;
+  };
+
+  const applyTimeRange = (url: URL, override?: { start?: string; end?: string }) => {
+    const start = override?.start;
+    const end = override?.end;
+    if (start && end) {
+      url.searchParams.set('time_range', JSON.stringify({ since: start, until: end }));
+      return;
+    }
+
+    if (datePreset === 'custom' && dateSince && dateUntil) {
+      url.searchParams.set('time_range', JSON.stringify({ since: dateSince, until: dateUntil }));
+    } else {
+      url.searchParams.set('date_preset', datePreset === 'custom' ? 'last_7d' : datePreset);
+    }
+  };
+
+  const fetchMetaCollection = async (startUrl: string, pageLimit = 20) => {
+    const rows: any[] = [];
+    let nextUrl: string | null = startUrl;
+
+    for (let page = 0; page < pageLimit && nextUrl; page += 1) {
+      const res: Response = await fetch(nextUrl);
+      const json: any = await res.json();
+      if (!res.ok || json?.error) {
+        const err: any = new Error(json?.error?.message || `Erro ao buscar insights (${res.status})`);
+        err.metaError = json?.error;
+        throw err;
+      }
+
+      if (Array.isArray(json?.data)) rows.push(...json.data);
+      nextUrl = typeof json?.paging?.next === 'string' ? json.paging.next : null;
+    }
+
+    return rows;
+  };
+
+  const mapInsightRowsToMetrics = async (
+    providerToken: string,
+    adAccountId: string,
+    adAccountName: string | null,
+    insightRows: any[],
+  ): Promise<AdMetric[]> => {
+    const entityIds = insightRows
+      .map((row) => (selectedLevel === 'campaign' ? row.campaign_id : selectedLevel === 'adset' ? row.adset_id : row.ad_id))
+      .filter(Boolean)
+      .map((v) => String(v));
+
+    const effectiveStatuses = await fetchEffectiveStatusesByIds(providerToken, entityIds);
+
+    const mapped: AdMetric[] = insightRows.map((row: any) => {
+      const entityId = selectedLevel === 'campaign' ? row.campaign_id : selectedLevel === 'adset' ? row.adset_id : row.ad_id;
+      const entityName =
+        selectedLevel === 'campaign' ? row.campaign_name : selectedLevel === 'adset' ? row.adset_name : row.ad_name;
+
+      const impressions = Math.floor(parseNumber(row.impressions));
+      const spend = parseNumber(row.spend);
+      const buckets = buildPlatformBuckets(row);
+      const ctr = typeof row.ctr === 'string' || typeof row.ctr === 'number' ? parseNumber(row.ctr) : undefined;
+      const roas = extractRoas(row.purchase_roas);
+
+      const hookRate = impressions > 0 && buckets.videoViews > 0 ? buckets.videoViews / impressions : undefined;
+      const holdRate = impressions > 0 && buckets.thruplays > 0 ? buckets.thruplays / impressions : undefined;
+
+      const linkClicks = row.inline_link_clicks != null ? Math.floor(parseNumber(row.inline_link_clicks)) : undefined;
+      const clicks = row.clicks != null ? Math.floor(parseNumber(row.clicks)) : undefined;
+      const primary = resolvePrimaryResult(row, {
+        leadForms: buckets.leadForms || undefined,
+        siteLeads: buckets.siteLeads || undefined,
+        messagesStarted: buckets.messagesStarted || undefined,
+        purchases: buckets.purchases || undefined,
+        profileVisits: buckets.profileVisits || undefined,
+        followers: buckets.followers || undefined,
+        linkClicks,
+        clicks,
+        video3s: buckets.videoViews || undefined,
+        thruplays: buckets.thruplays || undefined,
+      });
+      const results = primary.value;
+      const costPerResult = results && results > 0 ? spend / results : undefined;
+
+      const subtitle =
+        selectedLevel === 'campaign'
+          ? `Conta: ${adAccountName ?? adAccountId}`
+          : selectedLevel === 'adset'
+            ? `Campanha: ${row.campaign_name ?? row.campaign_id ?? '-'}`
+            : `Conjunto: ${row.adset_name ?? row.adset_id ?? '-'} • Campanha: ${row.campaign_name ?? row.campaign_id ?? '-'}`;
+
+      const baseThumb =
+        selectedLevel === 'campaign'
+          ? svgAvatarDataUrl(adAccountName ?? adAccountId, '#1F2937', '#EEF2FF')
+          : selectedLevel === 'adset'
+            ? svgAvatarDataUrl(String(row.campaign_name ?? 'CP'), '#1F2937', '#ECFDF5')
+            : svgAvatarDataUrl(String(entityName ?? 'AD'), '#1F2937', '#F3F4F6');
+
+      const tags: string[] = [];
+      const nameLower = String(entityName ?? '').toLowerCase();
+      if (nameLower.includes('depoimento') || nameLower.includes('prova')) tags.push('Prova Social');
+      if (tags.length === 0) tags.push('Em teste');
+
+      return {
+        id: String(entityId),
+        adName: entityName ?? `${selectedLevel} ${entityId}`,
+        adId: String(entityId),
+        subtitle,
+        thumbnail: baseThumb,
+        campaignId:
+          selectedLevel === 'campaign'
+            ? String(entityId)
+            : row.campaign_id != null
+              ? String(row.campaign_id)
+              : undefined,
+        campaignName:
+          selectedLevel === 'campaign'
+            ? (row.campaign_name != null ? String(row.campaign_name) : entityName != null ? String(entityName) : undefined)
+            : row.campaign_name != null
+              ? String(row.campaign_name)
+              : undefined,
+        adsetId:
+          selectedLevel === 'adset'
+            ? String(entityId)
+            : row.adset_id != null
+              ? String(row.adset_id)
+              : undefined,
+        adsetName:
+          selectedLevel === 'adset'
+            ? (row.adset_name != null ? String(row.adset_name) : entityName != null ? String(entityName) : undefined)
+            : row.adset_name != null
+              ? String(row.adset_name)
+              : undefined,
+        results,
+        resultLabel: primary.label,
+        costPerResult,
+        status: mapMetaEffectiveStatusToLocal(effectiveStatuses.get(String(entityId))),
+        spend,
+        impressions,
+        reach: row.reach != null ? Math.floor(parseNumber(row.reach)) : undefined,
+        clicks,
+        inlineLinkClicks: linkClicks,
+        cpm: row.cpm != null ? parseNumber(row.cpm) : undefined,
+        frequency: row.frequency != null ? parseNumber(row.frequency) : undefined,
+        leads: buckets.businessLeads > 0 ? buckets.businessLeads : undefined,
+        messagesStarted: buckets.messagesStarted > 0 ? buckets.messagesStarted : undefined,
+        leadForms: buckets.leadForms > 0 ? buckets.leadForms : undefined,
+        siteLeads: buckets.siteLeads > 0 ? buckets.siteLeads : undefined,
+        videoViews: buckets.videoViews > 0 ? buckets.videoViews : undefined,
+        thruplays: buckets.thruplays > 0 ? buckets.thruplays : undefined,
+        cpc: row.cpc != null ? parseNumber(row.cpc) : undefined,
+        ctr,
+        roas,
+        cpa: buckets.businessLeads > 0 ? spend / buckets.businessLeads : undefined,
+        hookRate,
+        holdRate,
+        profileVisits: buckets.profileVisits > 0 ? buckets.profileVisits : undefined,
+        followers: buckets.followers > 0 ? buckets.followers : undefined,
+        tags,
+      };
+    });
+
+    if (selectedLevel === 'ad' && mapped.length > 0) {
+      const adIds = mapped.map((r) => r.adId);
+      const thumbs = await fetchAdThumbnails(providerToken, adIds);
+      for (const row of mapped) {
+        const info = thumbs.get(row.adId);
+        if (info?.thumbnail) row.thumbnail = info.thumbnail;
+        if (info?.imageUrl) row.imageUrl = info.imageUrl;
+      }
+    }
+
+    return mapped;
+  };
+
+  const fetchTrafficRowsFromMeta = async (
+    providerToken: string,
+    adAccountId: string,
+    adAccountName: string | null,
+    periodOverride?: { start?: string; end?: string },
+  ) => {
+    const insightsUrl = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
+    insightsUrl.searchParams.set('level', selectedLevel);
+    const filters = buildInsightsFilters();
+    if (filters.length) insightsUrl.searchParams.set('filtering', JSON.stringify(filters));
+    insightsUrl.searchParams.set(
+      'fields',
+      [
+        selectedLevel === 'campaign'
+          ? 'campaign_id,campaign_name'
+          : selectedLevel === 'adset'
+            ? 'adset_id,adset_name,campaign_id,campaign_name'
+            : 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name',
+        'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas,video_thruplay_watched_actions',
+      ].join(','),
+    );
+    applyTimeRange(insightsUrl, periodOverride);
+    insightsUrl.searchParams.set('limit', '100');
+    insightsUrl.searchParams.set('access_token', providerToken);
+
+    const insightRows = await fetchMetaCollection(insightsUrl.toString());
+    return mapInsightRowsToMetrics(providerToken, adAccountId, adAccountName, insightRows);
+  };
+
+  const fetchAccountSummary = async (
+    providerToken: string,
+    adAccountId: string,
+    periodOverride: { start: string; end: string },
+  ): Promise<{ media: ReportMediaSummary; platform: ReportPlatformSummary }> => {
+    const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
+    url.searchParams.set(
+      'fields',
+      'impressions,reach,clicks,inline_link_clicks,spend,cpc,cpm,ctr,frequency,actions,video_thruplay_watched_actions',
+    );
+    url.searchParams.set('level', 'account');
+    applyTimeRange(url, periodOverride);
+    url.searchParams.set('limit', '1');
+    url.searchParams.set('access_token', providerToken);
+
+    const data = await fetchMetaCollection(url.toString(), 1);
+    const row = data[0] ?? {};
+    const platform = buildPlatformBuckets(row);
+    const impressions = parseNumber(row.impressions);
+    const clicks = parseNumber(row.clicks);
+    const reach = parseNumber(row.reach);
+    const invest = parseNumber(row.spend);
+    const linkClicks = parseNumber(row.inline_link_clicks);
+
+    return {
+      media: {
+        invest,
+        impressions,
+        reach,
+        clicks,
+        linkClicks,
+        ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+        cpc: clicks > 0 ? invest / clicks : 0,
+        cpm: impressions > 0 ? (invest / impressions) * 1000 : 0,
+        frequency: reach > 0 ? impressions / reach : 0,
+      },
+      platform,
+    };
+  };
+
+  const fetchAccountTimeseries = async (
+    providerToken: string,
+    adAccountId: string,
+    periodOverride: { start: string; end: string },
+  ) => {
+    const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
+    url.searchParams.set('level', 'account');
+    url.searchParams.set('fields', 'date_start,spend,impressions,actions,video_thruplay_watched_actions');
+    url.searchParams.set('time_increment', '1');
+    applyTimeRange(url, periodOverride);
+    url.searchParams.set('limit', '100');
+    url.searchParams.set('access_token', providerToken);
+
+    const rows = await fetchMetaCollection(url.toString());
+    return rows.map((row: any) => {
+      const buckets = buildPlatformBuckets(row);
+      return {
+        name: (() => {
+          const s = String(row.date_start ?? '');
+          const p = s.split('-');
+          return p.length === 3 ? `${p[2]}/${p[1]}` : s.slice(5).replace('-', '/');
+        })(),
+        metaSpend: parseNumber(row.spend),
+        metaLeads: buckets.businessLeads,
+      };
+    });
+  };
+
+  const fetchCrmBusinessSummary = async (
+    periodStart: string,
+    periodEnd: string,
+    platform: ReportPlatformSummary,
+  ): Promise<ReportBusinessSummary> => {
+    if (!companyId) {
+      return { crmLeads: 0, won: 0, revenue: 0, pendingFollowup: 0, leadSignals: platform.businessLeads };
+    }
+
+    const startIso = `${periodStart}T00:00:00.000Z`;
+    const endDate = new Date(`${periodEnd}T00:00:00.000Z`);
+    endDate.setUTCDate(endDate.getUTCDate() + 1);
+    const endIso = endDate.toISOString();
+    const pendingCutoff = new Date(endDate.getTime() - 2 * 24 * 60 * 60 * 1000).toISOString();
+
+    const [
+      crmLeadsRes,
+      wonRes,
+      revenueRes,
+      pendingRes,
+    ] = await Promise.all([
+      supabase.from('leads').select('id', { count: 'exact', head: true }).eq('company_id', companyId).gte('created_at', startIso).lt('created_at', endIso),
+      supabase.from('leads').select('id', { count: 'exact', head: true }).eq('company_id', companyId).eq('status', 'won').gte('updated_at', startIso).lt('updated_at', endIso),
+      supabase.from('leads').select('value').eq('company_id', companyId).eq('status', 'won').gte('updated_at', startIso).lt('updated_at', endIso),
+      supabase
+        .from('leads')
+        .select('id', { count: 'exact', head: true })
+        .eq('company_id', companyId)
+        .not('status', 'in', '("won","lost")')
+        .lt('created_at', pendingCutoff)
+        .or(`last_interaction_at.is.null,last_interaction_at.lt.${pendingCutoff}`),
+    ]);
+
+    const revenue = (revenueRes.data ?? []).reduce((sum: number, row: any) => sum + parseNumber(row?.value), 0);
+
+    return {
+      crmLeads: Number(crmLeadsRes.count ?? 0),
+      won: Number(wonRes.count ?? 0),
+      revenue,
+      pendingFollowup: Number(pendingRes.count ?? 0),
+      leadSignals: platform.businessLeads + Number(crmLeadsRes.count ?? 0),
+    };
   };
 
   const reauthorizeFacebook = async () => {
@@ -771,179 +1191,21 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           ts.map((row: any) => ({
             name: (() => { const s = String(row.date_start ?? ''); const p = s.split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : s.slice(5).replace('-', '/'); })(),
             metaSpend: parseNumber(row.spend),
-            metaLeads: (extractLeadsFromActions(row.actions) ?? 0) + (extractMessagingConversationsFromActions(row.actions) ?? 0),
+            metaLeads:
+              (extractLeadFormsFromActions(row.actions) ?? 0) +
+              (extractMessagingConversationsFromActions(row.actions) ?? 0) +
+              (extractSiteLeadsFromActions(row.actions) ?? 0),
           })),
         );
       } else {
         setComparisonData([]);
       }
 
-      const insightsUrl = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
-      insightsUrl.searchParams.set('level', selectedLevel);
-      {
-        const filters: any[] = [];
-        const campaignIds = selectedCampaignIds.length ? selectedCampaignIds : campaignFilterId ? [campaignFilterId] : [];
-        const adsetIds = selectedAdsetIds.length ? selectedAdsetIds : adsetFilterId ? [adsetFilterId] : [];
+      const nextMapped = await fetchTrafficRowsFromMeta(providerToken, adAccountId, adAccountName);
+      setRows(computeScores(nextMapped));
+      if (nextMapped.length === 0) setErrorMsg('Sem dados para esse período.');
+      return;
 
-        if (selectedLevel === 'ad' && adsetIds.length) {
-          filters.push({ field: 'adset.id', operator: 'IN', value: adsetIds });
-        }
-        if (selectedLevel !== 'campaign' && campaignIds.length) {
-          filters.push({ field: 'campaign.id', operator: 'IN', value: campaignIds });
-        }
-        if (filters.length) insightsUrl.searchParams.set('filtering', JSON.stringify(filters));
-      }
-      insightsUrl.searchParams.set(
-        'fields',
-        [
-          selectedLevel === 'campaign'
-            ? 'campaign_id,campaign_name'
-            : selectedLevel === 'adset'
-              ? 'adset_id,adset_name,campaign_id,campaign_name'
-              : 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name',
-          'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas,video_thruplay_watched_actions',
-        ].join(','),
-      );
-      if (datePreset === 'custom' && dateSince && dateUntil) {
-        insightsUrl.searchParams.set('time_range', JSON.stringify({ since: dateSince, until: dateUntil }));
-      } else {
-        insightsUrl.searchParams.set('date_preset', datePreset === 'custom' ? 'last_7d' : datePreset);
-      }
-      insightsUrl.searchParams.set('limit', '50');
-      insightsUrl.searchParams.set('access_token', providerToken);
-
-      const res = await fetch(insightsUrl.toString());
-      const json = await res.json();
-      if (!res.ok || json?.error) {
-        const err: any = new Error(json?.error?.message || `Erro ao buscar insights (${res.status})`);
-        err.metaError = json?.error;
-        throw err;
-      }
-
-      const insightRows: any[] = Array.isArray(json?.data) ? json.data : [];
-      const entityIds = insightRows
-        .map((row) => (selectedLevel === 'campaign' ? row.campaign_id : selectedLevel === 'adset' ? row.adset_id : row.ad_id))
-        .filter(Boolean)
-        .map((v) => String(v));
-      const effectiveStatuses = await fetchEffectiveStatusesByIds(providerToken, entityIds);
-
-      const mapped: AdMetric[] = insightRows.map((row: any) => {
-        const entityId = selectedLevel === 'campaign' ? row.campaign_id : selectedLevel === 'adset' ? row.adset_id : row.ad_id;
-        const entityName =
-          selectedLevel === 'campaign' ? row.campaign_name : selectedLevel === 'adset' ? row.adset_name : row.ad_name;
-
-        const impressions = Math.floor(parseNumber(row.impressions));
-        const spend = parseNumber(row.spend);
-        const formLeads = extractLeadsFromActions(row.actions) ?? 0;
-        const conversations = extractMessagingConversationsFromActions(row.actions) ?? 0;
-        const contacts = extractContactsFromActions(row.actions) ?? 0;
-        const customConversions = extractCustomConversionsFromActions(row.actions) ?? 0;
-        // Lead = lead de formulario + mensagem + contato + conversao personalizada
-        const leads = formLeads + conversations + contacts + customConversions;
-        const cpa = leads > 0 ? spend / leads : undefined;
-        const profileVisits = extractProfileVisitsFromActions(row.actions) ?? 0;
-        const followers = extractFollowersFromActions(row.actions) ?? 0;
-        const ctr = typeof row.ctr === 'string' || typeof row.ctr === 'number' ? parseNumber(row.ctr) : undefined;
-        const roas = extractRoas(row.purchase_roas);
-
-        const video3s = extractVideo3sFromActions(row.actions);
-        const video15s = extractVideo15sFromActions(row.actions) ?? extractActionTotal(row.video_thruplay_watched_actions);
-        const hookRate = impressions > 0 && video3s != null && video3s > 0 ? video3s / impressions : undefined;
-        // Hold Rate = visualizacoes 15s / impressoes (consistente com Hook Rate)
-        const holdRate = impressions > 0 && video15s != null && video15s > 0 ? video15s / impressions : undefined;
-
-        const linkClicks = row.inline_link_clicks != null ? Math.floor(parseNumber(row.inline_link_clicks)) : undefined;
-        const clicks = row.clicks != null ? Math.floor(parseNumber(row.clicks)) : undefined;
-        const purchases = extractPurchasesFromActions(row.actions);
-        const primary = resolvePrimaryResult(row, { leads, purchases, conversations: conversations || undefined, linkClicks, clicks, video3s });
-        const results = primary.value;
-        const costPerResult = results && results > 0 ? spend / results : undefined;
-
-        const subtitle =
-          selectedLevel === 'campaign'
-            ? `Conta: ${adAccountName ?? adAccountId}`
-            : selectedLevel === 'adset'
-              ? `Campanha: ${row.campaign_name ?? row.campaign_id ?? '-'}`
-              : `Conjunto: ${row.adset_name ?? row.adset_id ?? '-'} • Campanha: ${row.campaign_name ?? row.campaign_id ?? '-'}`;
-
-        const baseThumb =
-          selectedLevel === 'campaign'
-            ? svgAvatarDataUrl(adAccountName ?? adAccountId, '#1F2937', '#EEF2FF')
-            : selectedLevel === 'adset'
-              ? svgAvatarDataUrl(String(row.campaign_name ?? 'CP'), '#1F2937', '#ECFDF5')
-              : svgAvatarDataUrl(String(entityName ?? 'AD'), '#1F2937', '#F3F4F6');
-
-        const tags: string[] = [];
-        const nameLower = String(entityName ?? '').toLowerCase();
-        if (nameLower.includes('depoimento') || nameLower.includes('prova')) tags.push('Prova Social');
-        if (tags.length === 0) tags.push('Em teste');
-
-        return {
-          id: String(entityId),
-          adName: entityName ?? `${selectedLevel} ${entityId}`,
-          adId: String(entityId),
-          subtitle,
-          thumbnail: baseThumb,
-          campaignId:
-            selectedLevel === 'campaign'
-              ? String(entityId)
-              : row.campaign_id != null
-                ? String(row.campaign_id)
-                : undefined,
-          campaignName:
-            selectedLevel === 'campaign'
-              ? (row.campaign_name != null ? String(row.campaign_name) : entityName != null ? String(entityName) : undefined)
-              : row.campaign_name != null
-                ? String(row.campaign_name)
-                : undefined,
-          adsetId:
-            selectedLevel === 'adset'
-              ? String(entityId)
-              : row.adset_id != null
-                ? String(row.adset_id)
-                : undefined,
-          adsetName:
-            selectedLevel === 'adset'
-              ? (row.adset_name != null ? String(row.adset_name) : entityName != null ? String(entityName) : undefined)
-              : row.adset_name != null
-                ? String(row.adset_name)
-                : undefined,
-          results,
-          resultLabel: primary.label,
-          costPerResult,
-          status: mapMetaEffectiveStatusToLocal(effectiveStatuses.get(String(entityId))),
-          spend,
-          impressions,
-          reach: row.reach != null ? Math.floor(parseNumber(row.reach)) : undefined,
-          clicks,
-          inlineLinkClicks: linkClicks,
-          cpm: row.cpm != null ? parseNumber(row.cpm) : undefined,
-          frequency: row.frequency != null ? parseNumber(row.frequency) : undefined,
-          cpc: row.cpc != null ? parseNumber(row.cpc) : undefined,
-          ctr,
-          roas,
-          leads,
-          cpa,
-          hookRate,
-          holdRate,
-          profileVisits: profileVisits > 0 ? profileVisits : undefined,
-          followers: followers > 0 ? followers : undefined,
-          tags,
-        };
-      });
-
-      if (selectedLevel === 'ad' && mapped.length > 0) {
-        const adIds = mapped.map((r) => r.adId);
-        const thumbs = await fetchAdThumbnails(providerToken, adIds);
-        for (const row of mapped) {
-          const info = thumbs.get(row.adId);
-          if (info?.thumbnail) row.thumbnail = info.thumbnail;
-          if (info?.imageUrl) row.imageUrl = info.imageUrl;
-        }
-      }
-
-      setRows(computeScores(mapped));
-      if (mapped.length === 0) setErrorMsg('Sem dados para esse período.');
     } catch (e: any) {
       console.error(e);
       setRows([]);
@@ -1275,96 +1537,85 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       const period = currentAnalysisPeriod();
       const periodStart = period.start ?? new Date().toISOString().slice(0, 10);
       const periodEnd = period.end ?? new Date().toISOString().slice(0, 10);
+      const prevDates = calcPreviousPeriod(periodStart, periodEnd);
 
-      // Metricas do periodo atual (soma dos rows carregados)
-      const totalSpend = rows.reduce((s, r) => s + r.spend, 0);
-      const totalImpressions = rows.reduce((s, r) => s + r.impressions, 0);
-      const totalReach = rows.reduce((s, r) => s + (r.reach ?? 0), 0);
-      const totalClicks = rows.reduce((s, r) => s + (r.clicks ?? 0), 0);
-      const totalLinkClicks = rows.reduce((s, r) => s + (r.inlineLinkClicks ?? 0), 0);
-      const totalResults = rows.reduce((s, r) => s + (r.results ?? 0), 0);
-      const totalProfileVisits = rows.reduce((s, r) => s + (r.profileVisits ?? 0), 0);
-      const totalFollowers = rows.reduce((s, r) => s + (r.followers ?? 0), 0);
-      const primaryLabel = rows.find((r) => r.resultLabel && !['Views 3s','Cliques no link','Cliques'].includes(r.resultLabel))?.resultLabel ?? rows.find((r) => r.resultLabel)?.resultLabel ?? 'Resultados';
+      const providerToken = await getProviderToken();
+      if (!providerToken) throw new Error('Faça login com Facebook para gerar um relatório real da Meta.');
+      if (!selectedAdAccountId) throw new Error('Selecione uma conta de anúncio para gerar o relatório.');
 
-      const currentSummary = {
-        invest: totalSpend,
-        impressions: totalImpressions,
-        reach: totalReach,
-        clicks: totalClicks,
-        linkClicks: totalLinkClicks,
-        ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
-        cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
-        cpm: totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0,
-        frequency: totalReach > 0 ? totalImpressions / totalReach : 0,
-        results: totalResults,
-        resultLabel: primaryLabel,
-        costPerResult: totalResults > 0 ? totalSpend / totalResults : undefined,
-        profileVisits: totalProfileVisits > 0 ? totalProfileVisits : undefined,
-        followers: totalFollowers > 0 ? totalFollowers : undefined,
+      const selectedAccountName = adAccounts.find((a) => a.id === selectedAdAccountId)?.name ?? null;
+      const [currentMeta, previousMeta, currentTimeseries, reportRows] = await Promise.all([
+        fetchAccountSummary(providerToken, selectedAdAccountId, { start: periodStart, end: periodEnd }),
+        fetchAccountSummary(providerToken, selectedAdAccountId, { start: prevDates.start, end: prevDates.end }),
+        fetchAccountTimeseries(providerToken, selectedAdAccountId, { start: periodStart, end: periodEnd }),
+        fetchTrafficRowsFromMeta(providerToken, selectedAdAccountId, selectedAccountName, { start: periodStart, end: periodEnd }).then(computeScores),
+      ]);
+      const [currentBusiness, previousBusiness] = await Promise.all([
+        fetchCrmBusinessSummary(periodStart, periodEnd, currentMeta.platform),
+        fetchCrmBusinessSummary(prevDates.start, prevDates.end, previousMeta.platform),
+      ]);
+
+      const buildActiveObjectives = (currentPlatform: ReportPlatformSummary, previousPlatform: ReportPlatformSummary, currentBiz: ReportBusinessSummary, previousBiz: ReportBusinessSummary) => {
+        const items = [
+          { key: 'thruplays', label: 'ThruPlays', current: currentPlatform.thruplays, previous: previousPlatform.thruplays, layer: 'platform' },
+          { key: 'videoViews', label: 'Views 3s', current: currentPlatform.videoViews, previous: previousPlatform.videoViews, layer: 'platform' },
+          { key: 'profileVisits', label: 'Visitas ao perfil', current: currentPlatform.profileVisits, previous: previousPlatform.profileVisits, layer: 'platform' },
+          { key: 'followers', label: 'Seguidores', current: currentPlatform.followers, previous: previousPlatform.followers, layer: 'platform' },
+          { key: 'messagesStarted', label: 'Mensagens iniciadas', current: currentPlatform.messagesStarted, previous: previousPlatform.messagesStarted, layer: 'platform' },
+          { key: 'leadForms', label: 'Lead Forms', current: currentPlatform.leadForms, previous: previousPlatform.leadForms, layer: 'platform' },
+          { key: 'siteLeads', label: 'Conversões de site', current: currentPlatform.siteLeads, previous: previousPlatform.siteLeads, layer: 'platform' },
+          { key: 'crmLeads', label: 'Leads no CRM', current: currentBiz.crmLeads, previous: previousBiz.crmLeads, layer: 'business' },
+          { key: 'won', label: 'Won', current: currentBiz.won, previous: previousBiz.won, layer: 'business' },
+        ];
+        return items.filter((item) => item.current > 0 || item.previous > 0);
       };
 
-      // Periodo anterior
-      const prevDates = calcPreviousPeriod(periodStart, periodEnd);
-      let previousSummary = null;
-      try {
-        const providerToken = await getProviderToken();
-        if (providerToken && selectedAdAccountId) {
-          const prevUrl = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${selectedAdAccountId}/insights`);
-          prevUrl.searchParams.set('level', 'account');
-          prevUrl.searchParams.set('fields', 'impressions,reach,clicks,inline_link_clicks,spend,cpc,cpm,ctr,frequency,actions');
-          prevUrl.searchParams.set('time_range', JSON.stringify({ since: prevDates.start, until: prevDates.end }));
-          prevUrl.searchParams.set('limit', '1');
-          prevUrl.searchParams.set('access_token', providerToken);
-          const prevRes = await fetch(prevUrl.toString());
-          const prevJson = await prevRes.json();
-          if (prevRes.ok && !prevJson?.error) {
-            const d = Array.isArray(prevJson?.data) ? prevJson.data[0] : null;
-            if (d) {
-              const pSpend = parseNumber(d.spend);
-              const pImpr = parseNumber(d.impressions);
-              const pReach = parseNumber(d.reach);
-              const pClicks = parseNumber(d.clicks);
-              const pLinkClicks = parseNumber(d.inline_link_clicks);
-              const pLeads = (extractLeadsFromActions(d.actions) ?? 0) + (extractMessagingConversationsFromActions(d.actions) ?? 0) + (extractContactsFromActions(d.actions) ?? 0) + (extractCustomConversionsFromActions(d.actions) ?? 0);
-              const pPurchases = extractPurchasesFromActions(d.actions) ?? 0;
-              const pResults = pLeads > 0 ? pLeads : pPurchases;
-              const pProfileVisits = extractProfileVisitsFromActions(d.actions) ?? 0;
-              const pFollowers = extractFollowersFromActions(d.actions) ?? 0;
-              previousSummary = {
-                invest: pSpend,
-                impressions: pImpr,
-                reach: pReach,
-                clicks: pClicks,
-                linkClicks: pLinkClicks,
-                ctr: pImpr > 0 ? (pClicks / pImpr) * 100 : 0,
-                cpc: pClicks > 0 ? pSpend / pClicks : 0,
-                cpm: pImpr > 0 ? (pSpend / pImpr) * 1000 : 0,
-                frequency: pReach > 0 ? pImpr / pReach : 0,
-                results: pResults,
-                resultLabel: primaryLabel,
-                costPerResult: pResults > 0 ? pSpend / pResults : undefined,
-                profileVisits: pProfileVisits > 0 ? pProfileVisits : undefined,
-                followers: pFollowers > 0 ? pFollowers : undefined,
-              };
-            }
-          }
-        }
-      } catch {
-        // periodo anterior opcional — nao bloqueia geracao
+      const currentSummaryLegacy = {
+        ...currentMeta.media,
+        results: currentBusiness.leadSignals,
+        resultLabel: 'Leads de negócio',
+        costPerResult: currentBusiness.leadSignals > 0 ? currentMeta.media.invest / currentBusiness.leadSignals : undefined,
+        profileVisits: currentMeta.platform.profileVisits > 0 ? currentMeta.platform.profileVisits : undefined,
+        followers: currentMeta.platform.followers > 0 ? currentMeta.platform.followers : undefined,
+      };
+      const previousSummaryLegacy = {
+        ...previousMeta.media,
+        results: previousBusiness.leadSignals,
+        resultLabel: 'Leads de negócio',
+        costPerResult: previousBusiness.leadSignals > 0 ? previousMeta.media.invest / previousBusiness.leadSignals : undefined,
+        profileVisits: previousMeta.platform.profileVisits > 0 ? previousMeta.platform.profileVisits : undefined,
+        followers: previousMeta.platform.followers > 0 ? previousMeta.platform.followers : undefined,
+      };
+
+      const campaignRows = reportRows.map((r) => ({
+        name: r.adName,
+        status: r.status,
+        spend: r.spend,
+        reach: r.reach ?? 0,
+        impressions: r.impressions,
+        results: r.results ?? 0,
+        resultLabel: r.resultLabel ?? 'Resultados',
+        costPerResult: r.costPerResult ?? 0,
+        ctr: r.ctr ?? 0,
+        cpc: r.cpc ?? 0,
+        cpm: r.cpm ?? 0,
+        frequency: r.frequency ?? 0,
+        hookRate: r.hookRate,
+        holdRate: r.holdRate,
+        idc: r.idc,
+        classification: r.classification,
+      }));
+
+      const campaignGroupMap = new Map<string, AdMetric[]>();
+      for (const row of reportRows.filter((item) => item.spend > 0)) {
+        const key = row.campaignName ?? row.adsetName ?? 'Sem campanha';
+        if (!campaignGroupMap.has(key)) campaignGroupMap.set(key, []);
+        campaignGroupMap.get(key)!.push(row);
       }
 
-      // Top 3 por campanha (apenas campanhas com gasto no periodo)
-      const campaignGroupMap = new Map<string, typeof rows>();
-      for (const r of rows.filter((row) => row.spend > 0)) {
-        const key = r.campaignName ?? r.adsetName ?? 'Sem campanha';
-        if (!campaignGroupMap.has(key)) campaignGroupMap.set(key, []);
-        campaignGroupMap.get(key)!.push(r);
-      }
       const topAds: any[] = [];
       for (const [, campRows] of campaignGroupMap) {
-        // Ordenar por resultados primeiro, depois por IDC como desempate
-        const sorted = [...campRows].sort((a, b) => (b.results ?? 0) - (a.results ?? 0) || (b.idc ?? 0) - (a.idc ?? 0));
+        const sorted = [...campRows].sort((a, b) => (b.idc ?? 0) - (a.idc ?? 0) || (b.results ?? 0) - (a.results ?? 0));
         for (const r of sorted.slice(0, 3)) {
           topAds.push({
             id: r.adId,
@@ -1378,7 +1629,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
             cpm: r.cpm ?? 0,
             frequency: r.frequency ?? 0,
             results: r.results ?? 0,
-            resultLabel: r.resultLabel ?? primaryLabel,
+            resultLabel: r.resultLabel ?? 'Resultados',
             hookRate: r.hookRate ?? 0,
             holdRate: r.holdRate ?? 0,
             idc: r.idc ?? 0,
@@ -1387,27 +1638,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           });
         }
       }
-      // ordenar topAds por IDC globalmente
       topAds.sort((a, b) => b.idc - a.idc);
-
-      const campaigns = rows.map((r) => ({
-        name: r.adName,
-        status: r.status,
-        spend: r.spend,
-        reach: r.reach ?? 0,
-        impressions: r.impressions,
-        results: r.results ?? 0,
-        resultLabel: r.resultLabel ?? primaryLabel,
-        costPerResult: r.costPerResult ?? 0,
-        ctr: r.ctr ?? 0,
-        cpc: r.cpc ?? 0,
-        cpm: r.cpm ?? 0,
-        frequency: r.frequency ?? 0,
-        hookRate: r.hookRate,
-        holdRate: r.holdRate,
-        idc: r.idc,
-        classification: r.classification,
-      }));
 
       const fmtDateBR = (iso: string) => {
         const p = iso.split('-');
@@ -1415,21 +1646,32 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       };
 
       const reportData: any = {
+        schemaVersion: 2,
         clientName: reportClientName.trim() || 'Cliente',
         agencyName: reportAgencyName.trim() || 'CR8',
         level: selectedLevel,
         periodCurrent: { label: `${fmtDateBR(periodStart)} a ${fmtDateBR(periodEnd)}`, start: periodStart, end: periodEnd },
         periodPrevious: { label: `${fmtDateBR(prevDates.start)} a ${fmtDateBR(prevDates.end)}`, start: prevDates.start, end: prevDates.end },
-        current: currentSummary,
-        previous: previousSummary,
-        timeseries: comparisonData,
-        campaigns,
+        current: currentSummaryLegacy,
+        previous: previousSummaryLegacy,
+        currentLayers: {
+          media: currentMeta.media,
+          platform: currentMeta.platform,
+          business: currentBusiness,
+        },
+        previousLayers: {
+          media: previousMeta.media,
+          platform: previousMeta.platform,
+          business: previousBusiness,
+        },
+        activeObjectives: buildActiveObjectives(currentMeta.platform, previousMeta.platform, currentBusiness, previousBusiness),
+        timeseries: currentTimeseries,
+        campaigns: campaignRows,
         topAds,
         insights: [] as string[],
         actionItems: [] as string[],
       };
 
-      // Gerar insights e plano de acao com IA (nao bloqueia se falhar)
       try {
         const local = loadLocalAiSettings(userId ?? '');
         if (local?.apiKey) {
@@ -1452,43 +1694,39 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                 access_token: accessToken,
                 metrics: {
                   periodLabel: reportData.periodCurrent.label,
-                  invest: currentSummary.invest,
-                  results: currentSummary.results,
-                  resultLabel: primaryLabel,
-                  costPerResult: currentSummary.costPerResult,
-                  ctr: currentSummary.ctr,
-                  cpm: currentSummary.cpm,
-                  frequency: currentSummary.frequency,
-                  previousInvest: previousSummary?.invest,
-                  previousResults: previousSummary?.results,
-                  previousCostPerResult: previousSummary?.costPerResult,
+                  media: currentMeta.media,
+                  platform: currentMeta.platform,
+                  business: currentBusiness,
+                  previousMedia: previousMeta.media,
+                  previousPlatform: previousMeta.platform,
+                  previousBusiness,
                   topAds: topAds.slice(0, 5).map((a: any) => ({
                     name: a.name,
-                    idc: a.idc,
-                    idcClass: a.idcClass,
+                    resultLabel: a.resultLabel,
+                    results: a.results,
+                    ctr: a.ctr,
                     hookRate: a.hookRate,
                     holdRate: a.holdRate,
-                    ctr: a.ctr,
-                    results: a.results,
                     spend: a.spend,
                   })),
                 },
               }),
             });
+
             if (aiRes.ok) {
               const aiJson = await aiRes.json().catch(() => ({}));
-              const r = aiJson?.result ?? {};
-              const highlights: string[] = Array.isArray(r.highlights) ? r.highlights : [];
-              const risks: string[] = Array.isArray(r.risks) ? r.risks : [];
-              const nextWeek: string[] = Array.isArray(r.next_week) ? r.next_week : [];
-              if (r.summary) highlights.unshift(r.summary);
+              const result = aiJson?.result ?? {};
+              const highlights: string[] = Array.isArray(result.highlights) ? result.highlights : [];
+              const risks: string[] = Array.isArray(result.risks) ? result.risks : [];
+              const nextWeek: string[] = Array.isArray(result.next_week) ? result.next_week : [];
+              if (result.summary) highlights.unshift(result.summary);
               reportData.insights = highlights;
               reportData.actionItems = [...risks, ...nextWeek];
             }
           }
         }
       } catch {
-        // insights opcionais — nao bloqueia geracao
+        // IA opcional
       }
 
       const { data, error } = await supabase
@@ -1507,6 +1745,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       if (error) throw error;
       const publicId = (data as any)?.public_id;
       setReportPublicUrl(`${window.location.origin}/traffic-report/${publicId}`);
+      return;
+
     } catch (e: any) {
       const msg = String((e as any)?.message ?? '').toLowerCase();
       if (msg.includes('does not exist') || msg.includes('relation')) {
@@ -1856,7 +2096,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       <div className="rounded-2xl p-5 border border-[hsl(var(--border))]" style={{ background: 'hsl(220 18% 7%)' }}>
         <h3 className="text-sm font-bold text-[hsl(var(--foreground))] mb-4 flex items-center gap-2">
           <span className="w-1 h-4 rounded-full bg-indigo-400 inline-block" />
-          Leads vs Gasto (
+          Sinais de Lead vs Gasto (
           {datePreset === 'last_7d'
             ? 'últimos 7 dias'
             : datePreset === 'last_30d'

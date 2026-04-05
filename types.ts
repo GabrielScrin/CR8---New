@@ -98,6 +98,11 @@ export interface AdMetric {
   cpm?: number;
   frequency?: number;
   leads?: number;
+  messagesStarted?: number;
+  leadForms?: number;
+  siteLeads?: number;
+  videoViews?: number;
+  thruplays?: number;
   cpc?: number;
   ctr?: number;
   roas?: number;
