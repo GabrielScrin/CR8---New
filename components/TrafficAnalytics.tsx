@@ -2006,7 +2006,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                   />
                   <div className="text-xs text-[hsl(var(--muted-foreground))]">
                     {selectedPresetId === DEFAULT_PRESET_ID
-                      ? 'Para salvar, digite um nome e clique em “Salvar”.'
+                      ? 'Para salvar, digite um nome e clique em "Salvar".'
                       : 'Você pode salvar as mudanças nesta visualização ou salvar como uma nova.'}
                   </div>
                 </div>
