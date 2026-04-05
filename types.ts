@@ -104,6 +104,8 @@ export interface AdMetric {
   cpa?: number;
   hookRate?: number;
   holdRate?: number;
+  profileVisits?: number;
+  followers?: number;
   scores?: { label: string; value: number }[];
   idc?: number;
   classification?: 'otimo' | 'bom' | 'regular' | 'ruim';

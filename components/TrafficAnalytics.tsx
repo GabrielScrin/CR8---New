@@ -177,13 +177,27 @@ const extractActionTotal = (actions: any[] | undefined) => {
 };
 
 const extractLeadsFromActions = (actions: any[] | undefined) =>
-  extractActionSum(actions, (t) => t.includes('lead') || t === 'onsite_conversion.lead_grouped');
+  extractActionSum(actions, (t) => t.includes('lead') || t === 'onsite_conversion.lead_grouped' || t === 'omni_lead');
+
+const extractContactsFromActions = (actions: any[] | undefined) =>
+  extractActionSum(actions, (t) => t === 'contact' || t === 'omni_contact');
+
+const extractCustomConversionsFromActions = (actions: any[] | undefined) =>
+  extractActionSum(actions, (t) => t.startsWith('offsite_conversion.custom') || t.startsWith('omni_custom') || t === 'omni_complete_registration');
 
 const extractPurchasesFromActions = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t === 'purchase' || t.endsWith('.purchase') || t.includes('purchase'));
 
 const extractMessagingConversationsFromActions = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t.includes('messaging_conversation_started') || t.includes('onsite_conversion.messaging'));
+
+// Visitas ao perfil (Instagram profile visit + engajamento de pagina)
+const extractProfileVisitsFromActions = (actions: any[] | undefined) =>
+  extractActionSum(actions, (t) => t === 'instagram_profile_visit' || t === 'omni_view_content' || t === 'page_engagement');
+
+// Seguidores/likes ganhos (Meta page likes e Instagram follows via anuncios)
+const extractFollowersFromActions = (actions: any[] | undefined) =>
+  extractActionSum(actions, (t) => t === 'like' || t === 'page_fan' || t === 'instagram_profile_follow' || t === 'follow');
 
 const extractVideo3sFromActions = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => {
@@ -822,8 +836,13 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         const spend = parseNumber(row.spend);
         const formLeads = extractLeadsFromActions(row.actions) ?? 0;
         const conversations = extractMessagingConversationsFromActions(row.actions) ?? 0;
-        const leads = formLeads + conversations;
+        const contacts = extractContactsFromActions(row.actions) ?? 0;
+        const customConversions = extractCustomConversionsFromActions(row.actions) ?? 0;
+        // Lead = lead de formulario + mensagem + contato + conversao personalizada
+        const leads = formLeads + conversations + contacts + customConversions;
         const cpa = leads > 0 ? spend / leads : undefined;
+        const profileVisits = extractProfileVisitsFromActions(row.actions) ?? 0;
+        const followers = extractFollowersFromActions(row.actions) ?? 0;
         const ctr = typeof row.ctr === 'string' || typeof row.ctr === 'number' ? parseNumber(row.ctr) : undefined;
         const roas = extractRoas(row.purchase_roas);
 
@@ -907,6 +926,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           cpa,
           hookRate,
           holdRate,
+          profileVisits: profileVisits > 0 ? profileVisits : undefined,
+          followers: followers > 0 ? followers : undefined,
           tags,
         };
       });
@@ -1262,7 +1283,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       const totalClicks = rows.reduce((s, r) => s + (r.clicks ?? 0), 0);
       const totalLinkClicks = rows.reduce((s, r) => s + (r.inlineLinkClicks ?? 0), 0);
       const totalResults = rows.reduce((s, r) => s + (r.results ?? 0), 0);
-      const primaryLabel = rows.find((r) => r.resultLabel)?.resultLabel ?? 'Resultados';
+      const totalProfileVisits = rows.reduce((s, r) => s + (r.profileVisits ?? 0), 0);
+      const totalFollowers = rows.reduce((s, r) => s + (r.followers ?? 0), 0);
+      const primaryLabel = rows.find((r) => r.resultLabel && !['Views 3s','Cliques no link','Cliques'].includes(r.resultLabel))?.resultLabel ?? rows.find((r) => r.resultLabel)?.resultLabel ?? 'Resultados';
 
       const currentSummary = {
         invest: totalSpend,
@@ -1277,6 +1300,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         results: totalResults,
         resultLabel: primaryLabel,
         costPerResult: totalResults > 0 ? totalSpend / totalResults : undefined,
+        profileVisits: totalProfileVisits > 0 ? totalProfileVisits : undefined,
+        followers: totalFollowers > 0 ? totalFollowers : undefined,
       };
 
       // Periodo anterior
@@ -1301,7 +1326,11 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
               const pReach = parseNumber(d.reach);
               const pClicks = parseNumber(d.clicks);
               const pLinkClicks = parseNumber(d.inline_link_clicks);
-              const pResults = (extractLeadsFromActions(d.actions) ?? 0) + (extractMessagingConversationsFromActions(d.actions) ?? 0);
+              const pLeads = (extractLeadsFromActions(d.actions) ?? 0) + (extractMessagingConversationsFromActions(d.actions) ?? 0) + (extractContactsFromActions(d.actions) ?? 0) + (extractCustomConversionsFromActions(d.actions) ?? 0);
+              const pPurchases = extractPurchasesFromActions(d.actions) ?? 0;
+              const pResults = pLeads > 0 ? pLeads : pPurchases;
+              const pProfileVisits = extractProfileVisitsFromActions(d.actions) ?? 0;
+              const pFollowers = extractFollowersFromActions(d.actions) ?? 0;
               previousSummary = {
                 invest: pSpend,
                 impressions: pImpr,
@@ -1315,6 +1344,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                 results: pResults,
                 resultLabel: primaryLabel,
                 costPerResult: pResults > 0 ? pSpend / pResults : undefined,
+                profileVisits: pProfileVisits > 0 ? pProfileVisits : undefined,
+                followers: pFollowers > 0 ? pFollowers : undefined,
               };
             }
           }
@@ -1332,7 +1363,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       }
       const topAds: any[] = [];
       for (const [, campRows] of campaignGroupMap) {
-        const sorted = [...campRows].sort((a, b) => (b.idc ?? 0) - (a.idc ?? 0));
+        // Ordenar por resultados primeiro, depois por IDC como desempate
+        const sorted = [...campRows].sort((a, b) => (b.results ?? 0) - (a.results ?? 0) || (b.idc ?? 0) - (a.idc ?? 0));
         for (const r of sorted.slice(0, 3)) {
           topAds.push({
             id: r.adId,

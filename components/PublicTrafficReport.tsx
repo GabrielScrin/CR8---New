@@ -18,6 +18,8 @@ type PeriodSummary = {
   results: number;
   resultLabel: string;
   costPerResult?: number;
+  profileVisits?: number;
+  followers?: number;
 };
 
 type TopAd = {
@@ -127,7 +129,6 @@ const IDC_COLORS: Record<string, string> = {
   bad: '#ef4444',
 };
 
-const rankEmojis = ['1', '2', '3', '4', '5', '6', '7', '8'];
 
 // ─── Component ─────────────────────────────────────────────────────────────
 
@@ -216,6 +217,8 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
     { label: 'CPC', val: brl(c.cpc), d: delta(c.cpc, p?.cpc ?? 0, true), prev: p ? brl(p.cpc) : '', color: 'teal' },
     { label: 'CPM', val: brl(c.cpm), d: delta(c.cpm, p?.cpm ?? 0, true), prev: p ? brl(p.cpm) : '', color: 'purple' },
     { label: 'Frequencia', val: c.frequency.toFixed(2), d: delta(c.frequency, p?.frequency ?? 0, true), prev: p ? p.frequency.toFixed(2) : '', color: 'yellow' },
+    ...(c.profileVisits ? [{ label: 'Visitas ao Perfil', val: nInt(c.profileVisits), d: delta(c.profileVisits, p?.profileVisits ?? 0), prev: p?.profileVisits ? nInt(p.profileVisits) : '', color: 'teal' }] : []),
+    ...(c.followers ? [{ label: 'Seguidores', val: nInt(c.followers), d: delta(c.followers, p?.followers ?? 0), prev: p?.followers ? nInt(p.followers) : '', color: 'green' }] : []),
   ];
 
   // ── Comparison rows ────────────────────────────────────────────────────
@@ -343,17 +346,19 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {[
-                { label: 'Investimento', val: brl(c.invest), sub: 'base' },
-                { label: 'Impressoes', val: nInt(c.impressions), sub: c.invest > 0 ? `${((c.impressions / c.invest) * 100).toFixed(0)}/R$` : '' },
-                { label: 'Alcance', val: nInt(c.reach), sub: c.impressions > 0 ? `${((c.reach / c.impressions) * 100).toFixed(1)}% imp.` : '' },
-                { label: 'Cliques', val: nInt(c.clicks), sub: c.reach > 0 ? `${((c.clicks / c.reach) * 100).toFixed(2)}% alc.` : '' },
-                { label: 'Link Clicks', val: nInt(c.linkClicks), sub: c.clicks > 0 ? `${((c.linkClicks / c.clicks) * 100).toFixed(1)}% cliques` : '' },
-                ...(c.results > 0 ? [{ label: c.resultLabel, val: nInt(c.results), sub: c.linkClicks > 0 ? `${((c.results / c.linkClicks) * 100).toFixed(2)}% link` : '' }] : []),
+                { label: 'Investimento', val: brl(c.invest), sub: 'base', highlight: false },
+                { label: 'Impressoes', val: nInt(c.impressions), sub: c.invest > 0 ? `${((c.impressions / c.invest) * 100).toFixed(0)}/R$` : '', highlight: false },
+                { label: 'Alcance', val: nInt(c.reach), sub: c.impressions > 0 ? `${((c.reach / c.impressions) * 100).toFixed(1)}% imp.` : '', highlight: false },
+                { label: 'Cliques', val: nInt(c.clicks), sub: c.reach > 0 ? `${((c.clicks / c.reach) * 100).toFixed(2)}% alc.` : '', highlight: false },
+                { label: 'Link Clicks', val: nInt(c.linkClicks), sub: c.clicks > 0 ? `${((c.linkClicks / c.clicks) * 100).toFixed(1)}% cliques` : '', highlight: false },
+                ...(c.results > 0 ? [{ label: 'Resultados', val: nInt(c.results), sub: `${c.resultLabel}${c.linkClicks > 0 ? ` • ${((c.results / c.linkClicks) * 100).toFixed(1)}% link` : ''}`, highlight: true }] : []),
+                ...(c.profileVisits ? [{ label: 'Visitas ao Perfil', val: nInt(c.profileVisits), sub: '', highlight: false }] : []),
+                ...(c.followers ? [{ label: 'Seguidores', val: nInt(c.followers), sub: '', highlight: false }] : []),
               ].map((step, i, arr) => (
                 <React.Fragment key={step.label}>
-                  <div style={{ flex: 1, minWidth: 90, background: '#0d1117', border: '1px solid #1e2733', borderRadius: 12, padding: '14px 16px' }}>
-                    <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#4d5a6e', marginBottom: 6 }}>{step.label}</div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: '#e8edf5', letterSpacing: -0.5, lineHeight: 1 }}>{step.val}</div>
+                  <div style={{ flex: 1, minWidth: 90, background: (step as any).highlight ? 'rgba(34,197,94,0.06)' : '#0d1117', border: `1px solid ${(step as any).highlight ? 'rgba(34,197,94,0.3)' : '#1e2733'}`, borderRadius: 12, padding: '14px 16px' }}>
+                    <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: (step as any).highlight ? '#22c55e' : '#4d5a6e', marginBottom: 6 }}>{step.label}</div>
+                    <div style={{ fontSize: 20, fontWeight: 800, color: (step as any).highlight ? '#22c55e' : '#e8edf5', letterSpacing: -0.5, lineHeight: 1 }}>{step.val}</div>
                     {step.sub && <div style={{ fontSize: 10, color: '#4d5a6e', marginTop: 3, fontFamily: 'monospace' }}>{step.sub}</div>}
                   </div>
                   {i < arr.length - 1 && (
@@ -408,66 +413,99 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
               Melhores Criativos — IDC
               <span style={{ flex: 1, height: 1, background: '#1e2733', display: 'block' }} />
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {topAds.map((ad, i) => {
-                const idcColor = IDC_COLORS[ad.idcClass] ?? '#8a95a8';
-                const hookPct = Math.round(ad.hookRate * 100);
-                const holdPct = Math.round(ad.holdRate * 100);
+            {/* Agrupar por campanha */}
+            {(() => {
+              const grouped = new Map<string, typeof topAds>();
+              for (const ad of topAds) {
+                const key = ad.campaign || 'Sem campanha';
+                if (!grouped.has(key)) grouped.set(key, []);
+                grouped.get(key)!.push(ad);
+              }
+              return Array.from(grouped.entries()).map(([campName, ads]) => {
+                const champion = ads[0];
+                const runners = ads.slice(1);
+                const champIdcColor = IDC_COLORS[champion.idcClass] ?? '#8a95a8';
+                const hasThumb = (ad: typeof champion) => ad.thumbnailUrl && !ad.thumbnailUrl.startsWith('data:') && ad.thumbnailUrl.startsWith('http');
                 return (
-                  <div key={ad.id} style={{ background: '#0d1117', border: '1px solid #1e2733', borderRadius: 14, padding: '18px 20px', display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap', transition: 'border-color 0.2s' }}>
-                    {/* Rank */}
-                    <div style={{ width: 32, height: 32, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 800, flexShrink: 0, background: i === 0 ? 'linear-gradient(135deg,#f59e0b,#d97706)' : i === 1 ? 'linear-gradient(135deg,#94a3b8,#64748b)' : i === 2 ? 'linear-gradient(135deg,#c2855f,#a05a3a)' : '#141921', color: i < 3 ? '#fff' : '#8a95a8', border: i >= 3 ? '1px solid #253040' : 'none' }}>
-                      {rankEmojis[i] ?? i + 1}
+                  <div key={campName} style={{ marginBottom: 28 }}>
+                    {/* Campaign header */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: '#8a95a8', textTransform: 'uppercase', letterSpacing: '0.08em' }}>📢</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#c5d0de', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{campName}</span>
+                      <span style={{ flex: 1, height: 1, background: '#1e2733', display: 'block', minWidth: 20 }} />
                     </div>
-                    {/* Thumb */}
-                    <div style={{ width: 44, height: 44, background: '#141921', borderRadius: 8, border: '1px solid #1e2733', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>
-                      {ad.thumbnailUrl && !ad.thumbnailUrl.startsWith('data:') ? (
-                        <img src={ad.thumbnailUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      ) : '\ud83c\udfa5'}
-                    </div>
-                    {/* Info */}
-                    <div style={{ flex: 1, minWidth: 200 }}>
-                      <div style={{ fontWeight: 700, color: '#e8edf5', fontSize: 13, marginBottom: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 300 }}>{ad.name}</div>
-                      <div style={{ fontSize: 11, color: '#4d5a6e', marginBottom: 8, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 300 }}>{ad.campaign} &bull; {brl(ad.spend)} &bull; {ad.results} {ad.resultLabel}</div>
-                      {hasVideo && (
-                        <div style={{ display: 'flex', gap: 16 }}>
+
+                    {/* Champion card */}
+                    <div style={{ background: 'rgba(245,158,11,0.04)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: 14, padding: '18px 20px', marginBottom: 8, display: 'flex', gap: 16, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                      {/* Thumbnail */}
+                      <div style={{ width: 80, height: 80, background: '#141921', borderRadius: 10, border: '2px solid rgba(245,158,11,0.3)', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28 }}>
+                        {hasThumb(champion) ? (
+                          <img src={champion.thumbnailUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                        ) : '🎥'}
+                      </div>
+                      {/* Info */}
+                      <div style={{ flex: 1, minWidth: 180 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 6, background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)', fontSize: 9, fontWeight: 800, color: '#f59e0b', textTransform: 'uppercase', letterSpacing: '0.08em' }}>🏆 Anúncio Campeão</span>
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, padding: '3px 8px', borderRadius: 6, background: `${champIdcColor}18`, border: `1px solid ${champIdcColor}44`, fontSize: 10, fontWeight: 700, color: champIdcColor, fontFamily: 'DM Mono, monospace' }}>IDC {champion.idc}</span>
+                        </div>
+                        <div style={{ fontWeight: 700, color: '#e8edf5', fontSize: 14, marginBottom: 4, lineHeight: 1.3 }}>{champion.name}</div>
+                        <div style={{ fontSize: 12, color: '#8a95a8', marginBottom: 10 }}>
+                          {brl(champion.spend)} &bull; <span style={{ color: '#22c55e', fontWeight: 700 }}>{champion.results} {champion.resultLabel}</span> &bull; Custo/res: {champion.results > 0 ? brl(champion.spend / champion.results) : '-'}
+                        </div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                           {[
-                            { label: 'HOOK', pct: hookPct, maxScale: 50, gradient: 'linear-gradient(90deg,#3b82f6,#a855f7)' },
-                            { label: 'HOLD', pct: holdPct, maxScale: 25, gradient: 'linear-gradient(90deg,#14b8a6,#22c55e)' },
+                            { label: 'CTR', val: pct(champion.ctr, 1) },
+                            { label: 'CPC', val: brl(champion.cpc) },
+                            ...(champion.frequency > 0 ? [{ label: 'Freq.', val: champion.frequency.toFixed(2) }] : []),
+                            ...(champion.hookRate > 0 ? [{ label: 'Hook', val: pct(champion.hookRate * 100, 1) }] : []),
+                            ...(champion.holdRate > 0 ? [{ label: 'Hold', val: pct(champion.holdRate * 100, 1) }] : []),
                           ].map((m) => (
-                            <div key={m.label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <span style={{ fontSize: 9, fontWeight: 700, color: '#4d5a6e', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{m.label}</span>
-                              <div style={{ width: 60, height: 6, background: '#141921', borderRadius: 3, overflow: 'hidden' }}>
-                                <div style={{ height: '100%', width: `${Math.min(100, (m.pct / m.maxScale) * 100)}%`, background: m.gradient, borderRadius: 3 }} />
-                              </div>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: m.pct >= (m.label === 'HOOK' ? 20 : 8) ? '#22c55e' : m.pct >= (m.label === 'HOOK' ? 10 : 4) ? '#f59e0b' : '#ef4444', fontFamily: 'DM Mono, monospace' }}>{m.pct}%</span>
+                            <div key={m.label} style={{ padding: '4px 10px', background: '#141921', border: '1px solid #1e2733', borderRadius: 6 }}>
+                              <span style={{ fontSize: 9, color: '#4d5a6e', fontWeight: 700, textTransform: 'uppercase', marginRight: 4 }}>{m.label}</span>
+                              <span style={{ fontSize: 12, color: '#e8edf5', fontWeight: 700, fontFamily: 'DM Mono, monospace' }}>{m.val}</span>
                             </div>
                           ))}
                         </div>
-                      )}
-                    </div>
-                    {/* IDC + metricas */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', flexShrink: 0 }}>
-                      <div style={{ width: 48, height: 48, borderRadius: '50%', border: `2px solid ${idcColor}`, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', background: `${idcColor}18` }}>
-                        <span style={{ fontSize: 14, fontWeight: 800, color: idcColor, fontFamily: 'DM Mono, monospace', lineHeight: 1 }}>{ad.idc}</span>
-                        <span style={{ fontSize: 8, color: idcColor, fontWeight: 600, textTransform: 'uppercase' }}>IDC</span>
                       </div>
-                      {[
-                        { label: 'CTR', val: pct(ad.ctr, 1) },
-                        { label: 'CPC', val: brl(ad.cpc) },
-                        { label: 'CPM', val: brl(ad.cpm) },
-                        ...(ad.frequency > 0 ? [{ label: 'Freq.', val: ad.frequency.toFixed(2) }] : []),
-                      ].map((m) => (
-                        <div key={m.label} style={{ textAlign: 'center', padding: '6px 10px', background: '#141921', border: '1px solid #1e2733', borderRadius: 8, minWidth: 52 }}>
-                          <div style={{ fontSize: 9, fontWeight: 700, color: '#4d5a6e', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{m.label}</div>
-                          <div style={{ fontSize: 13, fontWeight: 800, color: '#e8edf5', fontFamily: 'DM Mono, monospace', lineHeight: 1 }}>{m.val}</div>
-                        </div>
-                      ))}
                     </div>
+
+                    {/* Runners-up */}
+                    {runners.length > 0 && (
+                      <div style={{ display: 'grid', gridTemplateColumns: `repeat(${runners.length}, 1fr)`, gap: 8 }}>
+                        {runners.map((ad, ri) => {
+                          const idcColor = IDC_COLORS[ad.idcClass] ?? '#8a95a8';
+                          return (
+                            <div key={ad.id} style={{ background: '#0d1117', border: '1px solid #1e2733', borderRadius: 12, padding: '14px 16px', display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                              {/* Thumb pequeno */}
+                              <div style={{ width: 52, height: 52, background: '#141921', borderRadius: 8, border: '1px solid #1e2733', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20 }}>
+                                {hasThumb(ad) ? (
+                                  <img src={ad.thumbnailUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                ) : '🎥'}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                                  <span style={{ width: 18, height: 18, borderRadius: 5, background: '#141921', border: '1px solid #253040', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: '#8a95a8', flexShrink: 0 }}>{ri + 2}</span>
+                                  <span style={{ fontSize: 9, fontWeight: 700, color: idcColor, fontFamily: 'DM Mono, monospace' }}>IDC {ad.idc}</span>
+                                </div>
+                                <div style={{ fontWeight: 600, color: '#c5d0de', fontSize: 12, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ad.name}</div>
+                                <div style={{ fontSize: 11, color: '#8a95a8' }}>
+                                  {brl(ad.spend)} &bull; <span style={{ color: '#22c55e' }}>{ad.results} {ad.resultLabel}</span>
+                                </div>
+                                <div style={{ fontSize: 10, color: '#4d5a6e', marginTop: 3 }}>
+                                  CTR {pct(ad.ctr, 1)} &bull; CPC {brl(ad.cpc)}
+                                  {ad.hookRate > 0 ? ` • Hook ${pct(ad.hookRate * 100, 1)}` : ''}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 );
-              })}
-            </div>
+              });
+            })()}
           </div>
         )}
 
