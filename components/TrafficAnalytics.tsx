@@ -1446,21 +1446,27 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-[hsl(var(--foreground))]">Análise de Tráfego Deep Dive</h2>
-          {errorMsg && <p className="text-sm text-red-600 mt-1">{errorMsg}</p>}
+    <div className="space-y-5">
+      {/* Page Header */}
+      <div className="flex flex-wrap justify-between items-start gap-3">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+            <ArrowUp className="w-4 h-4 text-indigo-400" />
+          </div>
+          <div>
+            <h2 className="text-lg font-bold text-[hsl(var(--foreground))] leading-none">Analise de Trafego</h2>
+            {errorMsg && <p className="text-xs text-red-400 mt-0.5">{errorMsg}</p>}
+          </div>
         </div>
 
-        <div className="flex space-x-2 items-center">
+        <div className="flex flex-wrap gap-2 items-center">
           {!demoMode && (
             <select
               value={selectedAdAccountId}
               onChange={(e) => void onChangeAdAccount(e.target.value)}
               disabled={loadingAdAccounts || adAccounts.length === 0}
-              className="max-w-[340px] px-3 py-2 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
-              title={adAccounts.length === 0 ? 'Nenhuma conta encontrada' : 'Selecione a conta de anúncio'}
+              className="max-w-[260px] px-3 py-2 rounded-xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+              title={adAccounts.length === 0 ? 'Nenhuma conta encontrada' : 'Selecione a conta de anuncio'}
             >
               <option value="" disabled>
                 {loadingAdAccounts ? 'Carregando contas...' : adAccounts.length === 0 ? 'Nenhuma conta encontrada' : 'Selecione a conta'}
@@ -1476,7 +1482,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           {needsReauth && !demoMode && (
             <button
               onClick={() => void reauthorizeFacebook().catch((e) => setErrorMsg(e?.message || 'Erro ao reautorizar Facebook.'))}
-              className="px-3 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 shadow-sm"
+              className="px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 text-sm font-semibold hover:bg-indigo-500/20 transition-all"
             >
               Reautorizar Facebook
             </button>
@@ -1484,34 +1490,35 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
           <button
             onClick={() => void fetchTraffic()}
-            className="flex items-center px-3 py-2 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-all"
           >
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             Atualizar
           </button>
 
           <button
             onClick={openColumnsModal}
-            className="flex items-center px-3 py-2 bg-[hsl(var(--card))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] shadow-sm"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-all"
           >
-            <Filter className="w-4 h-4 mr-2" />
+            <Filter className="w-3.5 h-3.5" />
             Colunas
           </button>
 
           <button
             onClick={exportCsv}
             disabled={rows.length === 0}
-            className="flex items-center px-3 py-2 bg-indigo-600 text-white rounded-md text-sm hover:bg-indigo-700 shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 text-sm font-semibold hover:bg-indigo-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
-            <Download className="w-4 h-4 mr-2" />
+            <Download className="w-3.5 h-3.5" />
             Exportar
           </button>
         </div>
       </div>
 
-      <div className="bg-[hsl(var(--card))] p-6 rounded-xl shadow-sm border border-[hsl(var(--border))]">
-        <h3 className="text-lg font-semibold mb-4 text-[hsl(var(--foreground))]">
-          Leads (Meta) vs Gasto (
+      <div className="rounded-2xl p-5 border border-[hsl(var(--border))]" style={{ background: 'hsl(220 18% 7%)' }}>
+        <h3 className="text-sm font-bold text-[hsl(var(--foreground))] mb-4 flex items-center gap-2">
+          <span className="w-1 h-4 rounded-full bg-indigo-400 inline-block" />
+          Leads vs Gasto (
           {datePreset === 'last_7d'
             ? 'últimos 7 dias'
             : datePreset === 'last_30d'
@@ -1540,7 +1547,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         </div>
       </div>
 
-      <div className="bg-[hsl(var(--card))] rounded-xl shadow-sm border border-[hsl(var(--border))] overflow-hidden">
+      <div className="rounded-2xl border border-[hsl(var(--border))] overflow-hidden" style={{ background: 'hsl(220 18% 7%)' }}>
         <div className="px-6 pt-4 border-b border-[hsl(var(--border))] flex items-center justify-between gap-4 flex-wrap">
           <div className="flex gap-6 text-sm font-medium">
             <button
