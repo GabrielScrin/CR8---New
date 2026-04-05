@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { ArrowDown, ArrowUp, Download, ExternalLink, Filter, RefreshCw, Sparkles, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, Download, ExternalLink, FileBarChart2, Filter, Link2, RefreshCw, Send, Sparkles, X } from 'lucide-react';
 import { AdMetric } from '../types';
 import { loadLocalAiSettings } from '../lib/aiLocal';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
@@ -155,6 +155,23 @@ const normalizeHigherBetter = (value: number, min: number, max: number) => {
 
 const normalizeLowerBetter = (value: number, min: number, max: number) => {
   return clamp01(1 - normalizeHigherBetter(value, min, max));
+};
+
+// Absolute benchmark scores for video metrics
+const scoreHookRateAbsolute = (hr: number | undefined): number => {
+  if (hr == null) return 0.5;
+  if (hr >= 0.30) return 1.0;
+  if (hr >= 0.15) return 0.7 + ((hr - 0.15) / 0.15) * 0.3;
+  if (hr >= 0.05) return 0.4 + ((hr - 0.05) / 0.10) * 0.3;
+  return clamp01((hr / 0.05) * 0.4);
+};
+
+const scoreHoldRateAbsolute = (hr: number | undefined): number => {
+  if (hr == null) return 0.5;
+  if (hr >= 0.40) return 1.0;
+  if (hr >= 0.25) return 0.7 + ((hr - 0.25) / 0.15) * 0.3;
+  if (hr >= 0.10) return 0.4 + ((hr - 0.10) / 0.15) * 0.3;
+  return clamp01((hr / 0.10) * 0.4);
 };
 
 const svgAvatarDataUrl = (text: string, fg = '#111827', bg = '#E5E7EB') => {
@@ -528,8 +545,14 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       const scoreResults01 = normalizeHigherBetter(results, minResults, maxResults);
       const scoreCpr01 = cpr != null ? normalizeLowerBetter(cpr, minCpr, maxCpr) : 0;
       const scoreCtr01 = normalizeHigherBetter(ctr, minCtr, maxCtr);
+      const scoreHook01 = scoreHookRateAbsolute(row.hookRate);
+      const scoreHold01 = scoreHoldRateAbsolute(row.holdRate);
 
-      const idc01 = (scoreResults01 + scoreCpr01 + scoreCtr01) / 3;
+      // Weighted IDC: Results 30%, CPR 25%, CTR 20%, Hook 15%, Hold 10%
+      const hasVideo = row.hookRate != null || row.holdRate != null;
+      const idc01 = hasVideo
+        ? scoreResults01 * 0.30 + scoreCpr01 * 0.25 + scoreCtr01 * 0.20 + scoreHook01 * 0.15 + scoreHold01 * 0.10
+        : (scoreResults01 + scoreCpr01 + scoreCtr01) / 3;
 
       const classification: AdMetric['classification'] =
         results === 0
@@ -547,6 +570,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         { label: resultLabel, value: Math.round(scoreResults01 * 100) },
         { label: 'C/Res', value: Math.round(scoreCpr01 * 100) },
         { label: 'CTR', value: Math.round(scoreCtr01 * 100) },
+        ...(row.hookRate != null ? [{ label: 'Hook', value: Math.round(scoreHook01 * 100) }] : []),
+        ...(row.holdRate != null ? [{ label: 'Hold', value: Math.round(scoreHold01 * 100) }] : []),
       ];
 
       const tags = [...(row.tags ?? [])];
@@ -777,7 +802,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
             : selectedLevel === 'adset'
               ? 'adset_id,adset_name,campaign_id,campaign_name'
               : 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name',
-          'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas,video_thruplay_watched_actions',
+          'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas,video_thruplay_watched_actions,video_3_second_watched_actions',
         ].join(','),
       );
       if (datePreset === 'custom' && dateSince && dateUntil) {
@@ -817,10 +842,11 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         const ctr = typeof row.ctr === 'string' || typeof row.ctr === 'number' ? parseNumber(row.ctr) : undefined;
         const roas = extractRoas(row.purchase_roas);
 
-        const video3s = extractVideo3sFromActions(row.actions);
+        const video3s = extractVideo3sFromActions(row.actions) ?? extractActionTotal(row.video_3_second_watched_actions);
         const video15s = extractVideo15sFromActions(row.actions) ?? extractActionTotal(row.video_thruplay_watched_actions);
         const hookRate = impressions > 0 && video3s != null && video3s > 0 ? video3s / impressions : undefined;
-        const holdRate = impressions > 0 && video15s != null && video15s > 0 ? video15s / impressions : undefined;
+        // Hold Rate = visualizacoes 15s / visualizacoes 3s (retencao apos primeiro engajamento)
+        const holdRate = video3s != null && video3s > 0 && video15s != null ? video15s / video3s : undefined;
 
         const linkClicks = row.inline_link_clicks != null ? Math.floor(parseNumber(row.inline_link_clicks)) : undefined;
         const clicks = row.clicks != null ? Math.floor(parseNumber(row.clicks)) : undefined;
@@ -1205,6 +1231,128 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     URL.revokeObjectURL(url);
   };
 
+  // Report modal state
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportGenerating, setReportGenerating] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportPublicUrl, setReportPublicUrl] = useState<string | null>(null);
+  const [reportTitle, setReportTitle] = useState('');
+  const [reportCopied, setReportCopied] = useState(false);
+
+  const openReportModal = () => {
+    setReportError(null);
+    setReportPublicUrl(null);
+    setReportCopied(false);
+    const period = currentAnalysisPeriod();
+    setReportTitle(`Relatorio de Trafego ${period.start ?? ''} a ${period.end ?? ''}`);
+    setReportModalOpen(true);
+  };
+
+  const generateReport = async () => {
+    if (!companyId || !userId || rows.length === 0) return;
+    setReportGenerating(true);
+    setReportError(null);
+    setReportPublicUrl(null);
+    try {
+      const period = currentAnalysisPeriod();
+      const totalSpend = rows.reduce((s, r) => s + r.spend, 0);
+      const totalResults = rows.reduce((s, r) => s + (r.results ?? 0), 0);
+      const totalImpressions = rows.reduce((s, r) => s + r.impressions, 0);
+      const totalClicks = rows.reduce((s, r) => s + (r.clicks ?? 0), 0);
+      const totalReach = rows.reduce((s, r) => s + (r.reach ?? 0), 0);
+      const avgCPR = totalResults > 0 ? totalSpend / totalResults : null;
+      const avgCPC = totalClicks > 0 ? totalSpend / totalClicks : null;
+      const avgCPM = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : null;
+      const avgCTR = totalClicks > 0 && totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : null;
+
+      const topCreatives = [...rows]
+        .filter((r) => r.idc != null && r.spend > 0)
+        .sort((a, b) => (b.idc ?? 0) - (a.idc ?? 0))
+        .slice(0, 10)
+        .map((r) => ({
+          id: r.adId,
+          name: r.adName,
+          spend: r.spend,
+          results: r.results,
+          resultLabel: r.resultLabel,
+          costPerResult: r.costPerResult,
+          ctr: r.ctr,
+          hookRate: r.hookRate,
+          holdRate: r.holdRate,
+          idc: r.idc,
+          classification: r.classification,
+          thumbnail: r.thumbnail,
+          tags: r.tags,
+        }));
+
+      const reportData = {
+        level: selectedLevel,
+        adAccountId: selectedAdAccountId,
+        summary: { totalSpend, totalResults, totalImpressions, totalClicks, totalReach, avgCPR, avgCPC, avgCPM, avgCTR },
+        timeseries: comparisonData,
+        items: rows.map((r) => ({
+          id: r.adId,
+          name: r.adName,
+          spend: r.spend,
+          results: r.results,
+          resultLabel: r.resultLabel,
+          costPerResult: r.costPerResult,
+          impressions: r.impressions,
+          reach: r.reach,
+          clicks: r.clicks,
+          ctr: r.ctr,
+          cpm: r.cpm,
+          hookRate: r.hookRate,
+          holdRate: r.holdRate,
+          idc: r.idc,
+          classification: r.classification,
+          status: r.status,
+          tags: r.tags,
+        })),
+        topCreatives,
+      };
+
+      const { data, error } = await supabase
+        .from('traffic_reports')
+        .insert({
+          company_id: companyId,
+          created_by: userId,
+          title: reportTitle.trim() || `Relatorio de Trafego`,
+          period_start: period.start ?? new Date().toISOString().slice(0, 10),
+          period_end: period.end ?? new Date().toISOString().slice(0, 10),
+          report_data: reportData,
+        })
+        .select('public_id')
+        .single();
+
+      if (error) throw error;
+      const publicId = (data as any)?.public_id;
+      setReportPublicUrl(`${window.location.origin}/traffic-report/${publicId}`);
+    } catch (e: any) {
+      const msg = String((e as any)?.message ?? '').toLowerCase();
+      if (msg.includes('does not exist') || msg.includes('relation')) {
+        setReportError('Tabela traffic_reports nao encontrada. Execute a migration SQL primeiro.');
+      } else {
+        setReportError(e?.message ?? 'Falha ao gerar relatorio.');
+      }
+    } finally {
+      setReportGenerating(false);
+    }
+  };
+
+  const copyReportLink = () => {
+    if (!reportPublicUrl) return;
+    navigator.clipboard.writeText(reportPublicUrl).catch(() => {});
+    setReportCopied(true);
+    setTimeout(() => setReportCopied(false), 2000);
+  };
+
+  const shareOnWhatsApp = () => {
+    if (!reportPublicUrl) return;
+    const text = encodeURIComponent(`Relatorio de Trafego - ${reportTitle}\n${reportPublicUrl}`);
+    window.open(`https://wa.me/?text=${text}`, '_blank', 'noopener,noreferrer');
+  };
+
   const [creativeModalOpen, setCreativeModalOpen] = useState(false);
   const [creativeRow, setCreativeRow] = useState<AdMetric | null>(null);
   const [creativeBusy, setCreativeBusy] = useState(false);
@@ -1507,11 +1655,22 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           <button
             onClick={exportCsv}
             disabled={rows.length === 0}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 text-sm font-semibold hover:bg-indigo-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
           >
             <Download className="w-3.5 h-3.5" />
             Exportar
           </button>
+
+          {!demoMode && isSupabaseConfigured() && (
+            <button
+              onClick={openReportModal}
+              disabled={rows.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-indigo-500/10 border border-indigo-500/25 text-indigo-400 text-sm font-semibold hover:bg-indigo-500/20 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+            >
+              <FileBarChart2 className="w-3.5 h-3.5" />
+              Gerar Relatorio
+            </button>
+          )}
         </div>
       </div>
 
@@ -2208,6 +2367,151 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                 Fechar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Report Generation Modal */}
+      {reportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
+          <div className="w-full max-w-md rounded-2xl border border-[hsl(var(--border))] shadow-2xl" style={{ background: 'hsl(220 18% 9%)' }}>
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-[hsl(var(--border))] flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
+                  <FileBarChart2 className="w-4 h-4 text-indigo-400" />
+                </div>
+                <div>
+                  <div className="text-sm font-bold text-[hsl(var(--foreground))]">Gerar Relatorio Semanal</div>
+                  <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-0.5">Cria um link publico para compartilhar com o cliente</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setReportModalOpen(false)}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-all"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="px-5 py-5 space-y-4">
+              {/* Period summary */}
+              <div className="rounded-xl bg-indigo-500/5 border border-indigo-500/15 px-4 py-3">
+                <div className="text-xs font-semibold text-indigo-300 mb-1">Periodo selecionado</div>
+                <div className="text-sm text-[hsl(var(--foreground))]">
+                  {datePreset === 'custom' && dateSince && dateUntil
+                    ? `${dateSince} ate ${dateUntil}`
+                    : datePreset === 'last_7d'
+                      ? 'Ultimos 7 dias'
+                      : datePreset === 'last_30d'
+                        ? 'Ultimos 30 dias'
+                        : datePreset === 'this_month'
+                          ? 'Este mes'
+                          : datePreset === 'last_month'
+                            ? 'Mes passado'
+                            : 'Periodo atual'}
+                </div>
+                <div className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                  {rows.length} {selectedLevel === 'campaign' ? 'campanhas' : selectedLevel === 'adset' ? 'conjuntos' : 'anuncios'} com dados
+                </div>
+              </div>
+
+              {/* Title input */}
+              <div>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1.5">
+                  Titulo do relatorio
+                </label>
+                <input
+                  type="text"
+                  value={reportTitle}
+                  onChange={(e) => setReportTitle(e.target.value)}
+                  className="w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                  placeholder="Ex: Relatorio Semana 14"
+                />
+              </div>
+
+              {/* Error */}
+              {reportError && (
+                <div className="flex items-start gap-2 text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2.5 text-xs">
+                  <X className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  {reportError}
+                </div>
+              )}
+
+              {/* Result - link generated */}
+              {reportPublicUrl && (
+                <div className="space-y-3">
+                  <div className="rounded-xl bg-emerald-500/5 border border-emerald-500/20 px-3 py-3">
+                    <div className="text-xs font-semibold text-emerald-400 mb-1.5">Link gerado com sucesso!</div>
+                    <div className="text-xs text-[hsl(var(--muted-foreground))] break-all font-mono bg-[hsl(var(--background))] rounded-lg px-2 py-1.5">
+                      {reportPublicUrl}
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={copyReportLink}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-[hsl(var(--secondary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))]/80 transition-all"
+                    >
+                      <Link2 className="w-3.5 h-3.5" />
+                      {reportCopied ? 'Copiado!' : 'Copiar link'}
+                    </button>
+                    <button
+                      onClick={shareOnWhatsApp}
+                      className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-sm font-semibold hover:bg-emerald-500/20 transition-all"
+                    >
+                      <Send className="w-3.5 h-3.5" />
+                      Enviar WhatsApp
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => window.open(reportPublicUrl, '_blank', 'noopener,noreferrer')}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border border-indigo-500/20 text-indigo-400 text-xs hover:bg-indigo-500/10 transition-all"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" />
+                    Abrir visualizacao do relatorio
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            {!reportPublicUrl && (
+              <div className="px-5 pb-5 flex justify-end gap-2">
+                <button
+                  onClick={() => setReportModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-[hsl(var(--secondary))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--foreground))] hover:opacity-90 transition-all"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => void generateReport()}
+                  disabled={reportGenerating || rows.length === 0}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                >
+                  {reportGenerating ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Gerando...
+                    </>
+                  ) : (
+                    <>
+                      <FileBarChart2 className="w-3.5 h-3.5" />
+                      Gerar relatorio
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+            {reportPublicUrl && (
+              <div className="px-5 pb-5 flex justify-end">
+                <button
+                  onClick={() => setReportModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 transition-all"
+                >
+                  Fechar
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

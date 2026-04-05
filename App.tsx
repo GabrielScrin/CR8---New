@@ -11,6 +11,7 @@ import { AIAgent } from './components/AIAgent';
 import { SettingsView } from './components/SettingsView';
 import { QuizForms } from './components/QuizForms';
 import { PublicQuiz } from './components/PublicQuiz';
+import { PublicTrafficReport } from './components/PublicTrafficReport';
 import { WhatsApp } from './components/WhatsApp';
 import { Join } from './components/Join';
 import { Role, User, isClientRole, getAllowedViews, normalizeRole } from './types';
@@ -52,6 +53,17 @@ export default function App() {
     }
   })();
 
+  const publicTrafficReportId = (() => {
+    try {
+      const path = window.location.pathname || '';
+      const parts = path.split('/').filter(Boolean);
+      if (parts.length >= 2 && parts[0] === 'traffic-report') return parts[1];
+      return null;
+    } catch {
+      return null;
+    }
+  })();
+
   const joinToken = (() => {
     try {
       const path = (window.location.pathname || '').replace(/\/+$/, '');
@@ -65,7 +77,7 @@ export default function App() {
 
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState('dashboard');
-  const [loadingSession, setLoadingSession] = useState(() => !publicQuizId && !joinToken);
+  const [loadingSession, setLoadingSession] = useState(() => !publicQuizId && !publicTrafficReportId && !joinToken);
 
   // Enforce view access restrictions based on role
   useEffect(() => {
@@ -77,6 +89,7 @@ export default function App() {
 
   useEffect(() => {
     if (publicQuizId) return;
+    if (publicTrafficReportId) return;
     if (joinToken) return;
     if (!isSupabaseConfigured()) {
       setLoadingSession(false);
@@ -196,6 +209,7 @@ export default function App() {
   };
 
   if (publicQuizId) return <PublicQuiz publicId={publicQuizId} />;
+  if (publicTrafficReportId) return <PublicTrafficReport publicId={publicTrafficReportId} />;
 
   if (joinToken) return <Join token={joinToken} />;
 
