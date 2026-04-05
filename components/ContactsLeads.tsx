@@ -1,5 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, RefreshCw, Search } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import {
+  Plus, RefreshCw, Search, X, Clock, Link2, BarChart2,
+  CheckCircle2, XCircle, AlertCircle, Activity,
+} from 'lucide-react';
 import { createPortal } from 'react-dom';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 import { Lead } from '../types';
@@ -10,37 +14,74 @@ interface ContactsLeadsProps {
 }
 
 const formatRelativeTime = (dateIso?: string | null) => {
-  if (!dateIso) return '—';
-  const date = new Date(dateIso);
-  const diffMs = Date.now() - date.getTime();
+  if (!dateIso) return '--';
+  const diffMs = Date.now() - new Date(dateIso).getTime();
   const diffMin = Math.max(0, Math.floor(diffMs / 60000));
-
   if (diffMin < 1) return 'Agora';
-  if (diffMin < 60) return `${diffMin} min atrás`;
-
-  const diffHours = Math.floor(diffMin / 60);
-  if (diffHours < 24) return `${diffHours} h atrás`;
-
-  const diffDays = Math.floor(diffHours / 24);
-  return `${diffDays} d atrás`;
+  if (diffMin < 60) return `${diffMin}m`;
+  const h = Math.floor(diffMin / 60);
+  if (h < 24) return `${h}h`;
+  return `${Math.floor(h / 24)}d`;
 };
 
-const statusLabel: Record<Lead['status'], string> = {
-  new: 'Novo',
-  contacted: 'Em contato',
-  proposal: 'Proposta',
-  won: 'Ganho',
-  lost: 'Perdido',
+const formatFullDate = (iso?: string | null) => {
+  if (!iso) return '--';
+  return new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 };
 
-const statusBadge: Record<Lead['status'], string> = {
-  new: 'bg-sky-500/15 text-sky-300 border border-sky-500/20',
-  contacted: 'bg-yellow-500/15 text-yellow-300 border border-yellow-500/20',
-  proposal: 'bg-purple-500/15 text-purple-300 border border-purple-500/20',
-  won: 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/20',
-  lost: 'bg-rose-500/15 text-rose-300 border border-rose-500/20',
+const initials = (name: string) =>
+  name.split(' ').slice(0, 2).map((w) => w[0] ?? '').join('').toUpperCase() || '?';
+
+const AVATAR_COLORS = [
+  'bg-blue-500/20 text-blue-300',
+  'bg-purple-500/20 text-purple-300',
+  'bg-emerald-500/20 text-emerald-300',
+  'bg-orange-500/20 text-orange-300',
+  'bg-pink-500/20 text-pink-300',
+  'bg-cyan-500/20 text-cyan-300',
+];
+const avatarColor = (id: string) => AVATAR_COLORS[id.charCodeAt(0) % AVATAR_COLORS.length];
+
+const STATUS_CONFIG: Record<Lead['status'], { label: string; badge: string; dot: string }> = {
+  new:       { label: 'Novo',       badge: 'bg-sky-500/15 text-sky-300 border-sky-500/20',       dot: 'bg-sky-400' },
+  contacted: { label: 'Contato',    badge: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/20', dot: 'bg-yellow-400' },
+  proposal:  { label: 'Proposta',   badge: 'bg-purple-500/15 text-purple-300 border-purple-500/20', dot: 'bg-purple-400' },
+  won:       { label: 'Ganho',      badge: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20', dot: 'bg-emerald-400' },
+  lost:      { label: 'Perdido',    badge: 'bg-rose-500/15 text-rose-300 border-rose-500/20',     dot: 'bg-rose-400' },
 };
 
+const SOURCE_COLORS: Record<string, string> = {
+  whatsapp: 'bg-emerald-500/15 text-emerald-400',
+  instagram: 'bg-pink-500/15 text-pink-400',
+  facebook: 'bg-blue-500/15 text-blue-400',
+  meta: 'bg-blue-500/15 text-blue-400',
+  google: 'bg-yellow-500/15 text-yellow-300',
+  form: 'bg-violet-500/15 text-violet-400',
+};
+const sourceColor = (s: string) => {
+  const lower = (s ?? '').toLowerCase();
+  for (const [k, v] of Object.entries(SOURCE_COLORS)) {
+    if (lower.includes(k)) return v;
+  }
+  return 'bg-[hsl(var(--muted))] text-[hsl(var(--muted-foreground))]';
+};
+
+const EVENT_ICON: Record<string, React.ReactNode> = {
+  message: <Activity className="h-3 w-3" />,
+  conversion: <CheckCircle2 className="h-3 w-3" />,
+  status_change: <RefreshCw className="h-3 w-3" />,
+};
+const eventIcon = (type: string) => EVENT_ICON[type] ?? <Clock className="h-3 w-3" />;
+
+// ── Stat badge ────────────────────────────────────────────────────────────────
+const Stat = ({ value, label }: { value: number; label: string }) => (
+  <div className="text-center">
+    <div className="text-lg font-extrabold text-[hsl(var(--foreground))] tabular-nums">{value}</div>
+    <div className="text-[10px] text-[hsl(var(--muted-foreground))] uppercase tracking-wider">{label}</div>
+  </div>
+);
+
+// ── Main component ────────────────────────────────────────────────────────────
 export const ContactsLeads: React.FC<ContactsLeadsProps> = ({ companyId }) => {
   const readOnlyMode = !isSupabaseConfigured();
   const [loading, setLoading] = useState(false);
@@ -60,62 +101,31 @@ export const ContactsLeads: React.FC<ContactsLeadsProps> = ({ companyId }) => {
 
   const fetchLeads = useCallback(async () => {
     setError(null);
-    if (readOnlyMode) {
-      setLeads([]);
-      return;
-    }
-    if (!companyId) {
-      setLeads([]);
-      return;
-    }
-
+    if (readOnlyMode || !companyId) { setLeads([]); return; }
     setLoading(true);
     try {
       const { data, error: dbError } = await supabase
-        .from('leads')
-        .select('*')
-        .eq('company_id', companyId)
-        .order('created_at', { ascending: false })
-        .limit(500);
+        .from('leads').select('*').eq('company_id', companyId)
+        .order('created_at', { ascending: false }).limit(500);
       if (dbError) throw dbError;
-
       const mapped: Lead[] = (data ?? []).map((d: any) => ({
-        id: d.id,
-        name: d.name ?? 'Lead',
-        phone: d.phone ?? '',
-        email: d.email ?? '',
-        status: d.status,
-        source: d.source ?? 'Manual',
-        utm_source: d.utm_source ?? undefined,
-        utm_campaign: d.utm_campaign ?? undefined,
-        utm_medium: d.utm_medium ?? undefined,
-        utm_content: d.utm_content ?? undefined,
-        utm_term: d.utm_term ?? undefined,
-        landing_page_url: d.landing_page_url ?? undefined,
-        referrer_url: d.referrer_url ?? undefined,
-        gclid: d.gclid ?? undefined,
-        gbraid: d.gbraid ?? undefined,
-        wbraid: d.wbraid ?? undefined,
-        fbclid: d.fbclid ?? undefined,
-        fbc: d.fbc ?? undefined,
-        fbp: d.fbp ?? undefined,
-        first_touch_at: d.first_touch_at ?? undefined,
-        first_touch_channel: d.first_touch_channel ?? undefined,
-        last_touch_at: d.last_touch_at ?? undefined,
-        last_touch_channel: d.last_touch_channel ?? undefined,
-        lead_score_total: d.lead_score_total ?? undefined,
-        lead_score_last: d.lead_score_last ?? undefined,
-        lead_score_updated_at: d.lead_score_updated_at ?? undefined,
+        id: d.id, name: d.name ?? 'Lead', phone: d.phone ?? '', email: d.email ?? '',
+        status: d.status, source: d.source ?? 'Manual',
+        utm_source: d.utm_source, utm_campaign: d.utm_campaign, utm_medium: d.utm_medium,
+        utm_content: d.utm_content, utm_term: d.utm_term,
+        landing_page_url: d.landing_page_url, referrer_url: d.referrer_url,
+        gclid: d.gclid, gbraid: d.gbraid, wbraid: d.wbraid,
+        fbclid: d.fbclid, fbc: d.fbc, fbp: d.fbp,
+        first_touch_at: d.first_touch_at, first_touch_channel: d.first_touch_channel,
+        last_touch_at: d.last_touch_at, last_touch_channel: d.last_touch_channel,
+        lead_score_total: d.lead_score_total, lead_score_last: d.lead_score_last,
+        lead_score_updated_at: d.lead_score_updated_at,
         lastInteraction: formatRelativeTime(d.last_interaction_at ?? d.created_at),
-        value: d.value ?? undefined,
-        assigned_to: d.assigned_to ?? undefined,
-        raw: d.raw ?? undefined,
-        created_at: d.created_at ?? undefined,
-        updated_at: d.updated_at ?? undefined,
+        value: d.value, assigned_to: d.assigned_to, raw: d.raw,
+        created_at: d.created_at, updated_at: d.updated_at,
       }));
       setLeads(mapped);
     } catch (e: any) {
-      console.error(e);
       setError(e?.message ?? 'Erro ao carregar leads.');
       setLeads([]);
     } finally {
@@ -123,63 +133,51 @@ export const ContactsLeads: React.FC<ContactsLeadsProps> = ({ companyId }) => {
     }
   }, [companyId, readOnlyMode]);
 
-  useEffect(() => {
-    void fetchLeads();
-  }, [fetchLeads]);
+  useEffect(() => { void fetchLeads(); }, [fetchLeads]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return leads.filter((l) => {
       if (status !== 'all' && l.status !== status) return false;
       if (!q) return true;
-      const hay = `${l.name} ${l.email} ${l.phone} ${l.source}`.toLowerCase();
-      return hay.includes(q);
+      return `${l.name} ${l.email} ${l.phone} ${l.source}`.toLowerCase().includes(q);
     });
   }, [leads, search, status]);
 
-  const fetchLeadTimeline = useCallback(
-    async (leadId: string) => {
-      if (readOnlyMode) return;
-      if (!companyId) return;
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: leads.length };
+    for (const l of leads) c[l.status] = (c[l.status] ?? 0) + 1;
+    return c;
+  }, [leads]);
 
-      setDetailError(null);
-      setDetailLoading(true);
-      try {
-        const [{ data: events, error: eventsError }, { data: convs, error: convsError }] = await Promise.all([
-          supabase
-            .from('lead_events')
-            .select('id,type,channel,summary,raw,occurred_at,created_at')
-            .eq('company_id', companyId)
-            .eq('lead_id', leadId)
-            .order('occurred_at', { ascending: false })
-            .limit(200),
-          supabase
-            .from('conversion_events')
-            .select('id,provider,event_key,status,attempts,last_error,event_time,created_at,updated_at')
-            .eq('company_id', companyId)
-            .eq('lead_id', leadId)
-            .order('created_at', { ascending: false })
-            .limit(200),
-        ]);
-        if (eventsError) throw eventsError;
-        if (convsError) throw convsError;
-        setLeadEvents(events ?? []);
-        setConversionEvents(convs ?? []);
-      } catch (e: any) {
-        console.error(e);
-        setDetailError(e?.message ?? 'Erro ao carregar histórico do contato.');
-        setLeadEvents([]);
-        setConversionEvents([]);
-      } finally {
-        setDetailLoading(false);
-      }
-    },
-    [companyId, readOnlyMode]
-  );
+  const fetchLeadTimeline = useCallback(async (leadId: string) => {
+    if (readOnlyMode || !companyId) return;
+    setDetailError(null);
+    setDetailLoading(true);
+    try {
+      const [{ data: events, error: evErr }, { data: convs, error: convErr }] = await Promise.all([
+        supabase.from('lead_events').select('id,type,channel,summary,raw,occurred_at,created_at')
+          .eq('company_id', companyId).eq('lead_id', leadId)
+          .order('occurred_at', { ascending: false }).limit(200),
+        supabase.from('conversion_events').select('id,provider,event_key,status,attempts,last_error,event_time,created_at,updated_at')
+          .eq('company_id', companyId).eq('lead_id', leadId)
+          .order('created_at', { ascending: false }).limit(200),
+      ]);
+      if (evErr) throw evErr;
+      if (convErr) throw convErr;
+      setLeadEvents(events ?? []);
+      setConversionEvents(convs ?? []);
+    } catch (e: any) {
+      setDetailError(e?.message ?? 'Erro ao carregar historico.');
+      setLeadEvents([]);
+      setConversionEvents([]);
+    } finally {
+      setDetailLoading(false);
+    }
+  }, [companyId, readOnlyMode]);
 
   useEffect(() => {
-    if (!selectedLeadId) return;
-    void fetchLeadTimeline(selectedLeadId);
+    if (selectedLeadId) void fetchLeadTimeline(selectedLeadId);
   }, [fetchLeadTimeline, selectedLeadId]);
 
   const closeDetails = () => {
@@ -192,315 +190,424 @@ export const ContactsLeads: React.FC<ContactsLeadsProps> = ({ companyId }) => {
 
   if (readOnlyMode) {
     return (
-      <div className="cr8-card h-[calc(100vh-8rem)] flex items-center justify-center">
-        <div className="max-w-md text-center px-6">
+      <div className="h-[calc(100vh-8rem)] flex items-center justify-center">
+        <div className="text-center space-y-2">
           <h2 className="text-xl font-bold text-[hsl(var(--foreground))]">Contatos & Leads</h2>
-          <p className="text-[hsl(var(--muted-foreground))] mt-2 text-sm">Configure o Supabase para habilitar este módulo.</p>
+          <p className="text-sm text-[hsl(var(--muted-foreground))]">Configure o Supabase para habilitar este modulo.</p>
         </div>
       </div>
     );
   }
 
+  const STATUS_FILTERS: Array<{ value: 'all' | Lead['status']; label: string }> = [
+    { value: 'all', label: 'Todos' },
+    { value: 'new', label: 'Novos' },
+    { value: 'contacted', label: 'Contato' },
+    { value: 'proposal', label: 'Proposta' },
+    { value: 'won', label: 'Ganhos' },
+    { value: 'lost', label: 'Perdidos' },
+  ];
+
   return (
     <>
-      <div className="space-y-6">
-        <div className="flex items-start justify-between gap-4">
+      <div className="space-y-5 pb-4">
+        {/* Header */}
+        <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}
+          className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-3xl font-bold text-[hsl(var(--foreground))]">Contatos & Leads</h1>
-            <p className="text-[hsl(var(--muted-foreground))] mt-1 text-sm">Lista completa de leads da empresa selecionada.</p>
+            <h2 className="text-2xl font-extrabold tracking-tight text-[hsl(var(--foreground))]">Contatos</h2>
+            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">Base de leads da empresa</p>
+            {error && <p className="text-xs text-red-400 mt-1">{error}</p>}
           </div>
-
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => void fetchLeads()}
-              className="px-3 py-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--card))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] flex items-center gap-2"
-              title="Atualizar"
-            >
-              <RefreshCw className="w-4 h-4" />
-              Atualizar
+            <button onClick={() => void fetchLeads()}
+              className="p-2 rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors">
+              <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <button
-              onClick={() => setIsModalOpen(true)}
-              className="px-3 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 flex items-center gap-2"
-              title="Novo lead"
-            >
-              <Plus className="w-4 h-4" />
-              Novo lead
+            <button onClick={() => setIsModalOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-[hsl(var(--primary))] text-white text-sm font-semibold hover:opacity-90 transition-opacity shadow-sm shadow-[hsl(var(--primary))]/20">
+              <Plus className="h-4 w-4" /> Novo Lead
             </button>
           </div>
-        </div>
+        </motion.div>
 
-        <div className="cr8-card p-4">
-          <div className="flex flex-col lg:flex-row gap-3 lg:items-center lg:justify-between">
-            <div className="relative w-full lg:max-w-md">
-              <Search className="w-4 h-4 absolute left-3 top-3 text-[hsl(var(--muted-foreground))]" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por nome, e-mail, telefone ou fonte..."
-                className="w-full pl-10 pr-3 py-2 rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
-              />
-            </div>
+        {/* Stats row */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, delay: 0.05 }}
+          className="grid grid-cols-5 gap-3">
+          {(['new', 'contacted', 'proposal', 'won', 'lost'] as Lead['status'][]).map((s) => {
+            const cfg = STATUS_CONFIG[s];
+            return (
+              <button key={s} onClick={() => setStatus(status === s ? 'all' : s)}
+                className={`cr8-card p-3 text-left transition-all ${status === s ? 'ring-1 ring-[hsl(var(--primary))]/40' : 'hover:border-[hsl(var(--primary))]/20'}`}>
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <div className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))]">{cfg.label}</span>
+                </div>
+                <div className="text-2xl font-extrabold text-[hsl(var(--foreground))] tabular-nums">{counts[s] ?? 0}</div>
+              </button>
+            );
+          })}
+        </motion.div>
 
-            <div className="flex items-center gap-2">
-              <label className="text-sm text-[hsl(var(--muted-foreground))]">Status:</label>
-              <select
-                value={status}
-                onChange={(e) => setStatus(e.target.value as any)}
-                className="rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
-              >
-                <option value="all">Todos</option>
-                <option value="new">Novo</option>
-                <option value="contacted">Em contato</option>
-                <option value="proposal">Proposta</option>
-                <option value="won">Ganho</option>
-                <option value="lost">Perdido</option>
-              </select>
-            </div>
+        {/* Search + Filter bar */}
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3, delay: 0.1 }}
+          className="cr8-card p-3 flex flex-col sm:flex-row gap-3 items-stretch sm:items-center">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[hsl(var(--muted-foreground))]" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar nome, email, telefone ou fonte..."
+              className="w-full pl-9 pr-3 py-2 rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] focus:outline-none focus:ring-1 focus:ring-[hsl(var(--primary))]/50 transition-all" />
+            {search && (
+              <button onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
+          <div className="flex items-center gap-1 p-0.5 rounded-lg bg-[hsl(var(--secondary))] border border-[hsl(var(--border))]">
+            {STATUS_FILTERS.map((f) => (
+              <button key={f.value} onClick={() => setStatus(f.value)}
+                className={`px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all whitespace-nowrap ${
+                  status === f.value
+                    ? 'bg-[hsl(var(--primary))] text-white shadow-sm'
+                    : 'text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))]'
+                }`}>
+                {f.label}
+                {f.value !== 'all' && counts[f.value] ? (
+                  <span className="ml-1 opacity-70">{counts[f.value]}</span>
+                ) : f.value === 'all' ? (
+                  <span className="ml-1 opacity-70">{counts.all}</span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </motion.div>
 
-          {error && <div className="mt-4 text-sm text-[hsl(var(--destructive))]">{error}</div>}
-
-          <div className="mt-4 overflow-x-auto">
+        {/* Table */}
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.12 }}
+          className="cr8-card overflow-hidden">
+          <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
-                <tr className="text-left text-[hsl(var(--muted-foreground))] border-b border-[hsl(var(--border))]">
-                  <th className="py-3 pr-4 font-medium">Contato</th>
-                  <th className="py-3 pr-4 font-medium">Status</th>
-                  <th className="py-3 pr-4 font-medium">Fonte</th>
-                  <th className="py-3 pr-4 font-medium">Última interação</th>
-                  <th className="py-3 pr-4 font-medium">Valor</th>
+                <tr className="border-b border-[hsl(var(--border))]">
+                  {['Contato', 'Status', 'Fonte', 'Ultima Interacao', 'Valor', 'Score'].map((h) => (
+                    <th key={h} className="px-4 py-3 text-left text-[10px] font-bold uppercase tracking-widest text-[hsl(var(--muted-foreground))]">{h}</th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
-                  <tr>
-                    <td colSpan={5} className="py-6 text-[hsl(var(--muted-foreground))]">
-                      Carregando…
-                    </td>
-                  </tr>
+                  [...Array(5)].map((_, i) => (
+                    <tr key={i} className="border-b border-[hsl(var(--border))]/50">
+                      {[...Array(6)].map((_, j) => (
+                        <td key={j} className="px-4 py-3.5">
+                          <div className={`h-3.5 rounded animate-shimmer ${j === 0 ? 'w-32' : 'w-16'}`} />
+                        </td>
+                      ))}
+                    </tr>
+                  ))
                 ) : filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-10 text-center text-[hsl(var(--muted-foreground))]">
-                      Nenhum lead encontrado.
+                    <td colSpan={6} className="px-4 py-16 text-center text-sm text-[hsl(var(--muted-foreground))]">
+                      {search ? `Nenhum resultado para "${search}"` : 'Nenhum lead encontrado.'}
                     </td>
                   </tr>
                 ) : (
-                  filtered.map((lead) => (
-                    <tr
-                      key={lead.id}
-                      className="border-b border-[hsl(var(--border))] hover:bg-[hsl(var(--secondary)/0.4)] cursor-pointer"
-                      onClick={() => setSelectedLeadId(lead.id)}
-                    >
-                      <td className="py-4 pr-4">
-                        <div className="font-semibold text-[hsl(var(--foreground))]">{lead.name}</div>
-                        <div className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
-                          {lead.email ? lead.email : '—'} {lead.phone ? `• ${lead.phone}` : ''}
-                        </div>
-                        {(lead.utm_source || lead.utm_medium || lead.utm_campaign) && (
-                          <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">
-                            UTM: {lead.utm_source ?? '—'}
-                            {lead.utm_medium ? ` / ${lead.utm_medium}` : ''}
-                            {lead.utm_campaign ? ` / ${lead.utm_campaign}` : ''}
+                  filtered.map((lead, idx) => {
+                    const cfg = STATUS_CONFIG[lead.status];
+                    const score = lead.lead_score_total ?? 0;
+                    return (
+                      <motion.tr
+                        key={lead.id}
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: Math.min(idx * 0.02, 0.3) }}
+                        onClick={() => setSelectedLeadId(lead.id)}
+                        className="border-b border-[hsl(var(--border))]/40 hover:bg-[hsl(var(--secondary))]/60 cursor-pointer transition-colors group"
+                      >
+                        {/* Contact */}
+                        <td className="px-4 py-3.5">
+                          <div className="flex items-center gap-3">
+                            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 ${avatarColor(lead.id)}`}>
+                              {initials(lead.name)}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-semibold text-[hsl(var(--foreground))] truncate leading-tight">{lead.name}</p>
+                              <p className="text-[11px] text-[hsl(var(--muted-foreground))] truncate mt-0.5">
+                                {lead.email || lead.phone || '--'}
+                              </p>
+                            </div>
                           </div>
-                        )}
-                      </td>
-                      <td className="py-4 pr-4">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-xs ${statusBadge[lead.status]}`}>
-                          {statusLabel[lead.status]}
-                        </span>
-                      </td>
-                      <td className="py-4 pr-4 text-[hsl(var(--foreground))]">{lead.source}</td>
-                      <td className="py-4 pr-4 text-[hsl(var(--foreground))]">{lead.lastInteraction}</td>
-                      <td className="py-4 pr-4 text-[hsl(var(--foreground))]">
-                        {lead.value != null ? `R$ ${lead.value.toLocaleString('pt-BR')}` : '—'}
-                      </td>
-                    </tr>
-                  ))
+                        </td>
+                        {/* Status */}
+                        <td className="px-4 py-3.5">
+                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${cfg.badge}`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+                            {cfg.label}
+                          </span>
+                        </td>
+                        {/* Source */}
+                        <td className="px-4 py-3.5">
+                          <span className={`inline-block px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide ${sourceColor(lead.source ?? '')}`}>
+                            {lead.source ?? 'Manual'}
+                          </span>
+                        </td>
+                        {/* Last interaction */}
+                        <td className="px-4 py-3.5">
+                          <span className="text-xs text-[hsl(var(--muted-foreground))]">{lead.lastInteraction}</span>
+                        </td>
+                        {/* Value */}
+                        <td className="px-4 py-3.5">
+                          {lead.value != null ? (
+                            <span className="text-sm font-semibold text-[hsl(var(--foreground))]">
+                              R$ {lead.value.toLocaleString('pt-BR')}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-[hsl(var(--muted-foreground))]">--</span>
+                          )}
+                        </td>
+                        {/* Score */}
+                        <td className="px-4 py-3.5">
+                          {score > 0 ? (
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 h-1 rounded-full bg-[hsl(var(--muted))] overflow-hidden w-16">
+                                <div className="h-full bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--accent))]"
+                                  style={{ width: `${Math.min((score / 100) * 100, 100)}%` }} />
+                              </div>
+                              <span className="text-[11px] font-bold text-[hsl(var(--foreground))]">{score}</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-[hsl(var(--muted-foreground))]">--</span>
+                          )}
+                        </td>
+                      </motion.tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
-        </div>
+
+          {/* Footer */}
+          {!loading && filtered.length > 0 && (
+            <div className="px-4 py-2.5 border-t border-[hsl(var(--border))]/50 flex items-center justify-between">
+              <span className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                {filtered.length} de {leads.length} contatos
+              </span>
+              <div className="flex items-center gap-3">
+                {(['won', 'lost'] as Lead['status'][]).map((s) => (
+                  <span key={s} className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                    {STATUS_CONFIG[s].label}: <strong className="text-[hsl(var(--foreground))]">{counts[s] ?? 0}</strong>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </motion.div>
       </div>
 
-      {selectedLeadId &&
-        createPortal(
-          <div className="fixed inset-0 z-[110] bg-black/70 flex justify-end" onMouseDown={closeDetails}>
-            <div
-              className="w-full max-w-xl h-full bg-[hsl(var(--background))] border-l border-[hsl(var(--border))] overflow-y-auto"
+      {/* Detail slide-over */}
+      {selectedLeadId && createPortal(
+        <AnimatePresence>
+          <motion.div
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[110] bg-black/60 flex justify-end"
+            onMouseDown={closeDetails}
+          >
+            <motion.div
+              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }}
+              transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+              className="w-full max-w-[480px] h-full bg-[hsl(var(--background))] border-l border-[hsl(var(--border))] flex flex-col overflow-hidden"
               onMouseDown={(e) => e.stopPropagation()}
             >
-              <div className="p-5 border-b border-[hsl(var(--border))] flex items-start justify-between gap-3">
-                <div>
-                  <div className="text-lg font-semibold text-[hsl(var(--foreground))]">{selectedLead?.name ?? 'Contato'}</div>
-                  <div className="mt-1 text-sm text-[hsl(var(--muted-foreground))]">
-                    {selectedLead?.email ? selectedLead.email : '—'} {selectedLead?.phone ? `• ${selectedLead.phone}` : ''}
+              {/* Panel header */}
+              <div className="px-5 py-4 border-b border-[hsl(var(--border))] flex items-start justify-between gap-3 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className={`h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0 ${avatarColor(selectedLeadId)}`}>
+                    {initials(selectedLead?.name ?? '?')}
+                  </div>
+                  <div>
+                    <p className="font-bold text-[hsl(var(--foreground))] leading-tight">{selectedLead?.name ?? 'Contato'}</p>
+                    <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                      {selectedLead?.email || selectedLead?.phone || '--'}
+                    </p>
                   </div>
                 </div>
-                <button
-                  onClick={closeDetails}
-                  className="px-3 py-2 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))]"
-                >
-                  Fechar
-                </button>
+                <div className="flex items-center gap-2">
+                  {selectedLead && (
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${STATUS_CONFIG[selectedLead.status].badge}`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${STATUS_CONFIG[selectedLead.status].dot}`} />
+                      {STATUS_CONFIG[selectedLead.status].label}
+                    </span>
+                  )}
+                  <button onClick={closeDetails}
+                    className="p-1.5 rounded-lg hover:bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors">
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
 
-              <div className="p-5 space-y-6">
-                {detailError && <div className="text-sm text-[hsl(var(--destructive))]">{detailError}</div>}
+              {/* Panel body */}
+              <div className="flex-1 overflow-y-auto cr8-scroll p-5 space-y-5">
+                {detailError && (
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-red-500/10 border border-red-500/20 text-xs text-red-400">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {detailError}
+                  </div>
+                )}
 
-                <section className="cr8-card p-4">
-                  <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Atribuição</div>
-                  <div className="mt-3 grid grid-cols-1 gap-2 text-sm">
-                    <div className="flex justify-between gap-4">
-                      <span className="text-[hsl(var(--muted-foreground))]">Primeiro toque</span>
-                      <span className="text-[hsl(var(--foreground))]">
-                        {selectedLead?.first_touch_channel ?? '—'} • {formatRelativeTime(selectedLead?.first_touch_at)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                      <span className="text-[hsl(var(--muted-foreground))]">Último toque</span>
-                      <span className="text-[hsl(var(--foreground))]">
-                        {selectedLead?.last_touch_channel ?? '—'} • {formatRelativeTime(selectedLead?.last_touch_at)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                      <span className="text-[hsl(var(--muted-foreground))]">UTM</span>
-                      <span className="text-[hsl(var(--foreground))]">
-                        {selectedLead?.utm_source ?? '—'}
-                        {selectedLead?.utm_medium ? ` / ${selectedLead.utm_medium}` : ''}
-                        {selectedLead?.utm_campaign ? ` / ${selectedLead.utm_campaign}` : ''}
-                      </span>
-                    </div>
-                    {selectedLead?.landing_page_url && (
-                      <div className="flex justify-between gap-4">
-                        <span className="text-[hsl(var(--muted-foreground))]">Landing</span>
-                        <span className="text-[hsl(var(--foreground))] break-all">{selectedLead.landing_page_url}</span>
+                {/* Value + Score */}
+                {(selectedLead?.value || (selectedLead?.lead_score_total ?? 0) > 0) && (
+                  <div className="flex gap-3">
+                    {selectedLead?.value != null && (
+                      <div className="flex-1 cr8-card p-3.5 text-center">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))] mb-1">Valor</p>
+                        <p className="text-xl font-extrabold text-[hsl(var(--foreground))]">
+                          R$ {selectedLead.value.toLocaleString('pt-BR')}
+                        </p>
                       </div>
                     )}
-                    {selectedLead?.referrer_url && (
-                      <div className="flex justify-between gap-4">
-                        <span className="text-[hsl(var(--muted-foreground))]">Referrer</span>
-                        <span className="text-[hsl(var(--foreground))] break-all">{selectedLead.referrer_url}</span>
-                      </div>
-                    )}
-                    {(selectedLead?.gclid || selectedLead?.gbraid || selectedLead?.wbraid) && (
-                      <div className="flex justify-between gap-4">
-                        <span className="text-[hsl(var(--muted-foreground))]">Click ID</span>
-                        <span className="text-[hsl(var(--foreground))] font-mono text-xs break-all">
-                          {selectedLead.gclid ?? selectedLead.gbraid ?? selectedLead.wbraid}
-                        </span>
-                      </div>
-                    )}
-                    {(selectedLead?.fbclid || selectedLead?.fbc || selectedLead?.fbp) && (
-                      <div className="flex justify-between gap-4">
-                        <span className="text-[hsl(var(--muted-foreground))]">Meta IDs</span>
-                        <span className="text-[hsl(var(--foreground))] font-mono text-xs break-all">
-                          {selectedLead.fbclid ?? selectedLead.fbc ?? selectedLead.fbp}
-                        </span>
+                    {(selectedLead?.lead_score_total ?? 0) > 0 && (
+                      <div className="flex-1 cr8-card p-3.5 text-center">
+                        <p className="text-[10px] font-semibold uppercase tracking-wider text-[hsl(var(--muted-foreground))] mb-1">Lead Score</p>
+                        <p className="text-xl font-extrabold text-[hsl(var(--foreground))]">{selectedLead?.lead_score_total}</p>
+                        <div className="h-1 rounded-full bg-[hsl(var(--muted))] mt-1.5 overflow-hidden">
+                          <div className="h-full bg-gradient-to-r from-[hsl(var(--primary))] to-[hsl(var(--accent))]"
+                            style={{ width: `${Math.min(((selectedLead?.lead_score_total ?? 0) / 100) * 100, 100)}%` }} />
+                        </div>
                       </div>
                     )}
                   </div>
-                </section>
+                )}
 
-                <section className="cr8-card p-4">
-                  <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Lead Score</div>
-                  <div className="mt-3 grid grid-cols-1 gap-2 text-sm">
-                    <div className="flex justify-between gap-4">
-                      <span className="text-[hsl(var(--muted-foreground))]">Total</span>
-                      <span className="text-[hsl(var(--foreground))]">{selectedLead?.lead_score_total ?? '—'}</span>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                      <span className="text-[hsl(var(--muted-foreground))]">Último</span>
-                      <span className="text-[hsl(var(--foreground))]">{selectedLead?.lead_score_last ?? '—'}</span>
-                    </div>
-                    <div className="flex justify-between gap-4">
-                      <span className="text-[hsl(var(--muted-foreground))]">Atualizado</span>
-                      <span className="text-[hsl(var(--foreground))]">{formatRelativeTime(selectedLead?.lead_score_updated_at)}</span>
-                    </div>
+                {/* Attribution */}
+                <div className="cr8-card overflow-hidden">
+                  <div className="flex items-center gap-2 px-4 py-3 border-b border-[hsl(var(--border))]">
+                    <Link2 className="h-3.5 w-3.5 text-[hsl(var(--primary))]" />
+                    <span className="text-xs font-bold text-[hsl(var(--foreground))]">Atribuicao</span>
                   </div>
-                </section>
+                  <div className="divide-y divide-[hsl(var(--border))]/50">
+                    {[
+                      { label: 'Primeiro toque', value: `${selectedLead?.first_touch_channel ?? '--'} · ${formatRelativeTime(selectedLead?.first_touch_at)}` },
+                      { label: 'Ultimo toque',   value: `${selectedLead?.last_touch_channel ?? '--'} · ${formatRelativeTime(selectedLead?.last_touch_at)}` },
+                      { label: 'UTM Source',     value: selectedLead?.utm_source },
+                      { label: 'UTM Medium',     value: selectedLead?.utm_medium },
+                      { label: 'UTM Campaign',   value: selectedLead?.utm_campaign },
+                      { label: 'Landing Page',   value: selectedLead?.landing_page_url },
+                      { label: 'Referrer',       value: selectedLead?.referrer_url },
+                      { label: 'Click ID (Google)', value: selectedLead?.gclid ?? selectedLead?.gbraid ?? selectedLead?.wbraid },
+                      { label: 'Click ID (Meta)', value: selectedLead?.fbclid ?? selectedLead?.fbc },
+                    ]
+                      .filter((r) => r.value)
+                      .map((row) => (
+                        <div key={row.label} className="flex items-start justify-between gap-3 px-4 py-2.5">
+                          <span className="text-[11px] text-[hsl(var(--muted-foreground))] shrink-0">{row.label}</span>
+                          <span className="text-[11px] text-[hsl(var(--foreground))] text-right break-all font-mono">{row.value}</span>
+                        </div>
+                      ))}
+                  </div>
+                </div>
 
-                <section className="cr8-card p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Histórico</div>
-                    <button
-                      onClick={() => selectedLeadId && fetchLeadTimeline(selectedLeadId)}
-                      className="px-3 py-2 rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] flex items-center gap-2 text-sm"
+                {/* Timeline */}
+                <div className="cr8-card overflow-hidden">
+                  <div className="flex items-center justify-between gap-2 px-4 py-3 border-b border-[hsl(var(--border))]">
+                    <div className="flex items-center gap-2">
+                      <Clock className="h-3.5 w-3.5 text-[hsl(var(--primary))]" />
+                      <span className="text-xs font-bold text-[hsl(var(--foreground))]">Historico</span>
+                    </div>
+                    <button onClick={() => selectedLeadId && fetchLeadTimeline(selectedLeadId)}
                       disabled={detailLoading}
-                    >
-                      <RefreshCw className="w-4 h-4" />
-                      Atualizar
+                      className="p-1 rounded-md hover:bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors disabled:opacity-40">
+                      <RefreshCw className={`h-3.5 w-3.5 ${detailLoading ? 'animate-spin' : ''}`} />
                     </button>
                   </div>
 
                   {detailLoading ? (
-                    <div className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">Carregando…</div>
-                  ) : leadEvents.length === 0 ? (
-                    <div className="mt-4 text-sm text-[hsl(var(--muted-foreground))]">Sem eventos ainda.</div>
-                  ) : (
-                    <div className="mt-4 space-y-3">
-                      {leadEvents.map((ev) => (
-                        <div key={ev.id} className="border border-[hsl(var(--border))] rounded-lg p-3 bg-[hsl(var(--card))]">
-                          <div className="flex items-start justify-between gap-3">
-                            <div>
-                              <div className="text-sm font-medium text-[hsl(var(--foreground))]">{ev.summary ?? ev.type}</div>
-                              <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
-                                {ev.channel} • {formatRelativeTime(ev.occurred_at ?? ev.created_at)}
-                              </div>
-                            </div>
-                            <span className="text-[10px] px-2 py-1 rounded-full bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] border border-[hsl(var(--border))]">
-                              {ev.type}
-                            </span>
-                          </div>
-                        </div>
+                    <div className="p-4 space-y-2">
+                      {[...Array(3)].map((_, i) => (
+                        <div key={i} className="h-10 rounded-lg animate-shimmer" />
                       ))}
                     </div>
-                  )}
-                </section>
-
-                <section className="cr8-card p-4">
-                  <div className="text-sm font-semibold text-[hsl(var(--foreground))]">Conversões (Outbox)</div>
-                  {conversionEvents.length === 0 ? (
-                    <div className="mt-3 text-sm text-[hsl(var(--muted-foreground))]">Nenhuma conversão enfileirada.</div>
+                  ) : leadEvents.length === 0 ? (
+                    <div className="px-4 py-8 text-center text-xs text-[hsl(var(--muted-foreground))]">
+                      Sem eventos registrados.
+                    </div>
                   ) : (
-                    <div className="mt-3 space-y-2 text-sm">
+                    <div className="p-4">
+                      <div className="relative pl-5 space-y-3">
+                        {/* Vertical line */}
+                        <div className="absolute left-[7px] top-1 bottom-1 w-px bg-[hsl(var(--border))]" />
+                        {leadEvents.map((ev) => (
+                          <div key={ev.id} className="relative flex gap-3">
+                            <div className="absolute -left-5 top-1 h-3.5 w-3.5 rounded-full border-2 border-[hsl(var(--border))] bg-[hsl(var(--background))] flex items-center justify-center text-[hsl(var(--muted-foreground))]">
+                              {eventIcon(ev.type)}
+                            </div>
+                            <div className="flex-1 min-w-0 bg-[hsl(var(--secondary))] rounded-lg px-3 py-2.5 border border-[hsl(var(--border))]">
+                              <div className="flex items-start justify-between gap-2">
+                                <p className="text-xs font-semibold text-[hsl(var(--foreground))] leading-tight">
+                                  {ev.summary ?? ev.type}
+                                </p>
+                                <span className="text-[10px] text-[hsl(var(--muted-foreground))] whitespace-nowrap shrink-0">
+                                  {formatRelativeTime(ev.occurred_at ?? ev.created_at)}
+                                </span>
+                              </div>
+                              {ev.channel && (
+                                <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-0.5">{ev.channel}</p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Conversions */}
+                {conversionEvents.length > 0 && (
+                  <div className="cr8-card overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-3 border-b border-[hsl(var(--border))]">
+                      <BarChart2 className="h-3.5 w-3.5 text-[hsl(var(--accent))]" />
+                      <span className="text-xs font-bold text-[hsl(var(--foreground))]">Conversoes Outbox</span>
+                    </div>
+                    <div className="divide-y divide-[hsl(var(--border))]/50">
                       {conversionEvents.map((c) => (
-                        <div
-                          key={c.id}
-                          className="flex items-start justify-between gap-3 border border-[hsl(var(--border))] rounded-lg p-3 bg-[hsl(var(--card))]"
-                        >
-                          <div>
-                            <div className="text-[hsl(var(--foreground))] font-medium">
+                        <div key={c.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold text-[hsl(var(--foreground))]">
                               {c.provider}:{c.event_key}
-                            </div>
-                            <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">
-                              {formatRelativeTime(c.created_at)} • tentativas: {c.attempts ?? 0}
-                            </div>
+                            </p>
+                            <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-0.5">
+                              {formatRelativeTime(c.created_at)} · {c.attempts ?? 0} tentativas
+                            </p>
                             {c.last_error && (
-                              <div className="mt-1 text-xs text-[hsl(var(--destructive))] break-words">{c.last_error}</div>
+                              <p className="text-[10px] text-red-400 mt-0.5 break-all">{c.last_error}</p>
                             )}
                           </div>
-                          <span className="text-[10px] px-2 py-1 rounded-full bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] border border-[hsl(var(--border))]">
+                          <span className={`shrink-0 inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full border ${
+                            c.status === 'sent' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/20'
+                            : c.status === 'failed' ? 'bg-red-500/15 text-red-300 border-red-500/20'
+                            : 'bg-yellow-500/15 text-yellow-300 border-yellow-500/20'
+                          }`}>
+                            {c.status === 'sent' ? <CheckCircle2 className="h-3 w-3" />
+                              : c.status === 'failed' ? <XCircle className="h-3 w-3" />
+                              : <Clock className="h-3 w-3" />}
                             {c.status}
                           </span>
                         </div>
                       ))}
                     </div>
-                  )}
-                </section>
+                  </div>
+                )}
               </div>
-            </div>
-          </div>,
-          document.body
-        )}
+            </motion.div>
+          </motion.div>
+        </AnimatePresence>,
+        document.body
+      )}
 
       <NewLeadModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        onSave={(newLead) => {
-          setLeads((prev) => [newLead, ...prev]);
-        }}
+        onSave={(newLead) => setLeads((prev) => [newLead, ...prev])}
         companyId={companyId}
       />
     </>
