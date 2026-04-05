@@ -157,22 +157,6 @@ const normalizeLowerBetter = (value: number, min: number, max: number) => {
   return clamp01(1 - normalizeHigherBetter(value, min, max));
 };
 
-// Absolute benchmark scores for video metrics
-const scoreHookRateAbsolute = (hr: number | undefined): number => {
-  if (hr == null) return 0.5;
-  if (hr >= 0.30) return 1.0;
-  if (hr >= 0.15) return 0.7 + ((hr - 0.15) / 0.15) * 0.3;
-  if (hr >= 0.05) return 0.4 + ((hr - 0.05) / 0.10) * 0.3;
-  return clamp01((hr / 0.05) * 0.4);
-};
-
-const scoreHoldRateAbsolute = (hr: number | undefined): number => {
-  if (hr == null) return 0.5;
-  if (hr >= 0.40) return 1.0;
-  if (hr >= 0.25) return 0.7 + ((hr - 0.25) / 0.15) * 0.3;
-  if (hr >= 0.10) return 0.4 + ((hr - 0.10) / 0.15) * 0.3;
-  return clamp01((hr / 0.10) * 0.4);
-};
 
 const svgAvatarDataUrl = (text: string, fg = '#111827', bg = '#E5E7EB') => {
   const label = (text || 'CR8').trim().slice(0, 2).toUpperCase();
@@ -524,38 +508,41 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   };
 
   const computeScores = (items: AdMetric[]) => {
-    const resultsValues = items.map((r) => r.results ?? 0);
+    // IDC v2: Hook 30% + Hold 30% + CTR 25% + CPC 15% (normalizacao relativa)
+    const hookValues = items.map((r) => r.hookRate ?? 0);
+    const holdValues = items.map((r) => r.holdRate ?? 0);
     const ctrValues = items.map((r) => r.ctr ?? 0);
-    const cprValues = items
-      .map((r) => r.costPerResult)
-      .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+    const cpcValues = items.map((r) => r.cpc).filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
 
-    const minResults = resultsValues.length ? Math.min(...resultsValues) : 0;
-    const maxResults = resultsValues.length ? Math.max(...resultsValues) : 0;
-    const minCtr = ctrValues.length ? Math.min(...ctrValues) : 0;
-    const maxCtr = ctrValues.length ? Math.max(...ctrValues) : 0;
-    const minCpr = cprValues.length ? Math.min(...cprValues) : 0;
-    const maxCpr = cprValues.length ? Math.max(...cprValues) : 0;
+    const [minHook, maxHook] = [Math.min(...hookValues), Math.max(...hookValues)];
+    const [minHold, maxHold] = [Math.min(...holdValues), Math.max(...holdValues)];
+    const [minCtr, maxCtr] = [Math.min(...ctrValues), Math.max(...ctrValues)];
+    const [minCpc, maxCpc] = cpcValues.length ? [Math.min(...cpcValues), Math.max(...cpcValues)] : [0, 1];
 
     return items.map((row) => {
-      const results = row.results ?? 0;
-      const cpr = row.costPerResult;
-      const ctr = row.ctr ?? 0;
+      const scoreHook = normalizeHigherBetter(row.hookRate ?? 0, minHook, maxHook);
+      const scoreHold = normalizeHigherBetter(row.holdRate ?? 0, minHold, maxHold);
+      const scoreCtr = normalizeHigherBetter(row.ctr ?? 0, minCtr, maxCtr);
+      const scoreCpc = row.cpc != null && Number.isFinite(row.cpc) ? normalizeLowerBetter(row.cpc, minCpc, maxCpc) : 0;
 
-      const scoreResults01 = normalizeHigherBetter(results, minResults, maxResults);
-      const scoreCpr01 = cpr != null ? normalizeLowerBetter(cpr, minCpr, maxCpr) : 0;
-      const scoreCtr01 = normalizeHigherBetter(ctr, minCtr, maxCtr);
-      const scoreHook01 = scoreHookRateAbsolute(row.hookRate);
-      const scoreHold01 = scoreHoldRateAbsolute(row.holdRate);
+      const hasHook = row.hookRate != null;
+      const hasHold = row.holdRate != null;
+      const hasCpc = row.cpc != null && Number.isFinite(row.cpc);
 
-      // Weighted IDC: Results 30%, CPR 25%, CTR 20%, Hook 15%, Hold 10%
-      const hasVideo = row.hookRate != null || row.holdRate != null;
-      const idc01 = hasVideo
-        ? scoreResults01 * 0.30 + scoreCpr01 * 0.25 + scoreCtr01 * 0.20 + scoreHook01 * 0.15 + scoreHold01 * 0.10
-        : (scoreResults01 + scoreCpr01 + scoreCtr01) / 3;
+      // Pesos: Hook 30% + Hold 30% + CTR 25% + CPC 15%
+      // Redistribui pesos quando metricas de video estao ausentes
+      let idc01: number;
+      if (hasHook && hasHold) {
+        idc01 = scoreHook * 0.30 + scoreHold * 0.30 + scoreCtr * 0.25 + (hasCpc ? scoreCpc * 0.15 : scoreCtr * 0.15);
+      } else if (hasHook || hasHold) {
+        const vs = hasHook ? scoreHook : scoreHold;
+        idc01 = vs * 0.50 + scoreCtr * 0.35 + (hasCpc ? scoreCpc * 0.15 : scoreCtr * 0.15);
+      } else {
+        idc01 = hasCpc ? scoreCtr * 0.625 + scoreCpc * 0.375 : scoreCtr;
+      }
 
       const classification: AdMetric['classification'] =
-        results === 0
+        row.impressions === 0
           ? undefined
           : idc01 >= IDC_THRESHOLDS.otimo
             ? 'otimo'
@@ -565,13 +552,11 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                 ? 'regular'
                 : 'ruim';
 
-      const resultLabel = (row.resultLabel || 'Resultados').slice(0, 12);
       const scores = [
-        { label: resultLabel, value: Math.round(scoreResults01 * 100) },
-        { label: 'C/Res', value: Math.round(scoreCpr01 * 100) },
-        { label: 'CTR', value: Math.round(scoreCtr01 * 100) },
-        ...(row.hookRate != null ? [{ label: 'Hook', value: Math.round(scoreHook01 * 100) }] : []),
-        ...(row.holdRate != null ? [{ label: 'Hold', value: Math.round(scoreHold01 * 100) }] : []),
+        ...(hasHook ? [{ label: 'Hook', value: Math.round(scoreHook * 100) }] : []),
+        ...(hasHold ? [{ label: 'Hold', value: Math.round(scoreHold * 100) }] : []),
+        { label: 'CTR', value: Math.round(scoreCtr * 100) },
+        ...(hasCpc ? [{ label: 'CPC', value: Math.round(scoreCpc * 100) }] : []),
       ];
 
       const tags = [...(row.tags ?? [])];
@@ -845,8 +830,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         const video3s = extractVideo3sFromActions(row.actions);
         const video15s = extractVideo15sFromActions(row.actions) ?? extractActionTotal(row.video_thruplay_watched_actions);
         const hookRate = impressions > 0 && video3s != null && video3s > 0 ? video3s / impressions : undefined;
-        // Hold Rate = visualizacoes 15s / visualizacoes 3s (retencao apos primeiro engajamento)
-        const holdRate = video3s != null && video3s > 0 && video15s != null ? video15s / video3s : undefined;
+        // Hold Rate = visualizacoes 15s / impressoes (consistente com Hook Rate)
+        const holdRate = impressions > 0 && video15s != null && video15s > 0 ? video15s / impressions : undefined;
 
         const linkClicks = row.inline_link_clicks != null ? Math.floor(parseNumber(row.inline_link_clicks)) : undefined;
         const clicks = row.clicks != null ? Math.floor(parseNumber(row.clicks)) : undefined;
@@ -1237,6 +1222,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   const [reportError, setReportError] = useState<string | null>(null);
   const [reportPublicUrl, setReportPublicUrl] = useState<string | null>(null);
   const [reportTitle, setReportTitle] = useState('');
+  const [reportClientName, setReportClientName] = useState('');
+  const [reportAgencyName, setReportAgencyName] = useState('CR8');
   const [reportCopied, setReportCopied] = useState(false);
 
   const openReportModal = () => {
@@ -1244,8 +1231,18 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     setReportPublicUrl(null);
     setReportCopied(false);
     const period = currentAnalysisPeriod();
-    setReportTitle(`Relatorio de Trafego ${period.start ?? ''} a ${period.end ?? ''}`);
+    setReportTitle(`Relatorio ${period.start ?? ''} a ${period.end ?? ''}`);
     setReportModalOpen(true);
+  };
+
+  const calcPreviousPeriod = (start: string, end: string) => {
+    const s = new Date(start + 'T00:00:00Z');
+    const e = new Date(end + 'T00:00:00Z');
+    const deltaMs = e.getTime() - s.getTime() + 86400000;
+    const prevEnd = new Date(s.getTime() - 86400000);
+    const prevStart = new Date(s.getTime() - deltaMs);
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    return { start: iso(prevStart), end: iso(prevEnd) };
   };
 
   const generateReport = async () => {
@@ -1255,61 +1252,132 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     setReportPublicUrl(null);
     try {
       const period = currentAnalysisPeriod();
-      const totalSpend = rows.reduce((s, r) => s + r.spend, 0);
-      const totalResults = rows.reduce((s, r) => s + (r.results ?? 0), 0);
-      const totalImpressions = rows.reduce((s, r) => s + r.impressions, 0);
-      const totalClicks = rows.reduce((s, r) => s + (r.clicks ?? 0), 0);
-      const totalReach = rows.reduce((s, r) => s + (r.reach ?? 0), 0);
-      const avgCPR = totalResults > 0 ? totalSpend / totalResults : null;
-      const avgCPC = totalClicks > 0 ? totalSpend / totalClicks : null;
-      const avgCPM = totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : null;
-      const avgCTR = totalClicks > 0 && totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : null;
+      const periodStart = period.start ?? new Date().toISOString().slice(0, 10);
+      const periodEnd = period.end ?? new Date().toISOString().slice(0, 10);
 
-      const topCreatives = [...rows]
-        .filter((r) => r.idc != null && r.spend > 0)
+      // Metricas do periodo atual (soma dos rows carregados)
+      const totalSpend = rows.reduce((s, r) => s + r.spend, 0);
+      const totalImpressions = rows.reduce((s, r) => s + r.impressions, 0);
+      const totalReach = rows.reduce((s, r) => s + (r.reach ?? 0), 0);
+      const totalClicks = rows.reduce((s, r) => s + (r.clicks ?? 0), 0);
+      const totalLinkClicks = rows.reduce((s, r) => s + (r.inlineLinkClicks ?? 0), 0);
+      const totalResults = rows.reduce((s, r) => s + (r.results ?? 0), 0);
+      const primaryLabel = rows.find((r) => r.resultLabel)?.resultLabel ?? 'Resultados';
+
+      const currentSummary = {
+        invest: totalSpend,
+        impressions: totalImpressions,
+        reach: totalReach,
+        clicks: totalClicks,
+        linkClicks: totalLinkClicks,
+        ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
+        cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
+        cpm: totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0,
+        frequency: totalReach > 0 ? totalImpressions / totalReach : 0,
+        results: totalResults,
+        resultLabel: primaryLabel,
+        costPerResult: totalResults > 0 ? totalSpend / totalResults : undefined,
+      };
+
+      // Periodo anterior
+      const prevDates = calcPreviousPeriod(periodStart, periodEnd);
+      let previousSummary = null;
+      try {
+        const providerToken = await getProviderToken();
+        if (providerToken && selectedAdAccountId) {
+          const prevUrl = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${selectedAdAccountId}/insights`);
+          prevUrl.searchParams.set('level', 'account');
+          prevUrl.searchParams.set('fields', 'impressions,reach,clicks,inline_link_clicks,spend,cpc,cpm,ctr,frequency,actions');
+          prevUrl.searchParams.set('time_range', JSON.stringify({ since: prevDates.start, until: prevDates.end }));
+          prevUrl.searchParams.set('limit', '1');
+          prevUrl.searchParams.set('access_token', providerToken);
+          const prevRes = await fetch(prevUrl.toString());
+          const prevJson = await prevRes.json();
+          if (prevRes.ok && !prevJson?.error) {
+            const d = Array.isArray(prevJson?.data) ? prevJson.data[0] : null;
+            if (d) {
+              const pSpend = parseNumber(d.spend);
+              const pImpr = parseNumber(d.impressions);
+              const pReach = parseNumber(d.reach);
+              const pClicks = parseNumber(d.clicks);
+              const pLinkClicks = parseNumber(d.inline_link_clicks);
+              const pResults = (extractLeadsFromActions(d.actions) ?? 0) + (extractMessagingConversationsFromActions(d.actions) ?? 0);
+              previousSummary = {
+                invest: pSpend,
+                impressions: pImpr,
+                reach: pReach,
+                clicks: pClicks,
+                linkClicks: pLinkClicks,
+                ctr: pImpr > 0 ? (pClicks / pImpr) * 100 : 0,
+                cpc: pClicks > 0 ? pSpend / pClicks : 0,
+                cpm: pImpr > 0 ? (pSpend / pImpr) * 1000 : 0,
+                frequency: pReach > 0 ? pImpr / pReach : 0,
+                results: pResults,
+                resultLabel: primaryLabel,
+                costPerResult: pResults > 0 ? pSpend / pResults : undefined,
+              };
+            }
+          }
+        }
+      } catch {
+        // periodo anterior opcional — nao bloqueia geracao
+      }
+
+      const topAds = [...rows]
+        .filter((r) => r.spend > 0)
         .sort((a, b) => (b.idc ?? 0) - (a.idc ?? 0))
-        .slice(0, 10)
+        .slice(0, 8)
         .map((r) => ({
           id: r.adId,
           name: r.adName,
+          campaign: r.campaignName ?? r.adsetName ?? '',
           spend: r.spend,
-          results: r.results,
-          resultLabel: r.resultLabel,
-          costPerResult: r.costPerResult,
-          ctr: r.ctr,
-          hookRate: r.hookRate,
-          holdRate: r.holdRate,
-          idc: r.idc,
-          classification: r.classification,
-          thumbnail: r.thumbnail,
-          tags: r.tags,
+          impressions: r.impressions,
+          reach: r.reach ?? 0,
+          ctr: r.ctr ?? 0,
+          cpc: r.cpc ?? 0,
+          cpm: r.cpm ?? 0,
+          results: r.results ?? 0,
+          resultLabel: r.resultLabel ?? primaryLabel,
+          hookRate: r.hookRate ?? 0,
+          holdRate: r.holdRate ?? 0,
+          idc: r.idc ?? 0,
+          idcClass: r.classification === 'otimo' ? 'great' : r.classification === 'bom' ? 'good' : r.classification === 'regular' ? 'ok' : 'bad',
+          thumbnailUrl: r.imageUrl ?? r.thumbnail,
         }));
 
+      const campaigns = rows.map((r) => ({
+        name: r.adName,
+        status: r.status,
+        spend: r.spend,
+        reach: r.reach ?? 0,
+        impressions: r.impressions,
+        results: r.results ?? 0,
+        resultLabel: r.resultLabel ?? primaryLabel,
+        costPerResult: r.costPerResult ?? 0,
+        ctr: r.ctr ?? 0,
+        cpc: r.cpc ?? 0,
+        cpm: r.cpm ?? 0,
+        frequency: r.frequency ?? 0,
+        hookRate: r.hookRate,
+        holdRate: r.holdRate,
+        idc: r.idc,
+        classification: r.classification,
+      }));
+
       const reportData = {
+        clientName: reportClientName.trim() || 'Cliente',
+        agencyName: reportAgencyName.trim() || 'CR8',
         level: selectedLevel,
-        adAccountId: selectedAdAccountId,
-        summary: { totalSpend, totalResults, totalImpressions, totalClicks, totalReach, avgCPR, avgCPC, avgCPM, avgCTR },
+        periodCurrent: { label: `${periodStart} a ${periodEnd}`, start: periodStart, end: periodEnd },
+        periodPrevious: { label: `${prevDates.start} a ${prevDates.end}`, start: prevDates.start, end: prevDates.end },
+        current: currentSummary,
+        previous: previousSummary,
         timeseries: comparisonData,
-        items: rows.map((r) => ({
-          id: r.adId,
-          name: r.adName,
-          spend: r.spend,
-          results: r.results,
-          resultLabel: r.resultLabel,
-          costPerResult: r.costPerResult,
-          impressions: r.impressions,
-          reach: r.reach,
-          clicks: r.clicks,
-          ctr: r.ctr,
-          cpm: r.cpm,
-          hookRate: r.hookRate,
-          holdRate: r.holdRate,
-          idc: r.idc,
-          classification: r.classification,
-          status: r.status,
-          tags: r.tags,
-        })),
-        topCreatives,
+        campaigns,
+        topAds,
+        insights: [],
+        actionItems: [],
       };
 
       const { data, error } = await supabase
@@ -1317,9 +1385,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         .insert({
           company_id: companyId,
           created_by: userId,
-          title: reportTitle.trim() || `Relatorio de Trafego`,
-          period_start: period.start ?? new Date().toISOString().slice(0, 10),
-          period_end: period.end ?? new Date().toISOString().slice(0, 10),
+          title: reportTitle.trim() || `Relatorio de Trafego ${periodStart}`,
+          period_start: periodStart,
+          period_end: periodEnd,
           report_data: reportData,
         })
         .select('public_id')
@@ -2413,6 +2481,34 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                 </div>
                 <div className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
                   {rows.length} {selectedLevel === 'campaign' ? 'campanhas' : selectedLevel === 'adset' ? 'conjuntos' : 'anuncios'} com dados
+                </div>
+              </div>
+
+              {/* Client + Agency */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1.5">
+                    Cliente
+                  </label>
+                  <input
+                    type="text"
+                    value={reportClientName}
+                    onChange={(e) => setReportClientName(e.target.value)}
+                    className="w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                    placeholder="Nome do cliente"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1.5">
+                    Agencia
+                  </label>
+                  <input
+                    type="text"
+                    value={reportAgencyName}
+                    onChange={(e) => setReportAgencyName(e.target.value)}
+                    className="w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
+                    placeholder="Nome da agencia"
+                  />
                 </div>
               </div>
 
