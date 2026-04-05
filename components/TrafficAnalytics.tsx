@@ -802,7 +802,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
             : selectedLevel === 'adset'
               ? 'adset_id,adset_name,campaign_id,campaign_name'
               : 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name',
-          'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas,video_thruplay_watched_actions,video_3_second_watched_actions',
+          'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas,video_thruplay_watched_actions',
         ].join(','),
       );
       if (datePreset === 'custom' && dateSince && dateUntil) {
@@ -842,7 +842,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         const ctr = typeof row.ctr === 'string' || typeof row.ctr === 'number' ? parseNumber(row.ctr) : undefined;
         const roas = extractRoas(row.purchase_roas);
 
-        const video3s = extractVideo3sFromActions(row.actions) ?? extractActionTotal(row.video_3_second_watched_actions);
+        const video3s = extractVideo3sFromActions(row.actions);
         const video15s = extractVideo15sFromActions(row.actions) ?? extractActionTotal(row.video_thruplay_watched_actions);
         const hookRate = impressions > 0 && video3s != null && video3s > 0 ? video3s / impressions : undefined;
         // Hold Rate = visualizacoes 15s / visualizacoes 3s (retencao apos primeiro engajamento)
@@ -2023,10 +2023,10 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
         <div className="p-4 border-t border-[hsl(var(--border))] bg-[hsl(var(--secondary))] text-xs text-[hsl(var(--muted-foreground))] space-y-1">
           <div>
-            *Hook Rate: estimativa baseada em video views (3s) / impressões. Hold Rate: estimativa baseada em video views (15s/ThruPlay) / impressões (apenas anúncios em vídeo).
+            *Hook Rate: views 3s / impressoes. Hold Rate: views 15s (ThruPlay) / views 3s — retencao apos primeiro engajamento.
           </div>
           <div>
-            *IDC: média dos scores (Resultados, C/Res e CTR) normalizados entre os itens desta tabela. Classificação: Ótimo/Bom/Regular/Ruim por faixas de IDC.
+            *IDC: score ponderado — Resultados 30%, C/Res 25%, CTR 20%, Hook 15%, Hold 10%. Benchmarks absolutos para Hook/Hold. Classificacao: Otimo/Bom/Regular/Ruim.
           </div>
         </div>
       </div>
