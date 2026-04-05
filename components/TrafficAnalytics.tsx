@@ -755,7 +755,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         const ts = Array.isArray(tsJson?.data) ? tsJson.data : [];
         setComparisonData(
           ts.map((row: any) => ({
-            name: String(row.date_start ?? '').slice(5).replace('-', '/'),
+            name: (() => { const s = String(row.date_start ?? ''); const p = s.split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : s.slice(5).replace('-', '/'); })(),
             metaSpend: parseNumber(row.spend),
             metaLeads: (extractLeadsFromActions(row.actions) ?? 0) + (extractMessagingConversationsFromActions(row.actions) ?? 0),
           })),
@@ -1323,28 +1323,40 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         // periodo anterior opcional — nao bloqueia geracao
       }
 
-      const topAds = [...rows]
-        .filter((r) => r.spend > 0)
-        .sort((a, b) => (b.idc ?? 0) - (a.idc ?? 0))
-        .slice(0, 8)
-        .map((r) => ({
-          id: r.adId,
-          name: r.adName,
-          campaign: r.campaignName ?? r.adsetName ?? '',
-          spend: r.spend,
-          impressions: r.impressions,
-          reach: r.reach ?? 0,
-          ctr: r.ctr ?? 0,
-          cpc: r.cpc ?? 0,
-          cpm: r.cpm ?? 0,
-          results: r.results ?? 0,
-          resultLabel: r.resultLabel ?? primaryLabel,
-          hookRate: r.hookRate ?? 0,
-          holdRate: r.holdRate ?? 0,
-          idc: r.idc ?? 0,
-          idcClass: r.classification === 'otimo' ? 'great' : r.classification === 'bom' ? 'good' : r.classification === 'regular' ? 'ok' : 'bad',
-          thumbnailUrl: r.imageUrl ?? r.thumbnail,
-        }));
+      // Top 3 por campanha (apenas campanhas com gasto no periodo)
+      const campaignGroupMap = new Map<string, typeof rows>();
+      for (const r of rows.filter((row) => row.spend > 0)) {
+        const key = r.campaignName ?? r.adsetName ?? 'Sem campanha';
+        if (!campaignGroupMap.has(key)) campaignGroupMap.set(key, []);
+        campaignGroupMap.get(key)!.push(r);
+      }
+      const topAds: any[] = [];
+      for (const [, campRows] of campaignGroupMap) {
+        const sorted = [...campRows].sort((a, b) => (b.idc ?? 0) - (a.idc ?? 0));
+        for (const r of sorted.slice(0, 3)) {
+          topAds.push({
+            id: r.adId,
+            name: r.adName,
+            campaign: r.campaignName ?? r.adsetName ?? '',
+            spend: r.spend,
+            impressions: r.impressions,
+            reach: r.reach ?? 0,
+            ctr: r.ctr ?? 0,
+            cpc: r.cpc ?? 0,
+            cpm: r.cpm ?? 0,
+            frequency: r.frequency ?? 0,
+            results: r.results ?? 0,
+            resultLabel: r.resultLabel ?? primaryLabel,
+            hookRate: r.hookRate ?? 0,
+            holdRate: r.holdRate ?? 0,
+            idc: r.idc ?? 0,
+            idcClass: r.classification === 'otimo' ? 'great' : r.classification === 'bom' ? 'good' : r.classification === 'regular' ? 'ok' : 'bad',
+            thumbnailUrl: r.imageUrl ?? r.thumbnail,
+          });
+        }
+      }
+      // ordenar topAds por IDC globalmente
+      topAds.sort((a, b) => b.idc - a.idc);
 
       const campaigns = rows.map((r) => ({
         name: r.adName,
@@ -1365,20 +1377,87 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         classification: r.classification,
       }));
 
-      const reportData = {
+      const fmtDateBR = (iso: string) => {
+        const p = iso.split('-');
+        return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : iso;
+      };
+
+      const reportData: any = {
         clientName: reportClientName.trim() || 'Cliente',
         agencyName: reportAgencyName.trim() || 'CR8',
         level: selectedLevel,
-        periodCurrent: { label: `${periodStart} a ${periodEnd}`, start: periodStart, end: periodEnd },
-        periodPrevious: { label: `${prevDates.start} a ${prevDates.end}`, start: prevDates.start, end: prevDates.end },
+        periodCurrent: { label: `${fmtDateBR(periodStart)} a ${fmtDateBR(periodEnd)}`, start: periodStart, end: periodEnd },
+        periodPrevious: { label: `${fmtDateBR(prevDates.start)} a ${fmtDateBR(prevDates.end)}`, start: prevDates.start, end: prevDates.end },
         current: currentSummary,
         previous: previousSummary,
         timeseries: comparisonData,
         campaigns,
         topAds,
-        insights: [],
-        actionItems: [],
+        insights: [] as string[],
+        actionItems: [] as string[],
       };
+
+      // Gerar insights e plano de acao com IA (nao bloqueia se falhar)
+      try {
+        const local = loadLocalAiSettings(userId ?? '');
+        if (local?.apiKey) {
+          const { data: sessionData } = await supabase.auth.getSession();
+          const accessToken = sessionData.session?.access_token;
+          if (accessToken) {
+            const aiRes = await fetch(`${getSupabaseUrl()}/functions/v1/ai-assistant`, {
+              method: 'POST',
+              headers: {
+                apikey: getSupabaseAnonKey(),
+                authorization: `Bearer ${accessToken}`,
+                'content-type': 'application/json',
+              },
+              body: JSON.stringify({
+                mode: 'weekly_report',
+                company_id: companyId,
+                provider: local.provider,
+                api_key: local.apiKey,
+                model: local.model,
+                access_token: accessToken,
+                metrics: {
+                  periodLabel: reportData.periodCurrent.label,
+                  invest: currentSummary.invest,
+                  results: currentSummary.results,
+                  resultLabel: primaryLabel,
+                  costPerResult: currentSummary.costPerResult,
+                  ctr: currentSummary.ctr,
+                  cpm: currentSummary.cpm,
+                  frequency: currentSummary.frequency,
+                  previousInvest: previousSummary?.invest,
+                  previousResults: previousSummary?.results,
+                  previousCostPerResult: previousSummary?.costPerResult,
+                  topAds: topAds.slice(0, 5).map((a: any) => ({
+                    name: a.name,
+                    idc: a.idc,
+                    idcClass: a.idcClass,
+                    hookRate: a.hookRate,
+                    holdRate: a.holdRate,
+                    ctr: a.ctr,
+                    results: a.results,
+                    spend: a.spend,
+                  })),
+                },
+              }),
+            });
+            if (aiRes.ok) {
+              const aiJson = await aiRes.json().catch(() => ({}));
+              const r = aiJson?.result ?? {};
+              const highlights: string[] = Array.isArray(r.highlights) ? r.highlights : [];
+              const risks: string[] = Array.isArray(r.risks) ? r.risks : [];
+              const nextWeek: string[] = Array.isArray(r.next_week) ? r.next_week : [];
+              if (r.summary) highlights.unshift(r.summary);
+              reportData.insights = highlights;
+              reportData.actionItems = [...risks, ...nextWeek];
+            }
+          }
+        }
+      } catch {
+        // insights opcionais — nao bloqueia geracao
+      }
 
       const { data, error } = await supabase
         .from('traffic_reports')

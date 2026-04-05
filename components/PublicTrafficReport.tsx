@@ -30,6 +30,7 @@ type TopAd = {
   ctr: number;
   cpc: number;
   cpm: number;
+  frequency: number;
   results: number;
   resultLabel: string;
   hookRate: number;
@@ -91,6 +92,25 @@ const n2 = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, 
 const nInt = (v: number) => Math.round(v).toLocaleString('pt-BR');
 const brl = (v: number) => `R$\u00a0${n2(v)}`;
 const pct = (v: number, d = 1) => `${v.toFixed(d)}%`;
+
+// Formata ISO (YYYY-MM-DD) → DD/MM/AAAA
+const fmtDate = (iso: string): string => {
+  if (!iso) return iso;
+  const parts = iso.split('-');
+  if (parts.length !== 3) return iso;
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+};
+
+const MONTHS_PT = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+// Formata ISO → "05 de abril de 2026"
+const fmtLongDate = (iso: string): string => {
+  if (!iso) return iso;
+  const parts = iso.split('-');
+  if (parts.length !== 3) return iso;
+  const day = parseInt(parts[2], 10);
+  const month = MONTHS_PT[parseInt(parts[1], 10) - 1] ?? parts[1];
+  return `${day} de ${month} de ${parts[0]}`;
+};
 
 const delta = (cur: number, prev: number, invert = false) => {
   if (!prev) return { label: '\u2014', cls: 'neutral' };
@@ -257,18 +277,25 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
                 <div style={{ fontSize: 11, color: '#4d5a6e', fontFamily: 'DM Mono, monospace', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Relatorio de Performance</div>
               </div>
             </div>
-            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: 20, fontSize: 11, fontWeight: 600, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              <span style={{ width: 6, height: 6, background: '#3b82f6', borderRadius: '50%', animation: 'pulse 2s infinite', display: 'inline-block' }} />
-              Relatorio Semanal
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6 }}>
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)', borderRadius: 20, fontSize: 11, fontWeight: 600, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                <span style={{ width: 6, height: 6, background: '#3b82f6', borderRadius: '50%', animation: 'pulse 2s infinite', display: 'inline-block' }} />
+                Relatorio de Trafego
+              </div>
+              <div style={{ fontSize: 11, color: '#4d5a6e', fontFamily: 'DM Mono, monospace' }}>
+                Gerado em: {fmtLongDate(report.created_at?.slice(0, 10) ?? d.periodCurrent.end)}
+              </div>
             </div>
           </div>
           <div style={{ marginTop: 24, fontSize: 38, fontWeight: 800, lineHeight: 1.1, letterSpacing: -1, background: 'linear-gradient(135deg,#e8edf5 40%,#8a95a8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{d.clientName}</div>
           <div style={{ marginTop: 10, fontSize: 15, color: '#8a95a8', display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <strong style={{ color: '#e8edf5' }}>{d.periodCurrent.label}</strong>
+            <strong style={{ color: '#e8edf5' }}>
+              {fmtDate(d.periodCurrent.start)} a {fmtDate(d.periodCurrent.end)}
+            </strong>
             {d.periodPrevious && (
               <>
                 <span style={{ display: 'inline-block', width: 20, height: 1, background: '#253040', verticalAlign: 'middle' }} />
-                Comparado com {d.periodPrevious.label}
+                Comparado com {fmtDate(d.periodPrevious.start)} a {fmtDate(d.periodPrevious.end)}
               </>
             )}
           </div>
@@ -330,7 +357,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
                     {step.sub && <div style={{ fontSize: 10, color: '#4d5a6e', marginTop: 3, fontFamily: 'monospace' }}>{step.sub}</div>}
                   </div>
                   {i < arr.length - 1 && (
-                    <div style={{ display: 'flex', alignItems: 'center', color: '#4d5a6e', fontSize: 16, paddingTop: 22, flexShrink: 0 }}>\u203a</div>
+                    <div style={{ display: 'flex', alignItems: 'center', color: '#4d5a6e', fontSize: 16, paddingTop: 22, flexShrink: 0 }}>{'›'}</div>
                   )}
                 </React.Fragment>
               ))}
@@ -347,7 +374,9 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
             </div>
             <div style={{ background: '#0d1117', border: '1px solid #1e2733', borderRadius: 14, padding: '20px 24px' }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: '#e8edf5', marginBottom: 16 }}>
-                {d.periodCurrent.label} vs {d.periodPrevious?.label}
+                {fmtDate(d.periodCurrent.start)} a {fmtDate(d.periodCurrent.end)}
+                {' vs '}
+                {d.periodPrevious ? `${fmtDate(d.periodPrevious.start)} a ${fmtDate(d.periodPrevious.end)}` : ''}
               </div>
               {/* header */}
               <div style={{ display: 'flex', alignItems: 'center', marginBottom: 8, paddingBottom: 8, borderBottom: '1px solid #1e2733' }}>
@@ -356,7 +385,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
                   <div style={{ padding: '0 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#3b82f6' }}>Atual</div>
                   <div style={{ padding: '0 12px', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#4d5a6e' }}>Anterior</div>
                 </div>
-                <div style={{ width: 80 }} />
+                <div style={{ width: 80, fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#4d5a6e', textAlign: 'right' }}>Delta</div>
               </div>
               {compRows.map((r) => (
                 <div key={r.label} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}>
@@ -427,6 +456,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
                         { label: 'CTR', val: pct(ad.ctr, 1) },
                         { label: 'CPC', val: brl(ad.cpc) },
                         { label: 'CPM', val: brl(ad.cpm) },
+                        ...(ad.frequency > 0 ? [{ label: 'Freq.', val: ad.frequency.toFixed(2) }] : []),
                       ].map((m) => (
                         <div key={m.label} style={{ textAlign: 'center', padding: '6px 10px', background: '#141921', border: '1px solid #1e2733', borderRadius: 8, minWidth: 52 }}>
                           <div style={{ fontSize: 9, fontWeight: 700, color: '#4d5a6e', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>{m.label}</div>
@@ -453,7 +483,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead>
                     <tr style={{ background: '#141921' }}>
-                      {['Nome', 'Status', 'Gasto', 'Alcance', c.resultLabel, 'Custo/Res', 'CTR', 'CPM', ...(hasVideo ? ['Hook', 'Hold'] : []), 'IDC'].map((h) => (
+                      {['Nome', 'Status', 'Gasto', 'Alcance', c.resultLabel, 'Custo/Res', 'CTR', 'CPM', 'Freq.', ...(hasVideo ? ['Hook', 'Hold'] : []), 'IDC'].map((h) => (
                         <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#4d5a6e', borderBottom: '1px solid #1e2733', whiteSpace: 'nowrap' }}>{h}</th>
                       ))}
                     </tr>
@@ -481,6 +511,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
                           <td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: '#8a95a8', whiteSpace: 'nowrap' }}>{camp.costPerResult > 0 ? brl(camp.costPerResult) : '-'}</td>
                           <td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: camp.ctr >= 5 ? '#22c55e' : '#8a95a8', whiteSpace: 'nowrap' }}>{pct(camp.ctr)}</td>
                           <td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: '#8a95a8', whiteSpace: 'nowrap' }}>{brl(camp.cpm)}</td>
+                          <td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: camp.frequency > 3 ? '#f59e0b' : '#8a95a8', whiteSpace: 'nowrap' }}>{camp.frequency > 0 ? camp.frequency.toFixed(2) : '-'}</td>
                           {hasVideo && <td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: camp.hookRate != null && camp.hookRate * 100 >= 20 ? '#22c55e' : '#8a95a8', whiteSpace: 'nowrap' }}>{camp.hookRate != null ? pct(camp.hookRate * 100) : '-'}</td>}
                           {hasVideo && <td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: camp.holdRate != null && camp.holdRate * 100 >= 8 ? '#22c55e' : '#8a95a8', whiteSpace: 'nowrap' }}>{camp.holdRate != null ? pct(camp.holdRate * 100) : '-'}</td>}
                           <td style={{ padding: '13px 14px' }}>
@@ -499,6 +530,83 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
                   </tbody>
                 </table>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Distribuição de Investimento ─────────────────────────────── */}
+        {campaigns.length > 1 && campaigns.some((c) => c.spend > 0) && (
+          <div style={{ marginBottom: 40 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#4d5a6e', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+              Distribuicao de Investimento
+              <span style={{ flex: 1, height: 1, background: '#1e2733', display: 'block' }} />
+            </div>
+            <div style={{ background: '#0d1117', border: '1px solid #1e2733', borderRadius: 14, padding: '20px 24px' }}>
+              {(() => {
+                const totalSpend = campaigns.reduce((s, c) => s + c.spend, 0);
+                const sorted = [...campaigns].filter((c) => c.spend > 0).sort((a, b) => b.spend - a.spend);
+                const barColors = ['#3b82f6','#6366f1','#a855f7','#ec4899','#f97316','#f59e0b','#14b8a6','#22c55e'];
+                return sorted.map((camp, i) => {
+                  const pctVal = totalSpend > 0 ? (camp.spend / totalSpend) * 100 : 0;
+                  const color = barColors[i % barColors.length];
+                  return (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
+                      <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
+                      <div style={{ fontSize: 11, color: '#8a95a8', minWidth: 160, maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flexShrink: 0 }}>{camp.name}</div>
+                      <div style={{ flex: 1, height: 18, background: '#141921', borderRadius: 4, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${pctVal}%`, background: color, opacity: 0.85, borderRadius: 4, transition: 'width 0.4s ease' }} />
+                      </div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color, fontFamily: 'DM Mono, monospace', minWidth: 80, textAlign: 'right', flexShrink: 0 }}>
+                        {brl(camp.spend)} <span style={{ fontSize: 10, color: '#4d5a6e', fontWeight: 500 }}>({pctVal.toFixed(1)}%)</span>
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* ── Insights & Plano de Acao ──────────────────────────────────── */}
+        {(d.insights?.length > 0 || d.actionItems?.length > 0) && (
+          <div style={{ marginBottom: 40 }}>
+            <div style={{ fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.12em', color: '#4d5a6e', marginBottom: 14, display: 'flex', alignItems: 'center', gap: 8 }}>
+              Analise & Plano de Acao — IA
+              <span style={{ flex: 1, height: 1, background: '#1e2733', display: 'block' }} />
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 16 }}>
+              {d.insights?.length > 0 && (
+                <div style={{ background: '#0d1117', border: '1px solid rgba(59,130,246,0.2)', borderRadius: 14, padding: '20px 24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(59,130,246,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>💡</div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#3b82f6', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Insights</span>
+                  </div>
+                  <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {d.insights.map((item, i) => (
+                      <li key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                        <span style={{ width: 18, height: 18, borderRadius: 5, background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: '#3b82f6', flexShrink: 0, marginTop: 2 }}>{i + 1}</span>
+                        <span style={{ fontSize: 13, color: '#c5d0de', lineHeight: 1.55 }}>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {d.actionItems?.length > 0 && (
+                <div style={{ background: '#0d1117', border: '1px solid rgba(34,197,94,0.2)', borderRadius: 14, padding: '20px 24px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(34,197,94,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }}>🎯</div>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#22c55e', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Plano de Acao</span>
+                  </div>
+                  <ul style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    {d.actionItems.map((item, i) => (
+                      <li key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                        <span style={{ width: 18, height: 18, borderRadius: 5, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 800, color: '#22c55e', flexShrink: 0, marginTop: 2 }}>{i + 1}</span>
+                        <span style={{ fontSize: 13, color: '#c5d0de', lineHeight: 1.55 }}>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -547,15 +655,20 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
         )}
 
         {/* ── Footer ────────────────────────────────────────────────────── */}
-        <div style={{ marginTop: 48, paddingTop: 24, borderTop: '1px solid #1e2733', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12 }}>
-          <div style={{ fontSize: 12, color: '#4d5a6e', display: 'flex', alignItems: 'center', gap: 8 }}>
-            Gerado pelo{' '}
-            <span style={{ color: '#3b82f6', fontWeight: 700 }}>{d.agencyName}</span>
-            {' '}&bull;{' '}
-            <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11 }}>CR8 Traffic OS</span>
+        <div style={{ marginTop: 48, paddingTop: 24, borderTop: '1px solid #1e2733' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 10 }}>
+            <div style={{ fontSize: 12, color: '#4d5a6e', display: 'flex', alignItems: 'center', gap: 8 }}>
+              Relatorio gerado pelo{' '}
+              <span style={{ color: '#3b82f6', fontWeight: 700 }}>{d.agencyName}</span>
+              {' '}&bull;{' '}
+              <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11 }}>CR8 Sistema Operacional de Trafego</span>
+            </div>
+            <div style={{ fontSize: 11, color: '#4d5a6e', textAlign: 'right', fontFamily: 'DM Mono, monospace' }}>
+              Periodo: {fmtDate(d.periodCurrent.start)} ate {fmtDate(d.periodCurrent.end)}
+            </div>
           </div>
-          <div style={{ fontSize: 11, color: '#4d5a6e', textAlign: 'right', fontFamily: 'DM Mono, monospace' }}>
-            {d.periodCurrent.start} ate {d.periodCurrent.end}
+          <div style={{ fontSize: 11, color: '#4d5a6e', fontFamily: 'DM Mono, monospace' }}>
+            Gerado em: {fmtLongDate(report.created_at?.slice(0, 10) ?? d.periodCurrent.end)}
           </div>
         </div>
 
