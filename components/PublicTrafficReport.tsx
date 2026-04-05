@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { getSupabaseAnonKey, getSupabaseUrl } from '../lib/supabase';
 
 interface PublicTrafficReportProps {
@@ -236,14 +236,14 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
   const levelLabel = d.level === 'campaign' ? 'Campanha' : d.level === 'adset' ? 'Conjunto' : 'Anuncio';
   const agencyInitials = (d.agencyName || 'CR').substring(0, 2).toUpperCase();
 
-  const activeObjectives = useMemo(() => {
+  const activeObjectives = (() => {
     if (Array.isArray(d.activeObjectives) && d.activeObjectives.length) return d.activeObjectives;
     const fallback: ObjectiveMetric[] = [];
     if (currentPlatform.profileVisits > 0) fallback.push({ key: 'profileVisits', label: 'Visitas ao perfil', current: currentPlatform.profileVisits, previous: previousPlatform?.profileVisits ?? 0, layer: 'platform' });
     if (currentPlatform.followers > 0) fallback.push({ key: 'followers', label: 'Seguidores', current: currentPlatform.followers, previous: previousPlatform?.followers ?? 0, layer: 'platform' });
     if (currentBusiness.leadSignals > 0) fallback.push({ key: 'leadSignals', label: 'Leads de negocio', current: currentBusiness.leadSignals, previous: previousBusiness?.leadSignals ?? 0, layer: 'business' });
     return fallback;
-  }, [currentBusiness.leadSignals, currentPlatform.followers, currentPlatform.profileVisits, d.activeObjectives, previousBusiness?.leadSignals, previousPlatform?.followers, previousPlatform?.profileVisits]);
+  })();
 
   const mediaCards: MetricCard[] = [
     { label: 'Investimento', current: currentMedia.invest, previous: previousMedia?.invest ?? 0, format: 'currency', invert: true, color: 'blue' },
