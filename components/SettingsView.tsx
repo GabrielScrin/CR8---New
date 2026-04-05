@@ -1,10 +1,10 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { motion, AnimatePresence } from 'framer-motion';
 import { InboundSources } from './InboundSources';
-import { CalendarClock, RefreshCw, Save, Trash2, UserPlus, Send, Copy, Link2, X, Crown, Sparkles, Briefcase, Mail } from 'lucide-react';
+import { CalendarClock, RefreshCw, Save, Trash2, UserPlus, Send, Copy, Link2, X, Crown, Sparkles, Briefcase, Mail, Settings, CheckCircle2, AlertCircle } from 'lucide-react';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { Role, labelRolePt, normalizeRole } from '../types';
-import { div } from 'framer-motion/client';
 
 type CompanyRow = {
   id: string;
@@ -137,28 +137,40 @@ const ModalShell = ({
   maxWidthClassName?: string;
   children: React.ReactNode;
 }) => {
-  if (!open) return null;
   return createPortal(
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 p-4" onMouseDown={onClose}>
-      <div
-        className={`w-full ${maxWidthClassName} cr8-card p-5 max-h-[calc(100vh-3rem)] overflow-hidden flex flex-col`}
-        onMouseDown={(e) => {
-          e.stopPropagation();
-        }}
-      >
-        <div className="flex items-center justify-between shrink-0">
-          <div className="text-lg font-semibold text-[hsl(var(--foreground))]">{title}</div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-2 py-1 rounded-md text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))]"
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onMouseDown={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 12 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 8 }}
+            transition={{ type: 'spring', stiffness: 400, damping: 32 }}
+            className={`w-full ${maxWidthClassName} rounded-2xl border border-[hsl(var(--border))] max-h-[calc(100vh-3rem)] overflow-hidden flex flex-col shadow-2xl`}
+            style={{ background: 'hsl(220 20% 8%)' }}
+            onMouseDown={(e) => e.stopPropagation()}
           >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="mt-4 min-h-0 overflow-y-auto pr-2 cr8-scroll">{children}</div>
-      </div>
-    </div>,
+            <div className="flex items-center justify-between px-6 py-4 border-b border-[hsl(var(--border))] shrink-0">
+              <div className="text-sm font-bold text-[hsl(var(--foreground))]">{title}</div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="h-7 w-7 rounded-lg flex items-center justify-center text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+            <div className="px-6 py-5 min-h-0 overflow-y-auto cr8-scroll">{children}</div>
+          </motion.div>
+        </motion.div>
+      )}
+    </AnimatePresence>,
     document.body
   );
 };
@@ -1085,10 +1097,13 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
 
   if (readOnlyMode) {
     return (
-      <div className="cr8-card h-[calc(100vh-8rem)] flex items-center justify-center">
-        <div className="max-w-md text-center px-6">
-          <h2 className="text-xl font-bold text-[hsl(var(--foreground))]">Configurações</h2>
-          <p className="text-[hsl(var(--muted-foreground))] mt-2 text-sm">Configure o Supabase para habilitar este módulo.</p>
+      <div className="flex items-center justify-center h-full text-[hsl(var(--muted-foreground))]">
+        <div className="text-center max-w-sm">
+          <div className="w-16 h-16 rounded-2xl bg-[hsl(var(--primary))]/10 border border-[hsl(var(--primary))]/20 flex items-center justify-center mx-auto mb-4">
+            <Settings className="w-7 h-7 opacity-40" />
+          </div>
+          <h3 className="text-base font-semibold text-[hsl(var(--foreground))]">Configuracoes</h3>
+          <p className="text-sm mt-1">Configure o Supabase para habilitar este modulo.</p>
         </div>
       </div>
     );
@@ -1096,71 +1111,90 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
 
   if (!companyId) {
     return (
-      <div className="cr8-card h-[calc(100vh-8rem)] flex items-center justify-center">
-        <div className="max-w-md text-center px-6">
-          <h2 className="text-xl font-bold text-[hsl(var(--foreground))]">Configurações</h2>
-          <p className="text-[hsl(var(--muted-foreground))] mt-2 text-sm">Selecione/crie uma empresa para continuar.</p>
+      <div className="flex items-center justify-center h-full text-[hsl(var(--muted-foreground))]">
+        <div className="text-center max-w-sm">
+          <div className="w-16 h-16 rounded-2xl bg-[hsl(var(--primary))]/10 border border-[hsl(var(--primary))]/20 flex items-center justify-center mx-auto mb-4">
+            <Settings className="w-7 h-7 opacity-40" />
+          </div>
+          <h3 className="text-base font-semibold text-[hsl(var(--foreground))]">Configuracoes</h3>
+          <p className="text-sm mt-1">Selecione ou crie uma empresa para continuar.</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-[hsl(var(--foreground))]">Configurações</h1>
-          <p className="text-[hsl(var(--muted-foreground))] mt-1 text-sm">Ajuste branding, integrações e financeiro por empresa.</p>
-
-
+    <div className="space-y-5">
+      {/* Page header */}
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-[hsl(var(--primary))]/10 border border-[hsl(var(--primary))]/20 flex items-center justify-center shrink-0">
+            <Settings className="w-4.5 h-4.5 text-[hsl(var(--primary))]" />
+          </div>
+          <div>
+            <h1 className="text-lg font-bold text-[hsl(var(--foreground))] leading-none">Configuracoes</h1>
+            <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">Ajuste branding, integracoes e financeiro por empresa.</p>
+          </div>
         </div>
         <button
           onClick={() => void save()}
           disabled={saving || loading || !canEditCompany}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] hover:opacity-90 disabled:opacity-50"
+          className="flex items-center gap-2 px-4 h-9 rounded-xl bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))] text-sm font-semibold hover:opacity-90 disabled:opacity-40 transition-all shadow-sm"
         >
-          <Save className="h-4 w-4" />
+          <Save className="h-3.5 w-3.5" />
           {saving ? 'Salvando...' : 'Salvar'}
         </button>
       </div>
 
+      {/* Feedback messages */}
+      <AnimatePresence>
+        {(error || ok) && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            className={`flex items-center gap-2 text-xs rounded-xl px-3 py-2 border ${
+              error
+                ? 'text-red-400 bg-red-500/10 border-red-500/20'
+                : 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+            }`}
+          >
+            {error ? <AlertCircle className="w-3.5 h-3.5 shrink-0" /> : <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+            {error || ok}
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {!canEditCompany && (
-        <div className="cr8-card p-4 text-sm text-[hsl(var(--muted-foreground))]">
-          Seu perfil ({role}) é somente leitura para configurações da empresa.
+        <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--secondary))]/30 px-4 py-3 text-xs text-[hsl(var(--muted-foreground))]">
+          Seu perfil ({role}) e somente leitura para configuracoes da empresa.
         </div>
       )}
 
       {selectedSection === 'integracoes' && (
-        <div className="cr8-card p-6 space-y-4">
-          <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Integrações</h2>
+        <div className="rounded-2xl border border-[hsl(var(--border))] p-6 space-y-4" style={{ background: "hsl(220 18% 7%)" }}>
+          <h2 className="text-sm font-bold text-[hsl(var(--foreground))] flex items-center gap-2"><span className="w-1 h-4 rounded-full bg-[hsl(var(--primary))] shrink-0 inline-block" />Integrações</h2>
           <p className="text-xs text-[hsl(var(--muted-foreground))]">Centralize APIs públicas, Webhooks e o MCP Server.</p>
 
           {!canViewIntegrations ? (
             <div className="text-sm text-[hsl(var(--muted-foreground))]">Aba disponível para admin e gestor.</div>
           ) : (
             <div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setIntegrationsHash('api')}
-                  className={`px-3 py-1 rounded-md ${integrationsTab === 'api' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--secondary))]'}`}
-                >
-                  API
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIntegrationsHash('webhooks')}
-                  className={`px-3 py-1 rounded-md ${integrationsTab === 'webhooks' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--secondary))]'}`}
-                >
-                  Webhooks
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setIntegrationsHash('mcp')}
-                  className={`px-3 py-1 rounded-md ${integrationsTab === 'mcp' ? 'bg-[hsl(var(--primary))] text-[hsl(var(--primary-foreground))]' : 'bg-[hsl(var(--secondary))]'}`}
-                >
-                  MCP
-                </button>
+              <div className="flex items-center gap-1">
+                {(['api', 'webhooks', 'mcp'] as const).map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setIntegrationsHash(t)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-medium border transition-all ${
+                      integrationsTab === t
+                        ? 'bg-[hsl(var(--primary))]/10 border-[hsl(var(--primary))]/25 text-[hsl(var(--primary))]'
+                        : 'border-transparent text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))]/50'
+                    }`}
+                  >
+                    {t.toUpperCase()}
+                  </button>
+                ))}
               </div>
 
               <div className="mt-4">
@@ -1179,7 +1213,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                               onChange={(e) => setNewApiName(e.target.value)}
                               disabled={apiLoading}
                               placeholder="ex: n8n integration"
-                              className="mt-1 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                              className="mt-1 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                             />
                           </div>
                           <div>
@@ -1221,7 +1255,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                                     value={testToken}
                                     onChange={(e) => setTestToken(e.target.value)}
                                     placeholder="Cole a API Key aqui (ou deixe em branco para usar a última criada)"
-                                    className="w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))] font-mono"
+                                    className="w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))] font-mono"
                                   />
                                 </div>
                                 <div>
@@ -1349,68 +1383,66 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
         </div>
       )}
 
-      {error && <div className="text-sm text-[hsl(var(--destructive))]">{error}</div>}
-      {ok && <div className="text-sm text-emerald-300">{ok}</div>}
 
       {selectedSection === 'company' && (
         <>
-          <div className="cr8-card p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Empresa</h2>
+          <div className="rounded-2xl border border-[hsl(var(--border))] p-6 space-y-4" style={{ background: "hsl(220 18% 7%)" }}>
+            <h2 className="text-sm font-bold text-[hsl(var(--foreground))] flex items-center gap-2"><span className="w-1 h-4 rounded-full bg-[hsl(var(--primary))] shrink-0 inline-block" />Empresa</h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Nome</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Nome</label>
                 <input
                   value={companyName}
                   onChange={(e) => setCompanyName(e.target.value)}
                   disabled={!canEditCompany}
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Meta Ad Account ID</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Meta Ad Account ID</label>
                 <input
                   value={metaAdAccountId}
                   onChange={(e) => setMetaAdAccountId(e.target.value)}
                   disabled={!canEditCompany}
                   placeholder="act_123..."
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                 />
               </div>
             </div>
           </div>
 
 
-          <div className="cr8-card p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">White Label</h2>
+          <div className="rounded-2xl border border-[hsl(var(--border))] p-6 space-y-4" style={{ background: "hsl(220 18% 7%)" }}>
+            <h2 className="text-sm font-bold text-[hsl(var(--foreground))] flex items-center gap-2"><span className="w-1 h-4 rounded-full bg-[hsl(var(--primary))] shrink-0 inline-block" />White Label</h2>
             <p className="text-xs text-[hsl(var(--muted-foreground))]">Esses campos personalizam o nome e o logo no menu lateral.</p>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Nome de marca</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Nome de marca</label>
                 <input
                   value={brandName}
                   onChange={(e) => setBrandName(e.target.value)}
                   disabled={!canEditCompany}
                   placeholder="Ex: Agência X"
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">URL do logo</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">URL do logo</label>
                 <input
                   value={brandLogoUrl}
                   onChange={(e) => setBrandLogoUrl(e.target.value)}
                   disabled={!canEditCompany}
                   placeholder="https://..."
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Cor primária (opcional)</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Cor primária (opcional)</label>
                 <div className="mt-2 flex items-center gap-3">
                   <input
                     type="color"
@@ -1424,7 +1456,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                     onChange={(e) => setBrandPrimaryColor(e.target.value)}
                     disabled={!canEditCompany}
                     placeholder="#0D6EFD"
-                    className="w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+                    className="w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] font-mono text-[hsl(var(--foreground))]"
                   />
                 </div>
                 <p className="mt-2 text-[11px] text-[hsl(var(--muted-foreground))]">Use HEX (ex: #0D6EFD). Aplica no tema ao trocar de empresa.</p>
@@ -1436,8 +1468,8 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
 
       {
         selectedSection === 'whatsapp' && (
-          <div className="cr8-card p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">WhatsApp (Cloud API)</h2>
+          <div className="rounded-2xl border border-[hsl(var(--border))] p-6 space-y-4" style={{ background: "hsl(220 18% 7%)" }}>
+            <h2 className="text-sm font-bold text-[hsl(var(--foreground))] flex items-center gap-2"><span className="w-1 h-4 rounded-full bg-[hsl(var(--primary))] shrink-0 inline-block" />WhatsApp (Cloud API)</h2>
             <p className="text-xs text-[hsl(var(--muted-foreground))]">
               Para receber mensagens no Live Chat, configure o webhook na Meta com esta URL de callback:{' '}
               <span className="font-mono">{webhookUrl}</span>
@@ -1445,24 +1477,24 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">phone_number_id</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">phone_number_id</label>
                 <input
                   value={whatsPhoneNumberId}
                   onChange={(e) => setWhatsPhoneNumberId(e.target.value)}
                   disabled={!canEditCompany}
                   placeholder="Ex: 1234567890"
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] font-mono text-[hsl(var(--foreground))]"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">WABA ID (opcional)</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">WABA ID (opcional)</label>
                 <input
                   value={whatsWabaId}
                   onChange={(e) => setWhatsWabaId(e.target.value)}
                   disabled={!canEditCompany}
                   placeholder="Ex: 198..."
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] font-mono text-[hsl(var(--foreground))]"
                 />
               </div>
             </div>
@@ -1472,55 +1504,55 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
 
       {
         selectedSection === 'financeiro' && (
-          <div className="cr8-card p-6 space-y-4">
-            <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Financeiro</h2>
+          <div className="rounded-2xl border border-[hsl(var(--border))] p-6 space-y-4" style={{ background: "hsl(220 18% 7%)" }}>
+            <h2 className="text-sm font-bold text-[hsl(var(--foreground))] flex items-center gap-2"><span className="w-1 h-4 rounded-full bg-[hsl(var(--primary))] shrink-0 inline-block" />Financeiro</h2>
             <p className="text-xs text-[hsl(var(--muted-foreground))]">Controle de saldo de mídia e fee da agência (por empresa).</p>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Moeda</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Moeda</label>
                 <input
                   value={currency}
                   onChange={(e) => setCurrency(e.target.value)}
                   disabled={!canEditCompany}
                   placeholder="BRL"
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Saldo de mídia</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Saldo de mídia</label>
                 <input
                   value={mediaBalance}
                   onChange={(e) => setMediaBalance(e.target.value)}
                   disabled={!canEditCompany}
                   placeholder="0"
                   inputMode="decimal"
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Fee (%)</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Fee (%)</label>
                 <input
                   value={feePercent}
                   onChange={(e) => setFeePercent(e.target.value)}
                   disabled={!canEditCompany}
                   placeholder="10"
                   inputMode="decimal"
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Fee fixo</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Fee fixo</label>
                 <input
                   value={feeFixed}
                   onChange={(e) => setFeeFixed(e.target.value)}
                   disabled={!canEditCompany}
                   placeholder="0"
                   inputMode="decimal"
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                 />
               </div>
             </div>
@@ -1554,7 +1586,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                       value={txnKind}
                       onChange={(e) => setTxnKind(e.target.value as FinanceTransactionKind)}
                       disabled={readOnlyMode || !canEditCompany}
-                      className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                      className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                     >
                       <option value="media_credit">Crédito de mídia</option>
                       <option value="media_spend">Gasto de mídia</option>
@@ -1571,7 +1603,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                       disabled={readOnlyMode || !canEditCompany}
                       placeholder="Ex: 100,00"
                       inputMode="decimal"
-                      className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                      className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                     />
                   </div>
 
@@ -1583,7 +1615,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                         onChange={(e) => setTxnNote(e.target.value)}
                         disabled={readOnlyMode || !canEditCompany}
                         placeholder="Ex: Recarga inicial / Ajuste"
-                        className="w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                        className="w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                       />
                       <button
                         onClick={() => void applyTransaction()}
@@ -1647,10 +1679,10 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
 
       {
         selectedSection === 'conversoes' && (
-          <div className="cr8-card p-6 space-y-4">
+          <div className="rounded-2xl border border-[hsl(var(--border))] p-6 space-y-4" style={{ background: "hsl(220 18% 7%)" }}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Conversões (Google Ads / Meta)</h2>
+                <h2 className="text-sm font-bold text-[hsl(var(--foreground))] flex items-center gap-2"><span className="w-1 h-4 rounded-full bg-[hsl(var(--primary))] shrink-0 inline-block" />Conversões (Google Ads / Meta)</h2>
                 <p className="text-xs text-[hsl(var(--muted-foreground))] mt-1">
                   Usa os click IDs capturados nos leads (ex: <span className="font-mono">gclid</span>) para enviar{' '}
                   <span className="font-medium">Offline Conversions</span>. Os segredos OAuth ficam no Supabase (Edge Secrets), não no banco.
@@ -1672,13 +1704,13 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Google Ads Customer ID</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Google Ads Customer ID</label>
                 <input
                   value={googleAdsCustomerId}
                   onChange={(e) => setGoogleAdsCustomerId(e.target.value)}
                   disabled={!canEditCompany}
                   placeholder="1234567890 (sem traços)"
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] font-mono text-[hsl(var(--foreground))]"
                 />
                 <div className="mt-2 flex items-center justify-between gap-3">
                   <div className="text-[11px] text-[hsl(var(--muted-foreground))]">Opcional: buscar as contas acessíveis e selecionar.</div>
@@ -1703,7 +1735,7 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                       if (id) setGoogleAdsCustomerId(id);
                     }}
                     disabled={!canEditCompany}
-                    className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                    className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                   >
                     <option value="">Selecionar conta...</option>
                     {googleCustomers.map((c) => (
@@ -1716,24 +1748,24 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Login Customer ID (MCC)</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Login Customer ID (MCC)</label>
                 <input
                   value={googleAdsLoginCustomerId}
                   onChange={(e) => setGoogleAdsLoginCustomerId(e.target.value)}
                   disabled={!canEditCompany}
                   placeholder="Opcional (sem traços)"
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] font-mono text-[hsl(var(--foreground))]"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Currency Code</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Currency Code</label>
                 <input
                   value={googleAdsCurrencyCode}
                   onChange={(e) => setGoogleAdsCurrencyCode(e.target.value)}
                   disabled={!canEditCompany}
                   placeholder="BRL"
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] font-mono text-[hsl(var(--foreground))]"
                 />
               </div>
 
@@ -1756,12 +1788,12 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Conversion Action (Lead)</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Conversion Action (Lead)</label>
                 <select
                   value={googleAdsConvLead}
                   onChange={(e) => setGoogleAdsConvLead(e.target.value)}
                   disabled={!canEditCompany}
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                 >
                   <option value="">Selecione (ou preencha manualmente)</option>
                   {googleActions.map((a) => (
@@ -1788,18 +1820,18 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                     onChange={(e) => setGoogleAdsConvLead(e.target.value)}
                     disabled={!canEditCompany}
                     placeholder="ID (ex: 123) ou resource name"
-                    className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+                    className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] font-mono text-[hsl(var(--foreground))]"
                   />
                 ) : null}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Conversion Action (Compra)</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Conversion Action (Compra)</label>
                 <select
                   value={googleAdsConvPurchase}
                   onChange={(e) => setGoogleAdsConvPurchase(e.target.value)}
                   disabled={!canEditCompany}
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] text-[hsl(var(--foreground))]"
                 >
                   <option value="">(Opcional) Selecione</option>
                   {googleActions.map((a) => (
@@ -1814,19 +1846,19 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
                     onChange={(e) => setGoogleAdsConvPurchase(e.target.value)}
                     disabled={!canEditCompany}
                     placeholder="ID (ex: 456) ou resource name"
-                    className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+                    className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] font-mono text-[hsl(var(--foreground))]"
                   />
                 ) : null}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-[hsl(var(--foreground))]">Meta Pixel ID (opcional)</label>
+                <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Meta Pixel ID (opcional)</label>
                 <input
                   value={metaPixelId}
                   onChange={(e) => setMetaPixelId(e.target.value)}
                   disabled={!canEditCompany}
                   placeholder="1234567890"
-                  className="mt-2 w-full rounded-lg bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2 text-sm font-mono text-[hsl(var(--foreground))]"
+                  className="mt-2 w-full rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))] font-mono text-[hsl(var(--foreground))]"
                 />
                 <p className="mt-2 text-[11px] text-[hsl(var(--muted-foreground))]">Usaremos isso para eventos da Meta (CAPI) em uma próxima etapa.</p>
               </div>
@@ -1842,10 +1874,10 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
 
       {selectedSection === 'auditoria' && (
         <>
-          <div className="cr8-card p-6 space-y-4">
+          <div className="rounded-2xl border border-[hsl(var(--border))] p-6 space-y-4" style={{ background: "hsl(220 18% 7%)" }}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Auditoria</h2>
+                <h2 className="text-sm font-bold text-[hsl(var(--foreground))] flex items-center gap-2"><span className="w-1 h-4 rounded-full bg-[hsl(var(--primary))] shrink-0 inline-block" />Auditoria</h2>
                 <p className="text-xs text-[hsl(var(--muted-foreground))]">
                   Registra eventos importantes (membros, convites e financeiro) para rastreabilidade.
                 </p>
@@ -1910,10 +1942,10 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
             )}
           </div>
 
-          <div className="cr8-card p-6 space-y-4">
+          <div className="rounded-2xl border border-[hsl(var(--border))] p-6 space-y-4" style={{ background: "hsl(220 18% 7%)" }}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Relatório semanal</h2>
+                <h2 className="text-sm font-bold text-[hsl(var(--foreground))] flex items-center gap-2"><span className="w-1 h-4 rounded-full bg-[hsl(var(--primary))] shrink-0 inline-block" />Relatório semanal</h2>
                 <p className="text-xs text-[hsl(var(--muted-foreground))]">
                   Gerado automaticamente toda segunda-feira (12:00 UTC ≈ 09:00 São Paulo). Baseado em Leads/CRM e atividade do Live Chat.
                 </p>
@@ -2032,10 +2064,10 @@ export const SettingsView: React.FC<{ companyId?: string; role: Role; userId?: s
 
       {
         selectedSection === 'equipe' && canEditCompany && (
-          <div className="cr8-card p-6 space-y-4">
+          <div className="rounded-2xl border border-[hsl(var(--border))] p-6 space-y-4" style={{ background: "hsl(220 18% 7%)" }}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-[hsl(var(--foreground))]">Equipe</h2>
+                <h2 className="text-sm font-bold text-[hsl(var(--foreground))] flex items-center gap-2"><span className="w-1 h-4 rounded-full bg-[hsl(var(--primary))] shrink-0 inline-block" />Equipe</h2>
                 <p className="text-xs text-[hsl(var(--muted-foreground))]">
                   Permissões por empresa (multi-tenant). Admin gerencia convites e membros.
                 </p>
