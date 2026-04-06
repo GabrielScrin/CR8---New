@@ -10,6 +10,7 @@ interface TrafficAnalyticsProps {
 }
 
 type MetaLevel = 'campaign' | 'adset' | 'ad';
+type InsightsScopeLevel = MetaLevel | 'account';
 type TrafficTab = 'meta' | 'platform';
 
 type OptionalMetricKey =
@@ -910,7 +911,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     return { byCampaignId, byAdsetId };
   };
 
-  const buildInsightsFilters = (level: MetaLevel) => {
+  const buildInsightsFilters = (level: InsightsScopeLevel) => {
     const filters: any[] = [];
     const campaignIds = selectedCampaignIds.length ? selectedCampaignIds : campaignFilterId ? [campaignFilterId] : [];
     const adsetIds = selectedAdsetIds.length ? selectedAdsetIds : adsetFilterId ? [adsetFilterId] : [];
@@ -918,7 +919,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     if (campaignIds.length) {
       filters.push({ field: 'campaign.id', operator: 'IN', value: campaignIds });
     }
-    if ((level === 'ad' || level === 'adset') && adsetIds.length) {
+    if ((level === 'ad' || level === 'adset' || level === 'account') && adsetIds.length) {
       filters.push({ field: 'adset.id', operator: 'IN', value: adsetIds });
     }
 
@@ -1192,6 +1193,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       'impressions,reach,clicks,inline_link_clicks,spend,cpc,cpm,ctr,frequency,actions,video_thruplay_watched_actions',
     );
     url.searchParams.set('level', 'account');
+    const filters = buildInsightsFilters('account');
+    if (filters.length) url.searchParams.set('filtering', JSON.stringify(filters));
     applyTimeRange(url, periodOverride);
     url.searchParams.set('limit', '1');
     url.searchParams.set('access_token', providerToken);
@@ -1230,6 +1233,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     url.searchParams.set('level', 'account');
     url.searchParams.set('fields', 'date_start,spend,impressions,actions,video_thruplay_watched_actions');
     url.searchParams.set('time_increment', '1');
+    const filters = buildInsightsFilters('account');
+    if (filters.length) url.searchParams.set('filtering', JSON.stringify(filters));
     applyTimeRange(url, periodOverride);
     url.searchParams.set('limit', '100');
     url.searchParams.set('access_token', providerToken);
@@ -1726,6 +1731,14 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   };
 
   const entityLabel = selectedLevel === 'campaign' ? 'Campanha' : selectedLevel === 'adset' ? 'Conjunto' : 'Anúncio';
+  const scopedCampaignIds = selectedCampaignIds.length ? selectedCampaignIds : campaignFilterId ? [campaignFilterId] : [];
+  const scopedAdsetIds = selectedAdsetIds.length ? selectedAdsetIds : adsetFilterId ? [adsetFilterId] : [];
+  const reportHasScopedSelection = scopedCampaignIds.length > 0 || scopedAdsetIds.length > 0;
+  const reportScopeLabel = scopedAdsetIds.length
+    ? `${scopedAdsetIds.length} ${scopedAdsetIds.length === 1 ? 'conjunto selecionado' : 'conjuntos selecionados'}`
+    : scopedCampaignIds.length
+      ? `${scopedCampaignIds.length} ${scopedCampaignIds.length === 1 ? 'campanha selecionada' : 'campanhas selecionadas'}`
+      : 'conta inteira';
   const presetOptions: TrafficViewPreset[] = presets.length
     ? presets
     : [{ id: DEFAULT_PRESET_ID, name: DEFAULT_PRESET_NAME, level: selectedLevel, optionalColumns: [] }];
@@ -1918,10 +1931,27 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         fetchTrafficRowsFromMeta(providerToken, selectedAdAccountId, selectedAccountName, { start: periodStart, end: periodEnd }, selectedLevel).then(computeScores),
         fetchTrafficRowsFromMeta(providerToken, selectedAdAccountId, selectedAccountName, { start: periodStart, end: periodEnd }, 'ad').then(computeScores),
       ]);
-      const [currentBusiness, previousBusiness] = await Promise.all([
-        fetchCrmBusinessSummary(periodStart, periodEnd, currentMeta.platform),
-        fetchCrmBusinessSummary(prevDates.start, prevDates.end, previousMeta.platform),
-      ]);
+      const [currentBusiness, previousBusiness] = reportHasScopedSelection
+        ? await Promise.all([
+            Promise.resolve({
+              crmLeads: 0,
+              won: 0,
+              revenue: 0,
+              pendingFollowup: 0,
+              leadSignals: currentMeta.platform.businessLeads,
+            } satisfies ReportBusinessSummary),
+            Promise.resolve({
+              crmLeads: 0,
+              won: 0,
+              revenue: 0,
+              pendingFollowup: 0,
+              leadSignals: previousMeta.platform.businessLeads,
+            } satisfies ReportBusinessSummary),
+          ])
+        : await Promise.all([
+            fetchCrmBusinessSummary(periodStart, periodEnd, currentMeta.platform),
+            fetchCrmBusinessSummary(prevDates.start, prevDates.end, previousMeta.platform),
+          ]);
 
       const buildActiveObjectives = (currentPlatform: ReportPlatformSummary, previousPlatform: ReportPlatformSummary, currentBiz: ReportBusinessSummary, previousBiz: ReportBusinessSummary) => {
         const items = [
@@ -2018,6 +2048,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         clientName: reportClientName.trim() || 'Cliente',
         agencyName: reportAgencyName.trim() || 'CR8',
         level: selectedLevel,
+        scope: reportHasScopedSelection ? 'selection' : 'account',
+        scopeLabel: reportScopeLabel,
         periodCurrent: { label: `${fmtDateBR(periodStart)} a ${fmtDateBR(periodEnd)}`, start: periodStart, end: periodEnd },
         periodPrevious: { label: `${fmtDateBR(prevDates.start)} a ${fmtDateBR(prevDates.end)}`, start: prevDates.start, end: prevDates.end },
         current: currentSummaryLegacy,
@@ -3199,7 +3231,10 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                             : 'Periodo atual'}
                 </div>
                 <div className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
-                  {rows.length} {selectedLevel === 'campaign' ? 'campanhas' : selectedLevel === 'adset' ? 'conjuntos' : 'anuncios'} com dados
+                  Escopo: {reportScopeLabel}
+                </div>
+                <div className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                  {rows.length} {selectedLevel === 'campaign' ? 'campanhas' : selectedLevel === 'adset' ? 'conjuntos' : 'anuncios'} com dados na visualizacao atual
                 </div>
               </div>
 
