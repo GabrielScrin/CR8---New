@@ -111,10 +111,30 @@ export interface AdMetric {
   holdRate?: number;
   profileVisits?: number;
   followers?: number;
+  nativeType?: NativeResultType;
+  nativeResultContext?: NativeResultContext;
   scores?: { label: string; value: number }[];
   idc?: number;
   classification?: 'otimo' | 'bom' | 'regular' | 'ruim';
   tags?: string[];
+}
+
+export type NativeResultType =
+  | 'messages_started'
+  | 'profile_visits'
+  | 'lead_forms'
+  | 'site_leads'
+  | 'video_views'
+  | 'followers'
+  | 'purchases'
+  | 'unknown';
+
+export interface NativeResultContext {
+  nativeType: NativeResultType;
+  sourceLevel: 'campaign' | 'adset' | 'ad' | 'inferred';
+  destinationType?: string;
+  optimizationGoal?: string;
+  objective?: string;
 }
 
 export interface Lead {

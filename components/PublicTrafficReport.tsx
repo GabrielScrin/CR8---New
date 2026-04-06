@@ -324,6 +324,14 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
           <div style={{ marginBottom: 40 }}>
             <SectionTitle label="Comparativo de periodo" />
             <div style={{ background: '#0d1117', border: '1px solid #1e2733', borderRadius: 14, padding: '20px 24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #1e2733' }}>
+                <div style={{ width: 160, fontSize: 10, fontWeight: 700, color: '#4d5a6e', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Metrica</div>
+                <div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
+                  <div style={{ padding: '0 12px', fontSize: 10, fontWeight: 700, color: '#4d5a6e', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Atual</div>
+                  <div style={{ padding: '0 12px', fontSize: 10, fontWeight: 700, color: '#4d5a6e', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Anterior</div>
+                </div>
+                <div style={{ width: 80, textAlign: 'right', fontSize: 10, fontWeight: 700, color: '#4d5a6e', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Variacao</div>
+              </div>
               {comparisonRows.map((row) => { const dlt = delta(row.current, row.previous, row.invert); return <div key={row.label} style={{ display: 'flex', alignItems: 'center', marginBottom: 8 }}><div style={{ width: 160, fontSize: 10, fontWeight: 700, color: '#4d5a6e', textTransform: 'uppercase' }}>{row.label}</div><div style={{ flex: 1, display: 'grid', gridTemplateColumns: '1fr 1fr' }}><div style={{ padding: '8px 12px', fontSize: 13, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: '#e8edf5', borderLeft: '2px solid #3b82f6' }}>{formatMetric(row.current, row.format)}</div><div style={{ padding: '8px 12px', fontSize: 13, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: '#8a95a8', borderLeft: '2px solid #1e2733' }}>{formatMetric(row.previous, row.format)}</div></div><div style={{ width: 80, textAlign: 'right', fontSize: 12, fontWeight: 700, fontFamily: 'DM Mono, monospace', color: dlt.cls === 'pos' ? '#22c55e' : dlt.cls === 'neg' ? '#ef4444' : '#8a95a8' }}>{dlt.label}</div></div>; })}
             </div>
           </div>

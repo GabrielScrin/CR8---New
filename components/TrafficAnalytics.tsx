@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ArrowDown, ArrowUp, Download, ExternalLink, FileBarChart2, Filter, Link2, RefreshCw, Send, Sparkles, X } from 'lucide-react';
-import { AdMetric } from '../types';
+import { AdMetric, NativeResultContext, NativeResultType } from '../types';
 import { loadLocalAiSettings } from '../lib/aiLocal';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
 
@@ -101,6 +101,22 @@ type ReportBusinessSummary = {
   revenue: number;
   pendingFollowup: number;
   leadSignals: number;
+};
+
+type CampaignMetaNode = {
+  objective?: string;
+};
+
+type AdsetMetaNode = {
+  campaignId?: string;
+  destinationType?: string;
+  optimizationGoal?: string;
+  promotedObject?: Record<string, unknown> | null;
+};
+
+type NativeTypeOverrideMaps = {
+  byCampaignId: Map<string, NativeResultContext>;
+  byAdsetId: Map<string, NativeResultContext>;
 };
 
 const DEFAULT_PRESET_ID = '__default__';
@@ -230,21 +246,26 @@ const extractSiteLeadsFromActions = (actions: any[] | undefined) =>
       t === 'omni_contact' ||
       t === 'omni_lead' ||
       t === 'omni_complete_registration' ||
-      t.startsWith('offsite_conversion.custom') ||
-      t.startsWith('omni_custom') ||
       t.includes('fb_pixel_lead') ||
-      (t.startsWith('offsite_conversion.') && t.includes('lead')),
+      (t.startsWith('offsite_conversion.') && (t.includes('lead') || t.includes('contact') || t.includes('complete_registration'))),
   );
 
 const extractPurchasesFromActions = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t === 'purchase' || t.endsWith('.purchase') || t.includes('purchase'));
 
 const extractMessagingConversationsFromActions = (actions: any[] | undefined) =>
-  extractActionSum(actions, (t) => t.includes('messaging_conversation_started') || t.includes('onsite_conversion.messaging'));
+  extractActionSum(
+    actions,
+    (t) =>
+      t === 'onsite_conversion.messaging_conversation_started_7d' ||
+      t === 'onsite_conversion.messaging_conversation_started_1d' ||
+      t === 'onsite_conversion.messaging_first_reply' ||
+      t.includes('messaging_conversation_started'),
+  );
 
-// Visitas ao perfil (Instagram profile visit + engajamento de pagina)
+// Visitas ao perfil reais do Instagram; nao incluir page engagement / view content genericos.
 const extractProfileVisitsFromActions = (actions: any[] | undefined) =>
-  extractActionSum(actions, (t) => t === 'instagram_profile_visit' || t === 'omni_view_content' || t === 'page_engagement');
+  extractActionSum(actions, (t) => t === 'instagram_profile_visit' || t === 'profile_visit' || t.endsWith('.profile_visit'));
 
 // Seguidores/likes ganhos (Meta page likes e Instagram follows via anuncios)
 const extractFollowersFromActions = (actions: any[] | undefined) =>
@@ -268,6 +289,161 @@ const extractVideo15sFromActions = (actions: any[] | undefined) =>
   });
 
 const normalizeObjective = (objective: unknown) => String(objective ?? '').trim().toUpperCase();
+const normalizeMetaSignal = (value: unknown) => String(value ?? '').trim().toUpperCase();
+
+const isGenericObjective = (objective: string) =>
+  objective === '' ||
+  objective === 'OUTCOME_AWARENESS' ||
+  objective === 'OUTCOME_ENGAGEMENT' ||
+  objective === 'OUTCOME_TRAFFIC' ||
+  objective === 'AWARENESS' ||
+  objective === 'ENGAGEMENT' ||
+  objective === 'TRAFFIC';
+
+const inferNativeTypeFromContext = (input: {
+  objective?: unknown;
+  destinationType?: unknown;
+  optimizationGoal?: unknown;
+  promotedObject?: Record<string, unknown> | null;
+}): NativeResultType => {
+  const destinationType = normalizeMetaSignal(input.destinationType);
+  const optimizationGoal = normalizeMetaSignal(input.optimizationGoal);
+  const objective = normalizeObjective(input.objective);
+  const promotedJson = JSON.stringify(input.promotedObject ?? {}).toUpperCase();
+
+  if (
+    destinationType.includes('WHATSAPP') ||
+    destinationType.includes('MESSENGER') ||
+    destinationType.includes('MESSAGING') ||
+    optimizationGoal.includes('MESSAGING') ||
+    optimizationGoal.includes('CONVERSATION') ||
+    optimizationGoal.includes('REPLIES') ||
+    promotedJson.includes('WHATSAPP') ||
+    promotedJson.includes('MESSENGER')
+  ) {
+    return 'messages_started';
+  }
+
+  if (
+    destinationType.includes('PROFILE') ||
+    destinationType.includes('INSTAGRAM') ||
+    optimizationGoal.includes('PROFILE') ||
+    promotedJson.includes('INSTAGRAM_PROFILE')
+  ) {
+    return 'profile_visits';
+  }
+
+  if (
+    optimizationGoal.includes('OFFSITE') ||
+    optimizationGoal.includes('CONVERSION') ||
+    optimizationGoal.includes('VALUE') ||
+    optimizationGoal.includes('PURCHASE') ||
+    destinationType.includes('WEBSITE') ||
+    destinationType.includes('WEB') ||
+    destinationType.includes('SHOP') ||
+    promotedJson.includes('PIXEL') ||
+    promotedJson.includes('CUSTOM_EVENT') ||
+    objective.includes('OUTCOME_SALES') ||
+    objective.includes('CONVERS')
+  ) {
+    return objective.includes('PURCHASE') || optimizationGoal.includes('PURCHASE') ? 'purchases' : 'site_leads';
+  }
+
+  if (
+    destinationType.includes('INSTANT_FORM') ||
+    destinationType.includes('ON_AD') ||
+    optimizationGoal.includes('LEAD') ||
+    promotedJson.includes('LEAD') ||
+    objective.includes('OUTCOME_LEADS') ||
+    objective === 'LEAD_GENERATION' ||
+    objective === 'LEADS'
+  ) {
+    return 'lead_forms';
+  }
+
+  if (
+    optimizationGoal.includes('THRUPLAY') ||
+    optimizationGoal.includes('VIDEO') ||
+    objective.includes('VIDEO') ||
+    objective.includes('OUTCOME_VIDEO')
+  ) {
+    return 'video_views';
+  }
+
+  if (
+    optimizationGoal.includes('FOLLOW') ||
+    destinationType.includes('FOLLOW') ||
+    promotedJson.includes('FOLLOW') ||
+    promotedJson.includes('PAGE_LIKE')
+  ) {
+    return 'followers';
+  }
+
+  if (!isGenericObjective(objective)) {
+    if (objective.includes('MESSAGE')) return 'messages_started';
+    if (objective.includes('LEAD')) return 'lead_forms';
+    if (objective.includes('PURCHASE') || objective.includes('SALE')) return 'purchases';
+    if (objective.includes('VIDEO')) return 'video_views';
+  }
+
+  return 'unknown';
+};
+
+const labelForNativeType = (nativeType: NativeResultType, hasThruplays = false) => {
+  switch (nativeType) {
+    case 'messages_started':
+      return 'Mensagens iniciadas';
+    case 'profile_visits':
+      return 'Visitas ao perfil';
+    case 'lead_forms':
+      return 'Lead Forms';
+    case 'site_leads':
+      return 'Conversões de site';
+    case 'video_views':
+      return hasThruplays ? 'ThruPlays' : 'Views 3s';
+    case 'followers':
+      return 'Seguidores';
+    case 'purchases':
+      return 'Compras';
+    default:
+      return 'Resultados';
+  }
+};
+
+const valueForNativeType = (
+  nativeType: NativeResultType,
+  computed: {
+    leadForms?: number;
+    siteLeads?: number;
+    messagesStarted?: number;
+    purchases?: number;
+    profileVisits?: number;
+    followers?: number;
+    linkClicks?: number;
+    clicks?: number;
+    video3s?: number;
+    thruplays?: number;
+  },
+) => {
+  switch (nativeType) {
+    case 'messages_started':
+      return computed.messagesStarted ?? 0;
+    case 'profile_visits':
+      return computed.profileVisits ?? 0;
+    case 'lead_forms':
+      return computed.leadForms ?? 0;
+    case 'site_leads':
+      return computed.siteLeads ?? 0;
+    case 'video_views':
+      return (computed.thruplays ?? 0) > 0 ? computed.thruplays ?? 0 : computed.video3s ?? 0;
+    case 'followers':
+      return computed.followers ?? 0;
+    case 'purchases':
+      return computed.purchases ?? 0;
+    default:
+      return undefined;
+  }
+};
 
 const resolvePrimaryResult = (row: any, computed: {
   leadForms?: number;
@@ -280,25 +456,20 @@ const resolvePrimaryResult = (row: any, computed: {
   clicks?: number;
   video3s?: number;
   thruplays?: number;
+  nativeContext?: NativeResultContext;
 }) => {
-  const objective = normalizeObjective(row?.objective ?? row?.campaign_objective ?? row?.objective_name ?? row?.campaign?.objective);
+  const nativeType = computed.nativeContext?.nativeType ?? 'unknown';
 
   const pick = (value: number | undefined, label: string) => ({ value: typeof value === 'number' ? value : undefined, label });
 
-  if (objective.includes('LEAD')) return pick(computed.leadForms ?? computed.siteLeads ?? computed.messagesStarted, 'Leads');
-  if (objective.includes('MESSAGE')) return pick(computed.messagesStarted, 'Mensagens iniciadas');
-  if (objective.includes('VIDEO')) return pick(computed.thruplays ?? computed.video3s, computed.thruplays ? 'ThruPlays' : 'Views 3s');
-  if (objective.includes('TRAFFIC')) return pick(computed.profileVisits ?? computed.linkClicks ?? computed.clicks, computed.profileVisits ? 'Visitas ao perfil' : 'Cliques no link');
-  if (objective.includes('ENGAGEMENT') || objective.includes('AWARENESS')) {
-    return pick(computed.followers ?? computed.profileVisits ?? computed.video3s, computed.followers ? 'Seguidores' : computed.profileVisits ? 'Visitas ao perfil' : 'Views 3s');
+  if (nativeType !== 'unknown') {
+    return pick(valueForNativeType(nativeType, computed), labelForNativeType(nativeType, (computed.thruplays ?? 0) > 0));
   }
-  if (objective.includes('CONVERS') || objective.includes('SALE') || objective.includes('PURCHASE')) {
-    return pick(computed.purchases ?? computed.siteLeads ?? computed.leadForms, computed.purchases ? 'Compras' : 'Conversões');
-  }
+
 
   if ((computed.purchases ?? 0) > 0) return pick(computed.purchases, 'Compras');
   if ((computed.messagesStarted ?? 0) > 0) return pick(computed.messagesStarted, 'Mensagens iniciadas');
-  if ((computed.siteLeads ?? 0) > 0) return pick(computed.siteLeads, 'Conversões');
+  if ((computed.siteLeads ?? 0) > 0) return pick(computed.siteLeads, 'Conversões de site');
   if ((computed.leadForms ?? 0) > 0) return pick(computed.leadForms, 'Lead Forms');
   if ((computed.followers ?? 0) > 0) return pick(computed.followers, 'Seguidores');
   if ((computed.profileVisits ?? 0) > 0) return pick(computed.profileVisits, 'Visitas ao perfil');
@@ -600,16 +771,155 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     return out;
   };
 
-  const buildInsightsFilters = () => {
+  const fetchCampaignMetadataByIds = async (providerToken: string, campaignIds: string[]) => {
+    const out = new Map<string, CampaignMetaNode>();
+    const ids = Array.from(new Set(campaignIds)).filter(Boolean);
+    for (const group of chunk(ids, 50)) {
+      const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/`);
+      url.searchParams.set('ids', group.join(','));
+      url.searchParams.set('fields', 'objective');
+      url.searchParams.set('access_token', providerToken);
+
+      const res = await fetch(url.toString());
+      const json = await res.json();
+      if (!res.ok || json?.error) continue;
+
+      for (const id of group) {
+        const node = json?.[id];
+        out.set(id, { objective: node?.objective != null ? String(node.objective) : undefined });
+      }
+    }
+    return out;
+  };
+
+  const fetchAdsetMetadataByIds = async (providerToken: string, adsetIds: string[]) => {
+    const out = new Map<string, AdsetMetaNode>();
+    const ids = Array.from(new Set(adsetIds)).filter(Boolean);
+    for (const group of chunk(ids, 50)) {
+      const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/`);
+      url.searchParams.set('ids', group.join(','));
+      url.searchParams.set('fields', 'campaign_id,destination_type,optimization_goal,promoted_object');
+      url.searchParams.set('access_token', providerToken);
+
+      const res = await fetch(url.toString());
+      const json = await res.json();
+      if (!res.ok || json?.error) continue;
+
+      for (const id of group) {
+        const node = json?.[id];
+        out.set(id, {
+          campaignId: node?.campaign_id != null ? String(node.campaign_id) : undefined,
+          destinationType: node?.destination_type != null ? String(node.destination_type) : undefined,
+          optimizationGoal: node?.optimization_goal != null ? String(node.optimization_goal) : undefined,
+          promotedObject: node?.promoted_object && typeof node.promoted_object === 'object' ? node.promoted_object : null,
+        });
+      }
+    }
+    return out;
+  };
+
+  const buildNativeContext = (
+    sourceLevel: NativeResultContext['sourceLevel'],
+    signal: {
+      objective?: unknown;
+      destinationType?: unknown;
+      optimizationGoal?: unknown;
+      promotedObject?: Record<string, unknown> | null;
+    },
+  ): NativeResultContext => ({
+    nativeType: inferNativeTypeFromContext(signal),
+    sourceLevel,
+    destinationType: signal.destinationType != null ? String(signal.destinationType) : undefined,
+    optimizationGoal: signal.optimizationGoal != null ? String(signal.optimizationGoal) : undefined,
+    objective: signal.objective != null ? String(signal.objective) : undefined,
+  });
+
+  const chooseDominantContext = (spendByType: Map<NativeResultType, number>, sampleByType: Map<NativeResultType, NativeResultContext>) => {
+    let winner: NativeResultType = 'unknown';
+    let winnerSpend = -1;
+    for (const [nativeType, spend] of spendByType.entries()) {
+      if (nativeType === 'unknown') continue;
+      if (spend > winnerSpend) {
+        winnerSpend = spend;
+        winner = nativeType;
+      }
+    }
+    return sampleByType.get(winner) ?? { nativeType: 'unknown', sourceLevel: 'inferred' as const };
+  };
+
+  const buildNativeTypeOverrideMapsFromAdInsights = async (
+    providerToken: string,
+    adInsightRows: any[],
+  ): Promise<NativeTypeOverrideMaps> => {
+    const adsetIds = adInsightRows.map((row) => String(row.adset_id ?? '')).filter(Boolean);
+    const adsetMeta = await fetchAdsetMetadataByIds(providerToken, adsetIds);
+    const campaignIds = Array.from(
+      new Set(
+        adInsightRows
+          .map((row) => String(row.campaign_id ?? adsetMeta.get(String(row.adset_id ?? ''))?.campaignId ?? ''))
+          .filter(Boolean),
+      ),
+    );
+    const campaignMeta = await fetchCampaignMetadataByIds(providerToken, campaignIds);
+
+    const adsetSpend = new Map<string, Map<NativeResultType, number>>();
+    const adsetSample = new Map<string, Map<NativeResultType, NativeResultContext>>();
+    const campaignSpend = new Map<string, Map<NativeResultType, number>>();
+    const campaignSample = new Map<string, Map<NativeResultType, NativeResultContext>>();
+
+    for (const row of adInsightRows) {
+      const adsetId = String(row.adset_id ?? '');
+      const campaignId = String(row.campaign_id ?? adsetMeta.get(adsetId)?.campaignId ?? '');
+      const adsetNode = adsetMeta.get(adsetId);
+      const campaignNode = campaignMeta.get(campaignId);
+      const context = buildNativeContext('ad', {
+        objective: row.objective ?? campaignNode?.objective,
+        destinationType: adsetNode?.destinationType,
+        optimizationGoal: adsetNode?.optimizationGoal,
+        promotedObject: adsetNode?.promotedObject ?? null,
+      });
+      const spend = parseNumber(row.spend);
+
+      if (adsetId) {
+        if (!adsetSpend.has(adsetId)) adsetSpend.set(adsetId, new Map());
+        if (!adsetSample.has(adsetId)) adsetSample.set(adsetId, new Map());
+        const next = (adsetSpend.get(adsetId)?.get(context.nativeType) ?? 0) + spend;
+        adsetSpend.get(adsetId)!.set(context.nativeType, next);
+        adsetSample.get(adsetId)!.set(context.nativeType, context);
+      }
+
+      if (campaignId) {
+        if (!campaignSpend.has(campaignId)) campaignSpend.set(campaignId, new Map());
+        if (!campaignSample.has(campaignId)) campaignSample.set(campaignId, new Map());
+        const next = (campaignSpend.get(campaignId)?.get(context.nativeType) ?? 0) + spend;
+        campaignSpend.get(campaignId)!.set(context.nativeType, next);
+        campaignSample.get(campaignId)!.set(context.nativeType, context);
+      }
+    }
+
+    const byCampaignId = new Map<string, NativeResultContext>();
+    const byAdsetId = new Map<string, NativeResultContext>();
+
+    for (const [campaignId, spendByType] of campaignSpend.entries()) {
+      byCampaignId.set(campaignId, chooseDominantContext(spendByType, campaignSample.get(campaignId) ?? new Map()));
+    }
+    for (const [adsetId, spendByType] of adsetSpend.entries()) {
+      byAdsetId.set(adsetId, chooseDominantContext(spendByType, adsetSample.get(adsetId) ?? new Map()));
+    }
+
+    return { byCampaignId, byAdsetId };
+  };
+
+  const buildInsightsFilters = (level: MetaLevel) => {
     const filters: any[] = [];
     const campaignIds = selectedCampaignIds.length ? selectedCampaignIds : campaignFilterId ? [campaignFilterId] : [];
     const adsetIds = selectedAdsetIds.length ? selectedAdsetIds : adsetFilterId ? [adsetFilterId] : [];
 
-    if (selectedLevel === 'ad' && adsetIds.length) {
-      filters.push({ field: 'adset.id', operator: 'IN', value: adsetIds });
-    }
-    if (selectedLevel !== 'campaign' && campaignIds.length) {
+    if (campaignIds.length) {
       filters.push({ field: 'campaign.id', operator: 'IN', value: campaignIds });
+    }
+    if ((level === 'ad' || level === 'adset') && adsetIds.length) {
+      filters.push({ field: 'adset.id', operator: 'IN', value: adsetIds });
     }
 
     return filters;
@@ -650,23 +960,59 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     return rows;
   };
 
+  const resolveNativeContextForInsightRow = (
+    row: any,
+    level: MetaLevel,
+    adsetMeta: Map<string, AdsetMetaNode>,
+    campaignMeta: Map<string, CampaignMetaNode>,
+    nativeOverrides?: NativeTypeOverrideMaps,
+  ): NativeResultContext => {
+    const adsetId = row?.adset_id != null ? String(row.adset_id) : '';
+    const campaignId = row?.campaign_id != null ? String(row.campaign_id) : adsetMeta.get(adsetId)?.campaignId ?? '';
+    const adsetNode = adsetMeta.get(adsetId);
+    const campaignNode = campaignMeta.get(campaignId);
+    const baseContext = buildNativeContext(level === 'campaign' ? 'campaign' : level === 'adset' ? 'adset' : 'ad', {
+      objective: row?.objective ?? campaignNode?.objective,
+      destinationType: adsetNode?.destinationType,
+      optimizationGoal: adsetNode?.optimizationGoal,
+      promotedObject: adsetNode?.promotedObject ?? null,
+    });
+    const needsOverride =
+      baseContext.nativeType === 'unknown' || isGenericObjective(normalizeObjective(baseContext.objective));
+
+    if (level === 'campaign' && campaignId && needsOverride) {
+      return nativeOverrides?.byCampaignId.get(campaignId) ?? baseContext;
+    }
+    if (level === 'adset' && adsetId && needsOverride) {
+      return nativeOverrides?.byAdsetId.get(adsetId) ?? baseContext;
+    }
+    return baseContext;
+  };
+
   const mapInsightRowsToMetrics = async (
     providerToken: string,
     adAccountId: string,
     adAccountName: string | null,
     insightRows: any[],
+    level: MetaLevel,
+    nativeOverrides?: NativeTypeOverrideMaps,
   ): Promise<AdMetric[]> => {
     const entityIds = insightRows
-      .map((row) => (selectedLevel === 'campaign' ? row.campaign_id : selectedLevel === 'adset' ? row.adset_id : row.ad_id))
+      .map((row) => (level === 'campaign' ? row.campaign_id : level === 'adset' ? row.adset_id : row.ad_id))
       .filter(Boolean)
       .map((v) => String(v));
+    const adsetIds = insightRows.map((row) => String(row?.adset_id ?? '')).filter(Boolean);
+    const campaignIds = Array.from(new Set(insightRows.map((row) => String(row?.campaign_id ?? '')).filter(Boolean)));
 
-    const effectiveStatuses = await fetchEffectiveStatusesByIds(providerToken, entityIds);
+    const [effectiveStatuses, adsetMeta, campaignMeta] = await Promise.all([
+      fetchEffectiveStatusesByIds(providerToken, entityIds),
+      fetchAdsetMetadataByIds(providerToken, adsetIds),
+      fetchCampaignMetadataByIds(providerToken, campaignIds),
+    ]);
 
     const mapped: AdMetric[] = insightRows.map((row: any) => {
-      const entityId = selectedLevel === 'campaign' ? row.campaign_id : selectedLevel === 'adset' ? row.adset_id : row.ad_id;
-      const entityName =
-        selectedLevel === 'campaign' ? row.campaign_name : selectedLevel === 'adset' ? row.adset_name : row.ad_name;
+      const entityId = level === 'campaign' ? row.campaign_id : level === 'adset' ? row.adset_id : row.ad_id;
+      const entityName = level === 'campaign' ? row.campaign_name : level === 'adset' ? row.adset_name : row.ad_name;
 
       const impressions = Math.floor(parseNumber(row.impressions));
       const spend = parseNumber(row.spend);
@@ -679,32 +1025,34 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
       const linkClicks = row.inline_link_clicks != null ? Math.floor(parseNumber(row.inline_link_clicks)) : undefined;
       const clicks = row.clicks != null ? Math.floor(parseNumber(row.clicks)) : undefined;
+      const nativeContext = resolveNativeContextForInsightRow(row, level, adsetMeta, campaignMeta, nativeOverrides);
       const primary = resolvePrimaryResult(row, {
-        leadForms: buckets.leadForms || undefined,
-        siteLeads: buckets.siteLeads || undefined,
-        messagesStarted: buckets.messagesStarted || undefined,
-        purchases: buckets.purchases || undefined,
-        profileVisits: buckets.profileVisits || undefined,
-        followers: buckets.followers || undefined,
+        leadForms: buckets.leadForms,
+        siteLeads: buckets.siteLeads,
+        messagesStarted: buckets.messagesStarted,
+        purchases: buckets.purchases,
+        profileVisits: buckets.profileVisits,
+        followers: buckets.followers,
         linkClicks,
         clicks,
-        video3s: buckets.videoViews || undefined,
-        thruplays: buckets.thruplays || undefined,
+        video3s: buckets.videoViews,
+        thruplays: buckets.thruplays,
+        nativeContext,
       });
       const results = primary.value;
-      const costPerResult = results && results > 0 ? spend / results : undefined;
+      const costPerResult = typeof results === 'number' && results > 0 ? spend / results : undefined;
 
       const subtitle =
-        selectedLevel === 'campaign'
+        level === 'campaign'
           ? `Conta: ${adAccountName ?? adAccountId}`
-          : selectedLevel === 'adset'
+          : level === 'adset'
             ? `Campanha: ${row.campaign_name ?? row.campaign_id ?? '-'}`
             : `Conjunto: ${row.adset_name ?? row.adset_id ?? '-'} • Campanha: ${row.campaign_name ?? row.campaign_id ?? '-'}`;
 
       const baseThumb =
-        selectedLevel === 'campaign'
+        level === 'campaign'
           ? svgAvatarDataUrl(adAccountName ?? adAccountId, '#1F2937', '#EEF2FF')
-          : selectedLevel === 'adset'
+          : level === 'adset'
             ? svgAvatarDataUrl(String(row.campaign_name ?? 'CP'), '#1F2937', '#ECFDF5')
             : svgAvatarDataUrl(String(entityName ?? 'AD'), '#1F2937', '#F3F4F6');
 
@@ -715,30 +1063,30 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
       return {
         id: String(entityId),
-        adName: entityName ?? `${selectedLevel} ${entityId}`,
+        adName: entityName ?? `${level} ${entityId}`,
         adId: String(entityId),
         subtitle,
         thumbnail: baseThumb,
         campaignId:
-          selectedLevel === 'campaign'
+          level === 'campaign'
             ? String(entityId)
             : row.campaign_id != null
               ? String(row.campaign_id)
               : undefined,
         campaignName:
-          selectedLevel === 'campaign'
+          level === 'campaign'
             ? (row.campaign_name != null ? String(row.campaign_name) : entityName != null ? String(entityName) : undefined)
             : row.campaign_name != null
               ? String(row.campaign_name)
               : undefined,
         adsetId:
-          selectedLevel === 'adset'
+          level === 'adset'
             ? String(entityId)
             : row.adset_id != null
               ? String(row.adset_id)
               : undefined,
         adsetName:
-          selectedLevel === 'adset'
+          level === 'adset'
             ? (row.adset_name != null ? String(row.adset_name) : entityName != null ? String(entityName) : undefined)
             : row.adset_name != null
               ? String(row.adset_name)
@@ -755,24 +1103,26 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         cpm: row.cpm != null ? parseNumber(row.cpm) : undefined,
         frequency: row.frequency != null ? parseNumber(row.frequency) : undefined,
         leads: buckets.businessLeads > 0 ? buckets.businessLeads : undefined,
-        messagesStarted: buckets.messagesStarted > 0 ? buckets.messagesStarted : undefined,
-        leadForms: buckets.leadForms > 0 ? buckets.leadForms : undefined,
-        siteLeads: buckets.siteLeads > 0 ? buckets.siteLeads : undefined,
-        videoViews: buckets.videoViews > 0 ? buckets.videoViews : undefined,
-        thruplays: buckets.thruplays > 0 ? buckets.thruplays : undefined,
+        messagesStarted: buckets.messagesStarted,
+        leadForms: buckets.leadForms,
+        siteLeads: buckets.siteLeads,
+        videoViews: buckets.videoViews,
+        thruplays: buckets.thruplays,
         cpc: row.cpc != null ? parseNumber(row.cpc) : undefined,
         ctr,
         roas,
         cpa: buckets.businessLeads > 0 ? spend / buckets.businessLeads : undefined,
         hookRate,
         holdRate,
-        profileVisits: buckets.profileVisits > 0 ? buckets.profileVisits : undefined,
-        followers: buckets.followers > 0 ? buckets.followers : undefined,
+        profileVisits: buckets.profileVisits,
+        followers: buckets.followers,
+        nativeType: nativeContext.nativeType,
+        nativeResultContext: nativeContext,
         tags,
       };
     });
 
-    if (selectedLevel === 'ad' && mapped.length > 0) {
+    if (level === 'ad' && mapped.length > 0) {
       const adIds = mapped.map((r) => r.adId);
       const thumbs = await fetchAdThumbnails(providerToken, adIds);
       for (const row of mapped) {
@@ -785,22 +1135,22 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     return mapped;
   };
 
-  const fetchTrafficRowsFromMeta = async (
+  const fetchInsightRowsFromMeta = async (
     providerToken: string,
     adAccountId: string,
-    adAccountName: string | null,
-    periodOverride?: { start?: string; end?: string },
+    periodOverride: { start?: string; end?: string } | undefined,
+    level: MetaLevel,
   ) => {
     const insightsUrl = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
-    insightsUrl.searchParams.set('level', selectedLevel);
-    const filters = buildInsightsFilters();
+    insightsUrl.searchParams.set('level', level);
+    const filters = buildInsightsFilters(level);
     if (filters.length) insightsUrl.searchParams.set('filtering', JSON.stringify(filters));
     insightsUrl.searchParams.set(
       'fields',
       [
-        selectedLevel === 'campaign'
+        level === 'campaign'
           ? 'campaign_id,campaign_name'
-          : selectedLevel === 'adset'
+          : level === 'adset'
             ? 'adset_id,adset_name,campaign_id,campaign_name'
             : 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name',
         'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas,video_thruplay_watched_actions',
@@ -809,9 +1159,26 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     applyTimeRange(insightsUrl, periodOverride);
     insightsUrl.searchParams.set('limit', '100');
     insightsUrl.searchParams.set('access_token', providerToken);
+    return fetchMetaCollection(insightsUrl.toString());
+  };
 
-    const insightRows = await fetchMetaCollection(insightsUrl.toString());
-    return mapInsightRowsToMetrics(providerToken, adAccountId, adAccountName, insightRows);
+  const fetchTrafficRowsFromMeta = async (
+    providerToken: string,
+    adAccountId: string,
+    adAccountName: string | null,
+    periodOverride?: { start?: string; end?: string },
+    level: MetaLevel = selectedLevel,
+    nativeOverrides?: NativeTypeOverrideMaps,
+  ) => {
+    const insightRows = await fetchInsightRowsFromMeta(providerToken, adAccountId, periodOverride, level);
+    const resolvedOverrides =
+      nativeOverrides ??
+      (level === 'ad'
+        ? undefined
+        : await fetchInsightRowsFromMeta(providerToken, adAccountId, periodOverride, 'ad').then((adRows) =>
+            buildNativeTypeOverrideMapsFromAdInsights(providerToken, adRows),
+          ));
+    return mapInsightRowsToMetrics(providerToken, adAccountId, adAccountName, insightRows, level, resolvedOverrides);
   };
 
   const fetchAccountSummary = async (
@@ -1544,11 +1911,12 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       if (!selectedAdAccountId) throw new Error('Selecione uma conta de anúncio para gerar o relatório.');
 
       const selectedAccountName = adAccounts.find((a) => a.id === selectedAdAccountId)?.name ?? null;
-      const [currentMeta, previousMeta, currentTimeseries, reportRows] = await Promise.all([
+      const [currentMeta, previousMeta, currentTimeseries, reportRows, topAdRows] = await Promise.all([
         fetchAccountSummary(providerToken, selectedAdAccountId, { start: periodStart, end: periodEnd }),
         fetchAccountSummary(providerToken, selectedAdAccountId, { start: prevDates.start, end: prevDates.end }),
         fetchAccountTimeseries(providerToken, selectedAdAccountId, { start: periodStart, end: periodEnd }),
-        fetchTrafficRowsFromMeta(providerToken, selectedAdAccountId, selectedAccountName, { start: periodStart, end: periodEnd }).then(computeScores),
+        fetchTrafficRowsFromMeta(providerToken, selectedAdAccountId, selectedAccountName, { start: periodStart, end: periodEnd }, selectedLevel).then(computeScores),
+        fetchTrafficRowsFromMeta(providerToken, selectedAdAccountId, selectedAccountName, { start: periodStart, end: periodEnd }, 'ad').then(computeScores),
       ]);
       const [currentBusiness, previousBusiness] = await Promise.all([
         fetchCrmBusinessSummary(periodStart, periodEnd, currentMeta.platform),
@@ -1607,7 +1975,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       }));
 
       const campaignGroupMap = new Map<string, AdMetric[]>();
-      for (const row of reportRows.filter((item) => item.spend > 0)) {
+      for (const row of topAdRows.filter((item) => item.spend > 0)) {
         const key = row.campaignName ?? row.adsetName ?? 'Sem campanha';
         if (!campaignGroupMap.has(key)) campaignGroupMap.set(key, []);
         campaignGroupMap.get(key)!.push(row);
