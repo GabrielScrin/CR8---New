@@ -266,7 +266,14 @@ const extractMessagingConversationsFromActions = (actions: any[] | undefined) =>
 
 // Visitas ao perfil reais do Instagram; nao incluir page engagement / view content genericos.
 const extractProfileVisitsFromActions = (actions: any[] | undefined) =>
-  extractActionSum(actions, (t) => t === 'instagram_profile_visit' || t === 'profile_visit' || t.endsWith('.profile_visit'));
+  extractActionSum(
+    actions,
+    (t) =>
+      t === 'instagram_profile_visit' ||
+      t === 'profile_visit' ||
+      t.includes('instagram_profile') ||
+      t.includes('profile_visit'),
+  );
 
 // Seguidores/likes ganhos (Meta page likes e Instagram follows via anuncios)
 const extractFollowersFromActions = (actions: any[] | undefined) =>
@@ -306,11 +313,13 @@ const inferNativeTypeFromContext = (input: {
   destinationType?: unknown;
   optimizationGoal?: unknown;
   promotedObject?: Record<string, unknown> | null;
+  nameHint?: unknown;
 }): NativeResultType => {
   const destinationType = normalizeMetaSignal(input.destinationType);
   const optimizationGoal = normalizeMetaSignal(input.optimizationGoal);
   const objective = normalizeObjective(input.objective);
   const promotedJson = JSON.stringify(input.promotedObject ?? {}).toUpperCase();
+  const nameHint = normalizeMetaSignal(input.nameHint);
 
   if (
     destinationType.includes('WHATSAPP') ||
@@ -321,6 +330,17 @@ const inferNativeTypeFromContext = (input: {
     optimizationGoal.includes('REPLIES') ||
     promotedJson.includes('WHATSAPP') ||
     promotedJson.includes('MESSENGER')
+  ) {
+    return 'messages_started';
+  }
+
+  if (
+    nameHint.includes('WHATSAPP') ||
+    nameHint.includes('WHATS') ||
+    nameHint.includes(' MENSA') ||
+    nameHint.includes('MSG') ||
+    nameHint.includes('DIRECT') ||
+    nameHint.includes('DM')
   ) {
     return 'messages_started';
   }
@@ -826,6 +846,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       destinationType?: unknown;
       optimizationGoal?: unknown;
       promotedObject?: Record<string, unknown> | null;
+      nameHint?: unknown;
     },
   ): NativeResultContext => ({
     nativeType: inferNativeTypeFromContext(signal),
@@ -878,6 +899,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         destinationType: adsetNode?.destinationType,
         optimizationGoal: adsetNode?.optimizationGoal,
         promotedObject: adsetNode?.promotedObject ?? null,
+        nameHint: `${row.ad_name ?? ''} ${row.adset_name ?? ''} ${row.campaign_name ?? ''}`,
       });
       const spend = parseNumber(row.spend);
 
@@ -977,6 +999,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       destinationType: adsetNode?.destinationType,
       optimizationGoal: adsetNode?.optimizationGoal,
       promotedObject: adsetNode?.promotedObject ?? null,
+      nameHint: `${row?.ad_name ?? ''} ${row?.adset_name ?? ''} ${row?.campaign_name ?? ''}`,
     });
     const needsOverride =
       baseContext.nativeType === 'unknown' || isGenericObjective(normalizeObjective(baseContext.objective));
