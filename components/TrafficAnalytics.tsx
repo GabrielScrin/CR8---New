@@ -450,7 +450,10 @@ const valueForNativeType = (
     case 'messages_started':
       return computed.messagesStarted ?? 0;
     case 'profile_visits':
-      return computed.profileVisits ?? 0;
+      if ((computed.profileVisits ?? 0) > 0) return computed.profileVisits ?? 0;
+      if ((computed.linkClicks ?? 0) > 0) return computed.linkClicks ?? 0;
+      if ((computed.clicks ?? 0) > 0) return computed.clicks ?? 0;
+      return 0;
     case 'lead_forms':
       return computed.leadForms ?? 0;
     case 'site_leads':
