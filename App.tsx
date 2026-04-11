@@ -45,17 +45,34 @@ const LoadingScreen = () => (
 const pickAvatarUrl = (sessionUser: any): string | undefined => {
   const meta = sessionUser?.user_metadata ?? {};
   const identities = Array.isArray(sessionUser?.identities) ? sessionUser.identities : [];
+  const facebookIdentity = identities.find((identity: any) => identity?.provider === 'facebook');
+  const facebookData = facebookIdentity?.identity_data ?? {};
+  const facebookId =
+    facebookData.user_id ??
+    facebookData.id ??
+    meta.user_id ??
+    meta.id ??
+    null;
 
   const candidates = [
     meta.avatar_url,
     meta.picture,
     meta.picture?.data?.url,
+    typeof facebookId === 'string' && facebookId.trim()
+      ? `https://graph.facebook.com/${facebookId.trim()}/picture?type=large&width=128&height=128`
+      : undefined,
     ...identities.flatMap((identity: any) => {
       const data = identity?.identity_data ?? {};
       return [
         data.avatar_url,
         data.picture,
         data.picture?.data?.url,
+        typeof data.user_id === 'string' && data.user_id.trim()
+          ? `https://graph.facebook.com/${data.user_id.trim()}/picture?type=large&width=128&height=128`
+          : undefined,
+        typeof data.id === 'string' && data.id.trim()
+          ? `https://graph.facebook.com/${data.id.trim()}/picture?type=large&width=128&height=128`
+          : undefined,
       ];
     }),
   ];

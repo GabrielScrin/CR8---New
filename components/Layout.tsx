@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Sidebar } from './Sidebar';
 import { User, isClientRole } from '../types';
-import { Bell, Bot, ChevronDown } from 'lucide-react';
+import { Bell, Bot, ChevronDown, LogOut, Settings } from 'lucide-react';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { loadLocalAiSettings } from '../lib/aiLocal';
 
@@ -130,6 +130,7 @@ const UserAvatar: React.FC<{ name: string; src?: string }> = ({ name, src }) => 
 
 export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, setCurrentView, onLogout, onCompanyChange }) => {
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
+  const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [aiInput, setAiInput] = useState('');
   const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
@@ -140,6 +141,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
     },
   ]);
   const aiBottomRef = useRef<HTMLDivElement | null>(null);
+  const userMenuRef = useRef<HTMLDivElement | null>(null);
   const [companies, setCompanies] = useState<CompanyOption[]>([]);
   const [companiesError, setCompaniesError] = useState<string | null>(null);
 
@@ -212,6 +214,28 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
   useEffect(() => {
     if (isClientPortal) setIsAiPanelOpen(false);
   }, [isClientPortal]);
+
+  useEffect(() => {
+    if (!isUserMenuOpen) return;
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!userMenuRef.current?.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsUserMenuOpen(false);
+    };
+
+    window.addEventListener('mousedown', handlePointerDown);
+    window.addEventListener('keydown', handleEscape);
+
+    return () => {
+      window.removeEventListener('mousedown', handlePointerDown);
+      window.removeEventListener('keydown', handleEscape);
+    };
+  }, [isUserMenuOpen]);
 
   const sendAi = async () => {
     const text = aiInput.trim();
@@ -381,13 +405,64 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
                   </div>
                 )}
 
-                <div className="flex items-center space-x-3 pl-6 border-l border-[hsl(var(--border))]">
-                    <UserAvatar name={user.name} src={user.avatar} />
-                    <div className="hidden md:block">
-                        <p className="text-sm font-medium text-[hsl(var(--foreground))] leading-tight">{user.name}</p>
-                        <p className="text-xs text-[hsl(var(--muted-foreground))] leading-tight capitalize">{user.role}</p>
-                    </div>
-                    {!isClientPortal && <ChevronDown className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />}
+                <div className="relative pl-6 border-l border-[hsl(var(--border))]" ref={userMenuRef}>
+                    <button
+                      type="button"
+                      onClick={() => setIsUserMenuOpen((open) => !open)}
+                      className="flex items-center space-x-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-[hsl(var(--secondary))]"
+                    >
+                        <UserAvatar name={user.name} src={user.avatar} />
+                        <div className="hidden md:block text-left">
+                            <p className="text-sm font-medium text-[hsl(var(--foreground))] leading-tight">{user.name}</p>
+                            <p className="text-xs text-[hsl(var(--muted-foreground))] leading-tight capitalize">{user.role}</p>
+                        </div>
+                        <ChevronDown className={`w-4 h-4 text-[hsl(var(--muted-foreground))] transition-transform ${isUserMenuOpen ? 'rotate-180' : ''}`} />
+                    </button>
+
+                    <AnimatePresence>
+                      {isUserMenuOpen && (
+                        <motion.div
+                          initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                          animate={{ opacity: 1, y: 0, scale: 1 }}
+                          exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                          transition={{ duration: 0.16, ease: 'easeOut' }}
+                          className="absolute right-0 top-[calc(100%+0.5rem)] z-50 w-56 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-2 shadow-2xl"
+                        >
+                          <div className="border-b border-[hsl(var(--border))] px-3 py-2">
+                            <p className="truncate text-sm font-medium text-[hsl(var(--foreground))]">{user.name}</p>
+                            <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">{user.email}</p>
+                          </div>
+
+                          <div className="py-1">
+                            {!isClientPortal && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setCurrentView('settings');
+                                  setIsUserMenuOpen(false);
+                                }}
+                                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[hsl(var(--foreground))] transition-colors hover:bg-[hsl(var(--secondary))]"
+                              >
+                                <Settings className="h-4 w-4 text-[hsl(var(--muted-foreground))]" />
+                                Configuracoes
+                              </button>
+                            )}
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setIsUserMenuOpen(false);
+                                onLogout();
+                              }}
+                              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-red-300 transition-colors hover:bg-red-500/10"
+                            >
+                              <LogOut className="h-4 w-4" />
+                              Sair da conta
+                            </button>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                 </div>
             </div>
         </header>
