@@ -24,28 +24,28 @@ interface ChartPoint {
   label: string;
   color: string;
   avgReach: number;
-  avgImpressions: number;
+  avgInteractions: number;
   count: number;
 }
 
 function buildChartData(media: IgMedia[]): ChartPoint[] {
-  const groups: Record<string, { reach: number; impressions: number; count: number }> = {};
+  const groups: Record<string, { reach: number; interactions: number; count: number }> = {};
 
   for (const m of media) {
     const t = effectiveType(m);
-    if (!groups[t]) groups[t] = { reach: 0, impressions: 0, count: 0 };
-    groups[t].reach       += m.reach ?? 0;
-    groups[t].impressions += m.impressions ?? 0;
-    groups[t].count       += 1;
+    if (!groups[t]) groups[t] = { reach: 0, interactions: 0, count: 0 };
+    groups[t].reach        += m.reach ?? 0;
+    groups[t].interactions += m.totalInteractions ?? 0;
+    groups[t].count        += 1;
   }
 
   return Object.entries(groups)
-    .map(([type, { reach, impressions, count }]) => ({
+    .map(([type, { reach, interactions, count }]) => ({
       type,
-      label:          TYPE_META[type]?.label ?? type,
-      color:          TYPE_META[type]?.color ?? '#888',
-      avgReach:       count > 0 ? Math.round(reach / count) : 0,
-      avgImpressions: count > 0 ? Math.round(impressions / count) : 0,
+      label:           TYPE_META[type]?.label ?? type,
+      color:           TYPE_META[type]?.color ?? '#888',
+      avgReach:        count > 0 ? Math.round(reach / count) : 0,
+      avgInteractions: count > 0 ? Math.round(interactions / count) : 0,
       count,
     }))
     .sort((a, b) => b.avgReach - a.avgReach);
@@ -88,8 +88,8 @@ export const InstagramMediaTypeChart: React.FC<InstagramMediaTypeChartProps> = (
       </div>
 
       <div className="flex flex-col gap-3">
-        {data.map(({ type, label, color, avgReach, avgImpressions, count }) => {
-          const maxVal = Math.max(...data.map((d) => d.avgImpressions), 1);
+        {data.map(({ type, label, color, avgReach, avgInteractions, count }) => {
+          const maxVal = Math.max(...data.map((d) => d.avgInteractions), 1);
           return (
             <div key={type}>
               <div className="flex items-center justify-between mb-1">
@@ -106,7 +106,7 @@ export const InstagramMediaTypeChart: React.FC<InstagramMediaTypeChartProps> = (
                     <span className="font-semibold text-[hsl(var(--foreground))]">{fmtY(avgReach)}</span> alcance
                   </span>
                   <span className="text-[hsl(var(--muted-foreground))]">
-                    <span className="font-semibold text-[hsl(var(--foreground))]">{fmtY(avgImpressions)}</span> impr.
+                    <span className="font-semibold text-[hsl(var(--foreground))]">{fmtY(avgInteractions)}</span> inter.
                   </span>
                 </div>
               </div>
@@ -115,7 +115,7 @@ export const InstagramMediaTypeChart: React.FC<InstagramMediaTypeChartProps> = (
                 {/* Fundo = impressões */}
                 <div
                   className="absolute inset-y-0 left-0 rounded-full"
-                  style={{ width: `${(avgImpressions / maxVal) * 100}%`, background: `${color}40` }}
+                  style={{ width: `${(avgInteractions / maxVal) * 100}%`, background: `${color}40` }}
                 />
                 {/* Frente = alcance */}
                 <div

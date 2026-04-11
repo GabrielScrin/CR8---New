@@ -17,47 +17,43 @@ export interface IgMedia {
   permalink: string;
   likeCount: number;
   commentsCount: number;
-  // Insights (null se indisponível — ex.: conta sem permissão)
+  // Insights por post (null se indisponível)
   reach: number | null;
-  impressions: number | null;
   saved: number | null;
   videoViews: number | null;
+  totalInteractions: number | null; // likes + comments + shares + saves
 }
 
-// Busca insights de uma mídia individual; retorna nulls em caso de falha
+// Métricas suportadas por tipo (impressions removida a partir da v22.0)
 async function fetchMediaInsights(
   mediaId: string,
   token: string,
   isVideo: boolean,
-): Promise<Pick<IgMedia, 'reach' | 'impressions' | 'saved' | 'videoViews'>> {
+): Promise<Pick<IgMedia, 'reach' | 'saved' | 'videoViews' | 'totalInteractions'>> {
+  const empty = { reach: null, saved: null, videoViews: null, totalInteractions: null };
   try {
     const metrics = isVideo
-      ? 'reach,impressions,saved,video_views'
-      : 'reach,impressions,saved';
+      ? 'reach,saved,video_views,total_interactions'
+      : 'reach,saved,total_interactions';
 
     const json = await fetchGraphJson(
       `${GRAPH_BASE}/${mediaId}/insights?metric=${metrics}&access_token=${token}`,
     );
 
-    const result: Pick<IgMedia, 'reach' | 'impressions' | 'saved' | 'videoViews'> = {
-      reach: null,
-      impressions: null,
-      saved: null,
-      videoViews: null,
-    };
+    const result = { ...empty };
 
     for (const item of json.data ?? []) {
-      // A API retorna o valor direto em item.values[0].value
+      // A API retorna o valor em item.values[0].value (série) ou item.value (simples)
       const val: number = item.values?.[0]?.value ?? item.value ?? null;
-      if (item.name === 'reach')        result.reach = val;
-      if (item.name === 'impressions')  result.impressions = val;
-      if (item.name === 'saved')        result.saved = val;
-      if (item.name === 'video_views')  result.videoViews = val;
+      if (item.name === 'reach')              result.reach = val;
+      if (item.name === 'saved')              result.saved = val;
+      if (item.name === 'video_views')        result.videoViews = val;
+      if (item.name === 'total_interactions') result.totalInteractions = val;
     }
 
     return result;
   } catch {
-    return { reach: null, impressions: null, saved: null, videoViews: null };
+    return empty;
   }
 }
 
@@ -79,7 +75,6 @@ export function useInstagramMedia(igUserId: string | null) {
         return;
       }
 
-      // Busca os últimos 25 posts com metadados básicos
       const mediaListJson = await fetchGraphJson(
         `${GRAPH_BASE}/${igUserId}/media` +
         `?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,timestamp,permalink,like_count,comments_count` +
@@ -89,7 +84,6 @@ export function useInstagramMedia(igUserId: string | null) {
 
       const rawItems: any[] = mediaListJson.data ?? [];
 
-      // Busca insights de todos os posts em paralelo
       const withInsights: IgMedia[] = await Promise.all(
         rawItems.map(async (item): Promise<IgMedia> => {
           const isVideo = item.media_type === 'VIDEO';

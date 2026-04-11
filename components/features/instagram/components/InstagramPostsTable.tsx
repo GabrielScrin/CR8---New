@@ -48,7 +48,7 @@ const TypeBadge: React.FC<{ type: string }> = ({ type }) => {
 
 type FilterType = 'ALL' | IgMediaType | 'REEL';
 
-type SortKey = 'timestamp' | 'reach' | 'impressions' | 'likeCount' | 'commentsCount' | 'saved';
+type SortKey = 'timestamp' | 'reach' | 'totalInteractions' | 'likeCount' | 'commentsCount' | 'saved';
 
 interface SortState {
   key: SortKey;
@@ -236,7 +236,7 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
                 <SortHeader label="Alcance" sortKey="reach" sort={sort} onSort={handleSort} />
               </th>
               <th className="px-3 py-2 text-right">
-                <SortHeader label="Impr." sortKey="impressions" sort={sort} onSort={handleSort} />
+                <SortHeader label="Interações" sortKey="totalInteractions" sort={sort} onSort={handleSort} />
               </th>
               <th className="px-3 py-2 text-right">
                 <SortHeader label="Curtidas" sortKey="likeCount" sort={sort} onSort={handleSort} />
@@ -303,9 +303,9 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
                         {fmt(m.reach)}
                       </td>
 
-                      {/* Impressões */}
+                      {/* Interações */}
                       <td className="px-3 py-2.5 text-right text-xs text-[hsl(var(--foreground))] tabular-nums">
-                        {fmt(m.impressions)}
+                        {fmt(m.totalInteractions)}
                       </td>
 
                       {/* Curtidas */}
