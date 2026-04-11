@@ -85,17 +85,31 @@ export async function resolveIgToken(): Promise<string | null> {
 
   // 1. Token armazenado no banco (longa duração)
   if (companyId) {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('companies')
       .select('instagram_access_token, instagram_token_expires_at')
       .eq('id', companyId)
-      .single();
+      .maybeSingle();
+
+    const missingColumns =
+      error &&
+      (String(error.message ?? '').includes('instagram_access_token') ||
+        String(error.message ?? '').includes('instagram_token_expires_at'));
+
+    if (error && !missingColumns) {
+      throw error;
+    }
 
     const stored = (data as any)?.instagram_access_token as string | null;
     const expiresAtRaw = (data as any)?.instagram_token_expires_at as string | null;
 
     if (stored) {
-      const expiresAt = expiresAtRaw ? new Date(expiresAtRaw).getTime() : 0;
+      if (!expiresAtRaw) {
+        _cache = { token: stored, companyId, fetchedAt: Date.now() };
+        return stored;
+      }
+
+      const expiresAt = new Date(expiresAtRaw).getTime();
       const minValidity = 24 * 60 * 60 * 1000; // exige pelo menos 24h restantes
 
       if (expiresAt > Date.now() + minValidity) {

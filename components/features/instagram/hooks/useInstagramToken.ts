@@ -46,11 +46,16 @@ export function useInstagramToken(companyId: string | null): IgTokenStatus {
       return;
     }
 
-    const expiresAt = expiresAtRaw ? new Date(expiresAtRaw) : null;
-    const msLeft = expiresAt ? expiresAt.getTime() - Date.now() : null;
-    const daysLeft = msLeft !== null ? Math.floor(msLeft / (1000 * 60 * 60 * 24)) : null;
-    const isExpired = msLeft !== null ? msLeft <= 0 : false;
-    const isExpiring = daysLeft !== null && !isExpired && daysLeft <= WARN_DAYS;
+    if (!expiresAtRaw) {
+      setStatus({ hasStoredToken: true, expiresAt: null, daysLeft: null, isExpiring: false, isExpired: false, loading: false });
+      return;
+    }
+
+    const expiresAt = new Date(expiresAtRaw);
+    const msLeft = expiresAt.getTime() - Date.now();
+    const daysLeft = Math.floor(msLeft / (1000 * 60 * 60 * 24));
+    const isExpired = msLeft <= 0;
+    const isExpiring = !isExpired && daysLeft <= WARN_DAYS;
 
     setStatus({ hasStoredToken: true, expiresAt, daysLeft, isExpiring, isExpired, loading: false });
   }, [companyId]);

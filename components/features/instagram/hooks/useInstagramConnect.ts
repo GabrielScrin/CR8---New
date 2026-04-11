@@ -19,6 +19,7 @@ export interface IgPage {
   igUserId: string;     // Instagram Business Account ID
   igUsername: string;
   igProfilePicture?: string;
+  pageAccessToken?: string;
 }
 
 interface UseInstagramConnectReturn {
@@ -60,7 +61,7 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
       // Busca as Facebook Pages do usuário com a conta Instagram vinculada
       const res = await fetch(
         `${GRAPH_BASE}/me/accounts` +
-        `?fields=id,name,instagram_business_account{id,username,profile_picture_url}` +
+        `?fields=id,name,access_token,instagram_business_account{id,username,profile_picture_url}` +
         `&access_token=${token}`,
       );
 
@@ -87,6 +88,7 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
           igUserId: p.instagram_business_account.id,
           igUsername: p.instagram_business_account.username ?? '',
           igProfilePicture: p.instagram_business_account.profile_picture_url,
+          pageAccessToken: p.access_token ?? undefined,
         }));
 
       if (igPages.length === 0) {
@@ -116,7 +118,7 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
           meta_page_id: page.id,
           instagram_business_account_id: page.igUserId,
           instagram_username: page.igUsername,
-          instagram_access_token: null,
+          instagram_access_token: page.pageAccessToken ?? null,
           instagram_token_expires_at: null,
         })
         .eq('id', companyId);
@@ -137,7 +139,7 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
       clearIgTokenCache();
 
       const providerToken = await getProviderToken();
-      if (providerToken) {
+      if (!page.pageAccessToken && providerToken) {
         await exchangeIgToken(companyId, providerToken);
       }
     } catch (err: any) {
