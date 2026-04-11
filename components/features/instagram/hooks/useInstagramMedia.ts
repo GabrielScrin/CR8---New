@@ -15,13 +15,11 @@ export interface IgMedia {
   thumbnailUrl: string;
   timestamp: string;       // ISO 8601
   permalink: string;
-  likeCount: number;
-  commentsCount: number;
   // Insights por post (null se indisponível)
   reach: number | null;
   saved: number | null;
   videoViews: number | null;
-  totalInteractions: number | null; // likes + comments + shares + saves
+  totalInteractions: number | null; // likes + comments + shares + saves (via insights)
 }
 
 // Métricas suportadas por tipo (impressions removida a partir da v22.0)
@@ -77,7 +75,7 @@ export function useInstagramMedia(igUserId: string | null) {
 
       const mediaListJson = await fetchGraphJson(
         `${GRAPH_BASE}/${igUserId}/media` +
-        `?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,timestamp,permalink,like_count,comments_count` +
+        `?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,timestamp,permalink` +
         `&limit=25` +
         `&access_token=${token}`,
       );
@@ -98,8 +96,6 @@ export function useInstagramMedia(igUserId: string | null) {
             thumbnailUrl: item.thumbnail_url ?? item.media_url ?? '',
             timestamp: item.timestamp ?? '',
             permalink: item.permalink ?? '',
-            likeCount: item.like_count ?? 0,
-            commentsCount: item.comments_count ?? 0,
             ...insights,
           };
         }),

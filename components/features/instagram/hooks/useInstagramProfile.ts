@@ -232,14 +232,14 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
           // 4. Demográfico — cidades
           fetchGraphJson(
             `${GRAPH_BASE}/${igUserId}/insights` +
-            `?metric=follower_demographics&period=lifetime&breakdown=city` +
+            `?metric=follower_demographics&metric_type=total_value&period=lifetime&breakdown=city` +
             base,
           ).catch(() => ({ data: [] })),
 
           // 5. Demográfico — idade × gênero
           fetchGraphJson(
             `${GRAPH_BASE}/${igUserId}/insights` +
-            `?metric=follower_demographics&period=lifetime&breakdown=age,gender` +
+            `?metric=follower_demographics&metric_type=total_value&period=lifetime&breakdown=age,gender` +
             base,
           ).catch(() => ({ data: [] })),
         ]);

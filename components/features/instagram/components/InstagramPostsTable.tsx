@@ -48,7 +48,7 @@ const TypeBadge: React.FC<{ type: string }> = ({ type }) => {
 
 type FilterType = 'ALL' | IgMediaType | 'REEL';
 
-type SortKey = 'timestamp' | 'reach' | 'totalInteractions' | 'likeCount' | 'commentsCount' | 'saved';
+type SortKey = 'timestamp' | 'reach' | 'totalInteractions' | 'saved';
 
 interface SortState {
   key: SortKey;
@@ -94,7 +94,7 @@ const ShimmerRow: React.FC = () => (
     <td className="px-3 py-2.5">
       <div className="h-5 w-16 rounded-full animate-shimmer" />
     </td>
-    {[...Array(5)].map((_, i) => (
+    {[...Array(3)].map((_, i) => (
       <td key={i} className="px-3 py-2.5 text-right">
         <div className="h-3.5 w-10 rounded animate-shimmer ml-auto" />
       </td>
@@ -239,12 +239,6 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
                 <SortHeader label="Interações" sortKey="totalInteractions" sort={sort} onSort={handleSort} />
               </th>
               <th className="px-3 py-2 text-right">
-                <SortHeader label="Curtidas" sortKey="likeCount" sort={sort} onSort={handleSort} />
-              </th>
-              <th className="px-3 py-2 text-right">
-                <SortHeader label="Coments." sortKey="commentsCount" sort={sort} onSort={handleSort} />
-              </th>
-              <th className="px-3 py-2 text-right">
                 <SortHeader label="Salvos" sortKey="saved" sort={sort} onSort={handleSort} />
               </th>
               <th className="px-3 py-2 w-10" />
@@ -306,16 +300,6 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
                       {/* Interações */}
                       <td className="px-3 py-2.5 text-right text-xs text-[hsl(var(--foreground))] tabular-nums">
                         {fmt(m.totalInteractions)}
-                      </td>
-
-                      {/* Curtidas */}
-                      <td className="px-3 py-2.5 text-right text-xs text-[hsl(var(--foreground))] tabular-nums">
-                        {fmt(m.likeCount)}
-                      </td>
-
-                      {/* Comentários */}
-                      <td className="px-3 py-2.5 text-right text-xs text-[hsl(var(--foreground))] tabular-nums">
-                        {fmt(m.commentsCount)}
                       </td>
 
                       {/* Salvos */}
