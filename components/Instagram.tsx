@@ -11,8 +11,10 @@ import { InstagramEngagementChart } from './features/instagram/components/Instag
 import { InstagramAudience } from './features/instagram/components/InstagramAudience';
 import { InstagramPostsTable } from './features/instagram/components/InstagramPostsTable';
 import { InstagramMediaTypeChart } from './features/instagram/components/InstagramMediaTypeChart';
+import { InstagramCrossTab } from './features/instagram/components/InstagramCrossTab';
 import { useInstagramProfile, IgPeriod } from './features/instagram/hooks/useInstagramProfile';
-import { useInstagramMedia } from './features/instagram/hooks/useInstagramMedia';
+import { useInstagramMedia, IgMedia } from './features/instagram/hooks/useInstagramMedia';
+import { useInstagramCross } from './features/instagram/hooks/useInstagramCross';
 
 interface InstagramProps {
   user: User;
@@ -26,15 +28,6 @@ const TAB_CONFIG: { id: Tab; label: string; icon: React.ElementType }[] = [
   { id: 'content',  label: 'Conteúdo',   icon: Grid3X3 },
   { id: 'cross',    label: 'Cruzamento', icon: GitMerge },
 ];
-
-const ComingSoonTab: React.FC<{ label: string }> = ({ label }) => (
-  <div className="flex flex-col items-center justify-center py-24 text-center">
-    <div className="text-4xl font-thin opacity-10 text-[hsl(var(--foreground))] mb-4">CR8</div>
-    <p className="text-sm text-[hsl(var(--muted-foreground))]">
-      {label} — disponível na próxima fase.
-    </p>
-  </div>
-);
 
 // ── Tab Visão Geral ─────────────────────────────────────────────────────────
 
@@ -111,30 +104,19 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ igUserId }) => {
 // ── Tab Conteúdo ─────────────────────────────────────────────────────────────
 
 interface ContentTabProps {
-  igUserId: string;
+  media: IgMedia[];
+  loading: boolean;
+  error: string | null;
+  onReload: () => void;
 }
 
-const ContentTab: React.FC<ContentTabProps> = ({ igUserId }) => {
-  const { media, loading, error, reload } = useInstagramMedia(igUserId);
-
-  return (
-    <div className="flex flex-col gap-0 pt-5">
-      {/* Gráfico por tipo de mídia */}
-      <InstagramMediaTypeChart media={media} loading={loading} />
-
-      {/* Divisor */}
-      <div className="mx-6 border-t border-[hsl(var(--border))] mb-5" />
-
-      {/* Tabela de posts */}
-      <InstagramPostsTable
-        media={media}
-        loading={loading}
-        error={error}
-        onReload={reload}
-      />
-    </div>
-  );
-};
+const ContentTab: React.FC<ContentTabProps> = ({ media, loading, error, onReload }) => (
+  <div className="flex flex-col gap-0 pt-5">
+    <InstagramMediaTypeChart media={media} loading={loading} />
+    <div className="mx-6 border-t border-[hsl(var(--border))] mb-5" />
+    <InstagramPostsTable media={media} loading={loading} error={error} onReload={onReload} />
+  </div>
+);
 
 // ── Componente raiz ─────────────────────────────────────────────────────────
 
@@ -145,6 +127,14 @@ export const Instagram: React.FC<InstagramProps> = ({ user, companyId }) => {
   const [companyName, setCompanyName] = useState('');
   const [loadingAccount, setLoadingAccount] = useState(true);
   const [accountError, setAccountError] = useState<string | null>(null);
+
+  // Mídia compartilhada entre Tab Conteúdo e Tab Cruzamento (evita chamada dupla)
+  const { media, loading: mediaLoading, error: mediaError, reload: reloadMedia } =
+    useInstagramMedia(igUserId);
+
+  // Cruzamento de posts com leads
+  const { data: crossData, loading: crossLoading, error: crossError, reload: reloadCross } =
+    useInstagramCross(companyId ?? null, media, mediaLoading);
 
   useEffect(() => {
     if (!companyId) { setLoadingAccount(false); return; }
@@ -300,8 +290,22 @@ export const Instagram: React.FC<InstagramProps> = ({ user, companyId }) => {
       {/* Conteúdo scrollável */}
       <div className="flex-1 overflow-auto">
         {activeTab === 'overview' && <OverviewTab igUserId={igUserId} />}
-        {activeTab === 'content'  && <ContentTab igUserId={igUserId} />}
-        {activeTab === 'cross'    && <ComingSoonTab label="Cruzamento com Leads" />}
+        {activeTab === 'content'  && (
+          <ContentTab
+            media={media}
+            loading={mediaLoading}
+            error={mediaError}
+            onReload={reloadMedia}
+          />
+        )}
+        {activeTab === 'cross' && (
+          <InstagramCrossTab
+            data={crossData}
+            loading={crossLoading || mediaLoading}
+            error={crossError}
+            onReload={reloadCross}
+          />
+        )}
       </div>
     </motion.div>
   );
