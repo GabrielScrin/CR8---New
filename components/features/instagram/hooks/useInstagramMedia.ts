@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from 'react';
-import { supabase } from '../../../../lib/supabase';
+import { resolveIgToken, fetchGraphJson } from '../../../../lib/instagramToken';
 
 const META_GRAPH_VERSION = import.meta.env.VITE_META_GRAPH_VERSION ?? 'v19.0';
 const GRAPH_BASE = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
@@ -24,18 +24,6 @@ export interface IgMedia {
   videoViews: number | null;
 }
 
-async function getProviderToken(): Promise<string | null> {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.provider_token ?? null;
-}
-
-async function fetchJson(url: string): Promise<any> {
-  const res = await fetch(url);
-  const json = await res.json();
-  if (json.error) throw new Error(json.error.message || 'Erro na Instagram Graph API');
-  return json;
-}
-
 // Busca insights de uma mídia individual; retorna nulls em caso de falha
 async function fetchMediaInsights(
   mediaId: string,
@@ -47,7 +35,7 @@ async function fetchMediaInsights(
       ? 'reach,impressions,saved,video_views'
       : 'reach,impressions,saved';
 
-    const json = await fetchJson(
+    const json = await fetchGraphJson(
       `${GRAPH_BASE}/${mediaId}/insights?metric=${metrics}&access_token=${token}`,
     );
 
@@ -85,14 +73,14 @@ export function useInstagramMedia(igUserId: string | null) {
     setError(null);
 
     try {
-      const token = await getProviderToken();
+      const token = await resolveIgToken();
       if (!token) {
         setError('Token de autenticação não encontrado. Reconecte sua conta Facebook.');
         return;
       }
 
       // Busca os últimos 25 posts com metadados básicos
-      const mediaListJson = await fetchJson(
+      const mediaListJson = await fetchGraphJson(
         `${GRAPH_BASE}/${igUserId}/media` +
         `?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,timestamp,permalink,like_count,comments_count` +
         `&limit=25` +

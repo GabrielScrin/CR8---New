@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Instagram as InstagramIcon, LayoutDashboard, Grid3X3, GitMerge, RefreshCw, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Instagram as InstagramIcon, LayoutDashboard, Grid3X3, GitMerge, RefreshCw, AlertTriangle, AlertCircle, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { setActiveIgCompany } from '../lib/instagramToken';
 import { User } from '../types';
 import { InstagramConnectBanner } from './features/instagram/components/InstagramConnectBanner';
 import { InstagramHeader } from './features/instagram/components/InstagramHeader';
@@ -15,6 +16,7 @@ import { InstagramCrossTab } from './features/instagram/components/InstagramCros
 import { useInstagramProfile, IgPeriod } from './features/instagram/hooks/useInstagramProfile';
 import { useInstagramMedia, IgMedia } from './features/instagram/hooks/useInstagramMedia';
 import { useInstagramCross } from './features/instagram/hooks/useInstagramCross';
+import { useInstagramToken } from './features/instagram/hooks/useInstagramToken';
 
 interface InstagramProps {
   user: User;
@@ -127,6 +129,14 @@ export const Instagram: React.FC<InstagramProps> = ({ user, companyId }) => {
   const [companyName, setCompanyName] = useState('');
   const [loadingAccount, setLoadingAccount] = useState(true);
   const [accountError, setAccountError] = useState<string | null>(null);
+
+  // Sincroniza o módulo de token com a empresa ativa
+  useEffect(() => {
+    setActiveIgCompany(companyId ?? null);
+  }, [companyId]);
+
+  // Status do token de longa duração (para banner de expiração)
+  const tokenStatus = useInstagramToken(companyId ?? null);
 
   // Mídia compartilhada entre Tab Conteúdo e Tab Cruzamento (evita chamada dupla)
   const { media, loading: mediaLoading, error: mediaError, reload: reloadMedia } =
@@ -286,6 +296,27 @@ export const Instagram: React.FC<InstagramProps> = ({ user, companyId }) => {
           );
         })}
       </div>
+
+      {/* Banner de expiração do token */}
+      {(tokenStatus.isExpiring || tokenStatus.isExpired) && (
+        <div className={`mx-6 mt-3 rounded-xl p-3 flex items-start gap-2 border ${
+          tokenStatus.isExpired
+            ? 'bg-red-500/10 border-red-500/20'
+            : 'bg-yellow-500/10 border-yellow-500/20'
+        }`}>
+          <Clock className={`w-4 h-4 mt-0.5 flex-shrink-0 ${tokenStatus.isExpired ? 'text-red-400' : 'text-yellow-400'}`} />
+          <div className="flex-1 min-w-0">
+            <p className={`text-xs font-medium ${tokenStatus.isExpired ? 'text-red-300' : 'text-yellow-300'}`}>
+              {tokenStatus.isExpired
+                ? 'Conexão com o Instagram expirou.'
+                : `Conexão expira em ${tokenStatus.daysLeft} dia${tokenStatus.daysLeft !== 1 ? 's' : ''}.`}
+            </p>
+            <p className="text-[11px] text-[hsl(var(--muted-foreground))] mt-0.5">
+              Desconecte e reconecte a conta para renovar o acesso.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Conteúdo scrollável */}
       <div className="flex-1 overflow-auto">

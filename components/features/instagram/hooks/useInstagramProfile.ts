@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { supabase } from '../../../../lib/supabase';
+import { resolveIgToken, fetchGraphJson } from '../../../../lib/instagramToken';
 
 const META_GRAPH_VERSION = import.meta.env.VITE_META_GRAPH_VERSION ?? 'v19.0';
 const GRAPH_BASE = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
@@ -61,10 +61,6 @@ export interface IgProfileData {
   totalFollowerGain: number;
 }
 
-async function getProviderToken(): Promise<string | null> {
-  const { data } = await supabase.auth.getSession();
-  return data.session?.provider_token ?? null;
-}
 
 function periodToDates(period: IgPeriod): { since: number; until: number } {
   const days = period === '7d' ? 7 : period === '14d' ? 14 : 30;
@@ -87,14 +83,6 @@ function endTimeToIso(endTime: string): string {
   return endTime.substring(0, 10);
 }
 
-async function fetchJson(url: string): Promise<any> {
-  const res = await fetch(url);
-  const json = await res.json();
-  if (json.error) {
-    throw new Error(json.error.message || 'Erro na Instagram Graph API');
-  }
-  return json;
-}
 
 export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
   const [data, setData] = useState<IgProfileData>({
@@ -118,7 +106,7 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
     setError(null);
 
     try {
-      const token = await getProviderToken();
+      const token = await resolveIgToken();
       if (!token) {
         setError('Token de autenticação não encontrado. Reconecte sua conta Facebook.');
         return;
@@ -130,14 +118,14 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
       const [profileJson, insightsJson, audienceJson] = await Promise.all([
 
         // 1. Perfil
-        fetchJson(
+        fetchGraphJson(
           `${GRAPH_BASE}/${igUserId}` +
           `?fields=username,name,biography,followers_count,follows_count,media_count,profile_picture_url,website` +
           `&access_token=${token}`,
         ),
 
         // 2. Insights diários
-        fetchJson(
+        fetchGraphJson(
           `${GRAPH_BASE}/${igUserId}/insights` +
           `?metric=reach,impressions,profile_views,follower_count` +
           `&period=day` +
@@ -146,7 +134,7 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
         ),
 
         // 3. Audiência (lifetime — não depende do período)
-        fetchJson(
+        fetchGraphJson(
           `${GRAPH_BASE}/${igUserId}/insights` +
           `?metric=audience_city,audience_gender_age` +
           `&period=lifetime` +
