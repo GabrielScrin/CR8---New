@@ -1,6 +1,12 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Instagram, AlertCircle, ChevronRight, RefreshCw, CheckCircle, ExternalLink } from 'lucide-react';
+import {
+  DEFAULT_FACEBOOK_SCOPES,
+  INSTAGRAM_BUSINESS_MANAGER_EXTRA_SCOPES,
+  mergeScopes,
+} from '../../../../lib/facebookScopes';
+import { supabase } from '../../../../lib/supabase';
 import { useInstagramConnect, IgPage, INSTAGRAM_REQUIRED_SCOPES } from '../hooks/useInstagramConnect';
 
 interface InstagramConnectBannerProps {
@@ -17,6 +23,10 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
   const [showModal, setShowModal] = useState(false);
   const [selected, setSelected] = useState<IgPage | null>(null);
   const { pages, loading, error, missingScopes, fetchPages, saveAccount, saving } = useInstagramConnect();
+  const reconnectScopes = mergeScopes(
+    DEFAULT_FACEBOOK_SCOPES,
+    INSTAGRAM_BUSINESS_MANAGER_EXTRA_SCOPES,
+  );
 
   const handleOpenModal = async () => {
     setShowModal(true);
@@ -24,59 +34,67 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
     await fetchPages();
   };
 
+  const handleReconnectFacebook = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'facebook',
+      options: {
+        scopes: reconnectScopes,
+        redirectTo: window.location.origin,
+      },
+    });
+  };
+
   const handleConfirm = async () => {
     if (!selected) return;
+
     try {
       await saveAccount(selected, companyId);
       setShowModal(false);
       onConnected(selected.igUserId, selected.igUsername);
     } catch {
-      // erro já está no hook
+      // O hook ja expoe a mensagem.
     }
   };
 
   return (
     <>
-      {/* ── Banner principal ── */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, ease: 'easeOut' }}
-        className="flex flex-col items-center justify-center h-full px-6 py-16 text-center"
+        className="flex h-full flex-col items-center justify-center px-6 py-16 text-center"
       >
-        {/* Ícone com gradiente instagram */}
         <div
-          className="w-20 h-20 rounded-2xl flex items-center justify-center mb-6 shadow-lg"
+          className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl shadow-lg"
           style={{
             background: 'linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
           }}
         >
-          <Instagram className="w-10 h-10 text-white" />
+          <Instagram className="h-10 w-10 text-white" />
         </div>
 
-        <h2 className="text-2xl font-bold text-[hsl(var(--foreground))] mb-2">
+        <h2 className="mb-2 text-2xl font-bold text-[hsl(var(--foreground))]">
           Conectar Instagram
         </h2>
-        <p className="text-sm text-[hsl(var(--muted-foreground))] max-w-md mb-2">
-          Visualize alcance, engajamento, posts e audiência de{' '}
+        <p className="mb-2 max-w-md text-sm text-[hsl(var(--muted-foreground))]">
+          Visualize alcance, engajamento, posts e audiencia de{' '}
           <span className="font-semibold text-[hsl(var(--foreground))]">{companyName}</span>{' '}
-          diretamente no CR8 — sem abrir Looker Studio ou ferramentas externas.
+          diretamente no CR8, sem abrir ferramentas externas.
         </p>
-        <p className="text-xs text-[hsl(var(--muted-foreground))] max-w-sm mb-8">
-          Requer uma conta Instagram Business ou Creator vinculada a uma Página do Facebook.
+        <p className="mb-8 max-w-sm text-xs text-[hsl(var(--muted-foreground))]">
+          Requer uma conta Instagram Business ou Creator vinculada a uma Pagina do Facebook.
         </p>
 
-        {/* Benefícios */}
-        <div className="flex flex-wrap justify-center gap-3 mb-8">
+        <div className="mb-8 flex flex-wrap justify-center gap-3">
           {[
-            'Alcance orgânico',
-            'Posts & Reels',
-            'Audiência (cidade, idade, gênero)',
+            'Alcance organico',
+            'Posts e Reels',
+            'Audiencia por cidade, idade e genero',
             'Cruzamento com leads',
           ].map((item) => (
             <span
               key={item}
-              className="text-xs px-3 py-1.5 rounded-full border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))]"
+              className="rounded-full border border-[hsl(var(--border))] px-3 py-1.5 text-xs text-[hsl(var(--muted-foreground))]"
             >
               {item}
             </span>
@@ -85,28 +103,25 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
 
         <button
           onClick={handleOpenModal}
-          className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95"
+          className="flex items-center gap-2 rounded-xl px-6 py-3 text-sm font-semibold text-white transition-all hover:opacity-90 active:scale-95"
           style={{
             background: 'linear-gradient(135deg, #833ab4 0%, #fd1d1d 50%, #fcb045 100%)',
             boxShadow: '0 4px 20px rgba(220, 39, 67, 0.3)',
           }}
         >
-          <Instagram className="w-4 h-4" />
+          <Instagram className="h-4 w-4" />
           Conectar Instagram
-          <ChevronRight className="w-4 h-4" />
+          <ChevronRight className="h-4 w-4" />
         </button>
 
-        {/* Nota sobre escopos */}
-        <p className="mt-4 text-xs text-[hsl(var(--muted-foreground))] max-w-xs">
-          Pode ser necessário reconectar sua conta Facebook para autorizar as permissões do Instagram.
+        <p className="mt-4 max-w-xs text-xs text-[hsl(var(--muted-foreground))]">
+          Pode ser necessario reconectar sua conta Facebook para autorizar as permissoes do Instagram.
         </p>
       </motion.div>
 
-      {/* ── Modal de seleção de conta ── */}
       <AnimatePresence>
         {showModal && (
           <>
-            {/* Backdrop */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
@@ -115,29 +130,27 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
               onClick={() => !saving && setShowModal(false)}
             />
 
-            {/* Modal */}
             <motion.div
               initial={{ opacity: 0, scale: 0.95, y: 8 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 8 }}
               transition={{ duration: 0.2, ease: 'easeOut' }}
               className="fixed inset-0 z-50 flex items-center justify-center p-4"
-              onClick={(e) => e.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
             >
               <div
-                className="w-full max-w-md max-h-[85vh] rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl overflow-hidden flex flex-col"
-                onClick={(e) => e.stopPropagation()}
+                className="flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl"
+                onClick={(event) => event.stopPropagation()}
               >
-                {/* Header do modal */}
-                <div className="p-6 border-b border-[hsl(var(--border))] flex-shrink-0">
+                <div className="flex-shrink-0 border-b border-[hsl(var(--border))] p-6">
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center"
+                      className="flex h-10 w-10 items-center justify-center rounded-xl"
                       style={{
                         background: 'linear-gradient(135deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%)',
                       }}
                     >
-                      <Instagram className="w-5 h-5 text-white" />
+                      <Instagram className="h-5 w-5 text-white" />
                     </div>
                     <div>
                       <h3 className="text-base font-bold text-[hsl(var(--foreground))]">
@@ -150,128 +163,132 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
                   </div>
                 </div>
 
-                {/* Corpo do modal */}
-                <div className="p-6 flex-1 min-h-0 overflow-y-auto">
-
-                  {/* Loading */}
+                <div className="min-h-0 flex-1 overflow-y-auto p-6">
                   {loading && (
                     <div className="flex flex-col items-center gap-3 py-8">
-                      <RefreshCw className="w-6 h-6 text-[hsl(var(--muted-foreground))] animate-spin" />
+                      <RefreshCw className="h-6 w-6 animate-spin text-[hsl(var(--muted-foreground))]" />
                       <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                        Buscando páginas do Facebook...
+                        Buscando paginas do Facebook...
                       </p>
                     </div>
                   )}
 
-                  {/* Erro */}
                   {!loading && error && (
-                    <div className="rounded-xl p-4 bg-red-500/10 border border-red-500/20 mb-4">
+                    <div className="mb-4 rounded-xl border border-red-500/20 bg-red-500/10 p-4">
                       <div className="flex items-start gap-2">
-                        <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+                        <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" />
                         <p className="text-sm text-red-300">{error}</p>
                       </div>
 
-                      {/* Escopos faltando — orienta re-auth */}
                       {missingScopes && (
-                        <div className="mt-3 pt-3 border-t border-red-500/20">
-                          <p className="text-xs text-red-300 mb-2">
-                            Adicione estes escopos ao <code className="font-mono">VITE_FACEBOOK_SCOPES</code> no seu <code className="font-mono">.env.local</code> e reconecte:
+                        <div className="mt-3 border-t border-red-500/20 pt-3">
+                          <p className="mb-2 text-xs text-red-300">
+                            Reconecte o Facebook autorizando estes escopos:
                           </p>
-                          <code className="block text-xs bg-black/20 rounded p-2 text-red-200 break-all">
+                          <code className="block break-all rounded bg-black/20 p-2 text-xs text-red-200">
                             {INSTAGRAM_REQUIRED_SCOPES.join(',')}
                           </code>
+                          <p className="mt-2 text-xs text-red-300">
+                            Se a Pagina foi compartilhada via Business Manager, a Meta tambem exige <code className="font-mono">ads_management</code> alem de <code className="font-mono">ads_read</code>.
+                          </p>
+                          <button
+                            onClick={handleReconnectFacebook}
+                            className="mt-3 inline-flex items-center gap-2 rounded-lg border border-red-400/30 px-3 py-2 text-xs font-medium text-red-200 hover:bg-red-500/10"
+                          >
+                            <RefreshCw className="h-3 w-3" />
+                            Reconectar com Facebook
+                          </button>
                           <a
-                            href="https://developers.facebook.com/docs/instagram-api/getting-started"
+                            href="https://developers.facebook.com/docs/instagram-platform/insights"
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 mt-2 text-xs text-red-300 hover:text-red-200"
+                            className="mt-3 inline-flex items-center gap-1 text-xs text-red-300 hover:text-red-200"
                           >
-                            Ver guia de configuração
-                            <ExternalLink className="w-3 h-3" />
+                            Ver documentacao oficial
+                            <ExternalLink className="h-3 w-3" />
                           </a>
                         </div>
                       )}
 
                       <button
                         onClick={fetchPages}
-                        className="mt-3 text-xs text-red-300 hover:text-red-200 underline"
+                        className="mt-3 text-xs text-red-300 underline hover:text-red-200"
                       >
                         Tentar novamente
                       </button>
                     </div>
                   )}
 
-                  {/* Lista de páginas */}
                   {!loading && pages.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-xs text-[hsl(var(--muted-foreground))] mb-3">
+                      <p className="mb-3 text-xs text-[hsl(var(--muted-foreground))]">
                         {pages.length} conta{pages.length > 1 ? 's' : ''} encontrada{pages.length > 1 ? 's' : ''}
                       </p>
-                      <div className="space-y-2 max-h-[42vh] overflow-y-auto pr-1">
-                      {pages.map((page) => (
-                        <button
-                          key={page.igUserId}
-                          onClick={() => setSelected(page)}
-                          className="w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left"
-                          style={{
-                            borderColor: selected?.igUserId === page.igUserId
-                              ? 'hsl(var(--primary))'
-                              : 'hsl(var(--border))',
-                            background: selected?.igUserId === page.igUserId
-                              ? 'hsl(var(--primary) / 0.08)'
-                              : 'transparent',
-                          }}
-                        >
-                          {/* Avatar */}
-                          {page.igProfilePicture ? (
-                            <img
-                              src={page.igProfilePicture}
-                              alt={page.igUsername}
-                              className="w-10 h-10 rounded-full object-cover flex-shrink-0"
-                            />
-                          ) : (
-                            <div
-                              className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0"
-                              style={{
-                                background: 'linear-gradient(135deg, #f09433 0%, #dc2743 50%, #bc1888 100%)',
-                              }}
-                            >
-                              <Instagram className="w-5 h-5 text-white" />
+                      <div className="max-h-[42vh] space-y-2 overflow-y-auto pr-1">
+                        {pages.map((page) => (
+                          <button
+                            key={page.igUserId}
+                            onClick={() => setSelected(page)}
+                            className="w-full rounded-xl border p-3 text-left transition-all"
+                            style={{
+                              borderColor: selected?.igUserId === page.igUserId
+                                ? 'hsl(var(--primary))'
+                                : 'hsl(var(--border))',
+                              background: selected?.igUserId === page.igUserId
+                                ? 'hsl(var(--primary) / 0.08)'
+                                : 'transparent',
+                            }}
+                          >
+                            <div className="flex items-center gap-3">
+                              {page.igProfilePicture ? (
+                                <img
+                                  src={page.igProfilePicture}
+                                  alt={page.igUsername}
+                                  className="h-10 w-10 flex-shrink-0 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div
+                                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full"
+                                  style={{
+                                    background: 'linear-gradient(135deg, #f09433 0%, #dc2743 50%, #bc1888 100%)',
+                                  }}
+                                >
+                                  <Instagram className="h-5 w-5 text-white" />
+                                </div>
+                              )}
+
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-semibold text-[hsl(var(--foreground))]">
+                                  @{page.igUsername || page.name}
+                                </p>
+                                <p className="truncate text-xs text-[hsl(var(--muted-foreground))]">
+                                  Pagina: {page.name}
+                                </p>
+                              </div>
+
+                              {selected?.igUserId === page.igUserId && (
+                                <CheckCircle className="h-5 w-5 flex-shrink-0" style={{ color: 'hsl(var(--primary))' }} />
+                              )}
                             </div>
-                          )}
-
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-semibold text-[hsl(var(--foreground))] truncate">
-                              @{page.igUsername || page.name}
-                            </p>
-                            <p className="text-xs text-[hsl(var(--muted-foreground))] truncate">
-                              Página: {page.name}
-                            </p>
-                          </div>
-
-                          {selected?.igUserId === page.igUserId && (
-                            <CheckCircle className="w-5 h-5 flex-shrink-0" style={{ color: 'hsl(var(--primary))' }} />
-                          )}
-                        </button>
-                      ))}
+                          </button>
+                        ))}
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Footer do modal */}
-                <div className="px-6 pb-6 pt-4 flex items-center justify-end gap-3 border-t border-[hsl(var(--border))] bg-[hsl(var(--card))] flex-shrink-0">
+                <div className="flex flex-shrink-0 items-center justify-end gap-3 border-t border-[hsl(var(--border))] bg-[hsl(var(--card))] px-6 pb-6 pt-4">
                   <button
                     onClick={() => setShowModal(false)}
                     disabled={saving}
-                    className="px-4 py-2 text-sm rounded-lg border border-[hsl(var(--border))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors disabled:opacity-50"
+                    className="rounded-lg border border-[hsl(var(--border))] px-4 py-2 text-sm text-[hsl(var(--muted-foreground))] transition-colors hover:text-[hsl(var(--foreground))] disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     onClick={handleConfirm}
                     disabled={!selected || saving}
-                    className="flex items-center gap-2 px-5 py-2 text-sm font-semibold rounded-lg text-white transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex items-center gap-2 rounded-lg px-5 py-2 text-sm font-semibold text-white transition-all disabled:cursor-not-allowed disabled:opacity-40"
                     style={{
                       background: selected && !saving
                         ? 'linear-gradient(135deg, #833ab4 0%, #fd1d1d 50%, #fcb045 100%)'
@@ -280,12 +297,12 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
                   >
                     {saving ? (
                       <>
-                        <RefreshCw className="w-4 h-4 animate-spin" />
+                        <RefreshCw className="h-4 w-4 animate-spin" />
                         Salvando...
                       </>
                     ) : (
                       <>
-                        <CheckCircle className="w-4 h-4" />
+                        <CheckCircle className="h-4 w-4" />
                         Conectar
                       </>
                     )}

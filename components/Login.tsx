@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Facebook, AlertCircle, Mail, Lock, ArrowRight, ChevronRight, Zap, BarChart3, Users } from 'lucide-react';
+import { DEFAULT_FACEBOOK_SCOPES, normalizeScopes } from '../lib/facebookScopes';
 import { getSupabaseConfigHints, isSupabaseConfigured, supabase } from '../lib/supabase';
 import { User } from '../types';
 
@@ -42,13 +43,8 @@ export const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const isBackendReady = isSupabaseConfigured();
   const supabaseHints = getSupabaseConfigHints();
 
-  const normalizeScopes = (scopes: string) => {
-    const parts = scopes.split(/[,\s]+/g).map((s) => s.trim()).filter(Boolean);
-    return Array.from(new Set(parts)).join(' ');
-  };
-
   const facebookScopes: string = normalizeScopes(
-    import.meta.env.VITE_FACEBOOK_SCOPES ?? 'public_profile ads_read',
+    import.meta.env.VITE_FACEBOOK_SCOPES ?? DEFAULT_FACEBOOK_SCOPES.join(' '),
   );
 
   const demoLogin = () => {

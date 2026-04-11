@@ -1,17 +1,12 @@
 import { useState, useCallback } from 'react';
+import { INSTAGRAM_REQUIRED_SCOPES as REQUIRED_SCOPES } from '../../../../lib/facebookScopes';
 import { supabase } from '../../../../lib/supabase';
 import { clearIgTokenCache, exchangeIgToken, setActiveIgCompany } from '../../../../lib/instagramToken';
 
 const META_GRAPH_VERSION = import.meta.env.VITE_META_GRAPH_VERSION ?? 'v19.0';
 const GRAPH_BASE = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
 
-// Escopos necessários para Instagram orgânico
-export const INSTAGRAM_REQUIRED_SCOPES = [
-  'instagram_basic',
-  'instagram_manage_insights',
-  'pages_show_list',
-  'pages_read_engagement',
-];
+export const INSTAGRAM_REQUIRED_SCOPES = REQUIRED_SCOPES;
 
 export interface IgPage {
   id: string;           // Facebook Page ID
@@ -54,11 +49,11 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
       const token = await getProviderToken();
 
       if (!token) {
-        setError('Você precisa estar logado com Facebook para conectar o Instagram. Faça logout e entre novamente com Facebook.');
+        setError('Voce precisa estar logado com Facebook para conectar o Instagram. Faca logout e entre novamente com Facebook.');
         return;
       }
 
-      // Busca as Facebook Pages do usuário com a conta Instagram vinculada
+      // Busca as Facebook Pages do usuario com a conta Instagram vinculada.
       const res = await fetch(
         `${GRAPH_BASE}/me/accounts` +
         `?fields=id,name,access_token,instagram_business_account{id,username,profile_picture_url}` +
@@ -68,33 +63,32 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
       const json = await res.json();
 
       if (json.error) {
-        // Escopos insuficientes
         if (json.error.code === 10 || json.error.code === 200 || json.error.type === 'OAuthException') {
           setMissingScopes(true);
-          setError('Permissões insuficientes. Reconecte sua conta Facebook com os escopos do Instagram.');
+          setError('Permissoes insuficientes. Reconecte sua conta Facebook com os escopos do Instagram.');
           return;
         }
-        throw new Error(json.error.message || 'Erro ao buscar páginas do Facebook.');
+
+        throw new Error(json.error.message || 'Erro ao buscar paginas do Facebook.');
       }
 
       const rawPages: any[] = json.data ?? [];
 
-      // Filtra apenas pages que têm conta Instagram Business/Creator vinculada
       const igPages: IgPage[] = rawPages
-        .filter((p: any) => p.instagram_business_account?.id)
-        .map((p: any) => ({
-          id: p.id,
-          name: p.name,
-          igUserId: p.instagram_business_account.id,
-          igUsername: p.instagram_business_account.username ?? '',
-          igProfilePicture: p.instagram_business_account.profile_picture_url,
-          pageAccessToken: p.access_token ?? undefined,
+        .filter((page: any) => page.instagram_business_account?.id)
+        .map((page: any) => ({
+          id: page.id,
+          name: page.name,
+          igUserId: page.instagram_business_account.id,
+          igUsername: page.instagram_business_account.username ?? '',
+          igProfilePicture: page.instagram_business_account.profile_picture_url,
+          pageAccessToken: page.access_token ?? undefined,
         }));
 
       if (igPages.length === 0) {
         setError(
-          'Nenhuma conta Instagram Business ou Creator encontrada nas suas páginas do Facebook. ' +
-          'Certifique-se de que seu perfil do Instagram está vinculado a uma Página do Facebook.',
+          'Nenhuma conta Instagram Business ou Creator encontrada nas suas paginas do Facebook. ' +
+          'Certifique-se de que seu perfil do Instagram esta vinculado a uma Pagina do Facebook.',
         );
         return;
       }
@@ -125,13 +119,13 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
 
       if (updateError) {
         const msg = String(updateError?.message ?? updateError);
-        // Coluna ainda não existe — orienta o usuário a rodar a migração
         if (msg.toLowerCase().includes('does not exist') || msg.toLowerCase().includes('column')) {
           throw new Error(
-            'A coluna instagram_business_account_id não existe na tabela companies. ' +
-            'Execute a migração SQL antes de continuar.',
+            'A coluna instagram_business_account_id nao existe na tabela companies. ' +
+            'Execute a migracao SQL antes de continuar.',
           );
         }
+
         throw updateError;
       }
 
