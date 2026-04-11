@@ -14,6 +14,7 @@ import { PublicQuiz } from './components/PublicQuiz';
 import { PublicTrafficReport } from './components/PublicTrafficReport';
 import { WhatsApp } from './components/WhatsApp';
 import { Join } from './components/Join';
+import { Instagram } from './components/Instagram';
 import { Role, User, isClientRole, getAllowedViews, normalizeRole } from './types';
 import { isSupabaseConfigured, supabase } from './lib/supabase';
 import { loadSelectedCompanyId, saveSelectedCompanyId } from './lib/companySelection';
@@ -290,7 +291,7 @@ export default function App() {
       case 'forms':
         return <QuizForms companyId={user.companyId} />;
       case 'instagram':
-        return <PlaceholderView title="Instagram Mirror" />;
+        return <Instagram user={user} companyId={user.companyId} />;
       case 'whatsapp':
         return <WhatsApp companyId={user.companyId} role={user.role} />;
       case 'ai':
