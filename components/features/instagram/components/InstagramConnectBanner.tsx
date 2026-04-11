@@ -125,11 +125,11 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
               onClick={(e) => e.stopPropagation()}
             >
               <div
-                className="w-full max-w-md rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl overflow-hidden"
+                className="w-full max-w-md max-h-[85vh] rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl overflow-hidden flex flex-col"
                 onClick={(e) => e.stopPropagation()}
               >
                 {/* Header do modal */}
-                <div className="p-6 border-b border-[hsl(var(--border))]">
+                <div className="p-6 border-b border-[hsl(var(--border))] flex-shrink-0">
                   <div className="flex items-center gap-3">
                     <div
                       className="w-10 h-10 rounded-xl flex items-center justify-center"
@@ -151,7 +151,7 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
                 </div>
 
                 {/* Corpo do modal */}
-                <div className="p-6">
+                <div className="p-6 flex-1 min-h-0 overflow-y-auto">
 
                   {/* Loading */}
                   {loading && (
@@ -207,6 +207,7 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
                       <p className="text-xs text-[hsl(var(--muted-foreground))] mb-3">
                         {pages.length} conta{pages.length > 1 ? 's' : ''} encontrada{pages.length > 1 ? 's' : ''}
                       </p>
+                      <div className="space-y-2 max-h-[42vh] overflow-y-auto pr-1">
                       {pages.map((page) => (
                         <button
                           key={page.igUserId}
@@ -253,12 +254,13 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
                           )}
                         </button>
                       ))}
+                      </div>
                     </div>
                   )}
                 </div>
 
                 {/* Footer do modal */}
-                <div className="px-6 pb-6 flex items-center justify-end gap-3">
+                <div className="px-6 pb-6 pt-4 flex items-center justify-end gap-3 border-t border-[hsl(var(--border))] bg-[hsl(var(--card))] flex-shrink-0">
                   <button
                     onClick={() => setShowModal(false)}
                     disabled={saving}
