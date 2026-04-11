@@ -42,6 +42,27 @@ const LoadingScreen = () => (
   </div>
 );
 
+const pickAvatarUrl = (sessionUser: any): string | undefined => {
+  const meta = sessionUser?.user_metadata ?? {};
+  const identities = Array.isArray(sessionUser?.identities) ? sessionUser.identities : [];
+
+  const candidates = [
+    meta.avatar_url,
+    meta.picture,
+    meta.picture?.data?.url,
+    ...identities.flatMap((identity: any) => {
+      const data = identity?.identity_data ?? {};
+      return [
+        data.avatar_url,
+        data.picture,
+        data.picture?.data?.url,
+      ];
+    }),
+  ];
+
+  return candidates.find((value) => typeof value === 'string' && value.trim())?.trim();
+};
+
 export default function App() {
   const publicQuizId = (() => {
     try {
@@ -103,7 +124,7 @@ export default function App() {
         name: sessionUser.user_metadata?.full_name || sessionUser.email || 'Usuário',
         email: sessionUser.email || '',
         role: 'gestor',
-        avatar: sessionUser.user_metadata?.avatar_url,
+        avatar: pickAvatarUrl(sessionUser),
       };
 
       try {

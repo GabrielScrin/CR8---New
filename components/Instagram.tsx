@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Instagram as InstagramIcon, LayoutDashboard, Grid3X3, GitMerge, RefreshCw, AlertTriangle, AlertCircle, Clock } from 'lucide-react';
 import { supabase } from '../lib/supabase';
-import { setActiveIgCompany } from '../lib/instagramToken';
+import { clearIgTokenCache, setActiveIgCompany } from '../lib/instagramToken';
 import { User } from '../types';
 import { InstagramConnectBanner } from './features/instagram/components/InstagramConnectBanner';
 import { InstagramHeader } from './features/instagram/components/InstagramHeader';
@@ -261,8 +261,15 @@ export const Instagram: React.FC<InstagramProps> = ({ user, companyId }) => {
             if (!confirm('Desconectar a conta Instagram desta empresa?')) return;
             await supabase
               .from('companies')
-              .update({ instagram_business_account_id: null, instagram_username: null })
+              .update({
+                meta_page_id: null,
+                instagram_business_account_id: null,
+                instagram_username: null,
+                instagram_access_token: null,
+                instagram_token_expires_at: null,
+              })
               .eq('id', companyId);
+            clearIgTokenCache();
             setIgUserId(null);
             setIgUsername(null);
           }}

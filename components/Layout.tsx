@@ -94,6 +94,40 @@ const applyBrandPrimaryColor = (hex: string | null | undefined) => {
   style.setProperty('--shadow-glow', `0 0 20px -5px hsl(${primary} / 0.35)`);
 };
 
+const getUserInitials = (name: string) => {
+  const parts = String(name || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2);
+
+  if (parts.length === 0) return 'U';
+  return parts.map((part) => part[0]?.toUpperCase() ?? '').join('') || 'U';
+};
+
+const UserAvatar: React.FC<{ name: string; src?: string }> = ({ name, src }) => {
+  const [failed, setFailed] = useState(false);
+  const initials = getUserInitials(name);
+
+  if (!src || failed) {
+    return (
+      <div className="w-8 h-8 rounded-full bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))] flex items-center justify-center text-xs font-bold">
+        {initials}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src}
+      alt={name}
+      referrerPolicy="no-referrer"
+      onError={() => setFailed(true)}
+      className="w-8 h-8 rounded-full bg-[hsl(var(--muted))] object-cover"
+    />
+  );
+};
+
 export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, setCurrentView, onLogout, onCompanyChange }) => {
   const [isAiPanelOpen, setIsAiPanelOpen] = useState(false);
   const [aiInput, setAiInput] = useState('');
@@ -348,7 +382,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
                 )}
 
                 <div className="flex items-center space-x-3 pl-6 border-l border-[hsl(var(--border))]">
-                    <img src={user.avatar || 'https://via.placeholder.com/40'} alt={user.name} className="w-8 h-8 rounded-full bg-[hsl(var(--muted))]" />
+                    <UserAvatar name={user.name} src={user.avatar} />
                     <div className="hidden md:block">
                         <p className="text-sm font-medium text-[hsl(var(--foreground))] leading-tight">{user.name}</p>
                         <p className="text-xs text-[hsl(var(--muted-foreground))] leading-tight capitalize">{user.role}</p>

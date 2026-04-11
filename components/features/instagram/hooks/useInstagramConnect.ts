@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { supabase } from '../../../../lib/supabase';
+import { clearIgTokenCache, exchangeIgToken, setActiveIgCompany } from '../../../../lib/instagramToken';
 
 const META_GRAPH_VERSION = import.meta.env.VITE_META_GRAPH_VERSION ?? 'v19.0';
 const GRAPH_BASE = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
@@ -67,7 +68,7 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
 
       if (json.error) {
         // Escopos insuficientes
-        if (json.error.code === 200 || json.error.type === 'OAuthException') {
+        if (json.error.code === 10 || json.error.code === 200 || json.error.type === 'OAuthException') {
           setMissingScopes(true);
           setError('Permissões insuficientes. Reconecte sua conta Facebook com os escopos do Instagram.');
           return;
@@ -112,8 +113,11 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
       const { error: updateError } = await supabase
         .from('companies')
         .update({
+          meta_page_id: page.id,
           instagram_business_account_id: page.igUserId,
           instagram_username: page.igUsername,
+          instagram_access_token: null,
+          instagram_token_expires_at: null,
         })
         .eq('id', companyId);
 
@@ -127,6 +131,14 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
           );
         }
         throw updateError;
+      }
+
+      setActiveIgCompany(companyId);
+      clearIgTokenCache();
+
+      const providerToken = await getProviderToken();
+      if (providerToken) {
+        await exchangeIgToken(companyId, providerToken);
       }
     } catch (err: any) {
       setError(err?.message || 'Erro ao salvar conta Instagram.');

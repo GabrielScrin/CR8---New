@@ -83,6 +83,34 @@ function endTimeToIso(endTime: string): string {
   return endTime.substring(0, 10);
 }
 
+async function fetchDailyInsightsWithFallback(
+  igUserId: string,
+  token: string,
+  since: number,
+  until: number,
+) {
+  const metricSets = [
+    'reach,impressions,profile_views,follower_count',
+    'reach,impressions,follower_count',
+  ];
+
+  let lastError: unknown = null;
+  for (const metrics of metricSets) {
+    try {
+      return await fetchGraphJson(
+        `${GRAPH_BASE}/${igUserId}/insights` +
+        `?metric=${metrics}` +
+        `&period=day` +
+        `&since=${since}&until=${until}` +
+        `&access_token=${token}`,
+      );
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  throw lastError ?? new Error('Erro ao buscar insights do Instagram.');
+}
 
 export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
   const [data, setData] = useState<IgProfileData>({
@@ -115,32 +143,28 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
       const { since, until } = periodToDates(period);
 
       // ── Requisições em paralelo ────────────────────────────────────────────
-      const [profileJson, insightsJson, audienceJson] = await Promise.all([
-
-        // 1. Perfil
+      const [profileResult, insightsResult, audienceResult] = await Promise.allSettled([
         fetchGraphJson(
           `${GRAPH_BASE}/${igUserId}` +
           `?fields=username,name,biography,followers_count,follows_count,media_count,profile_picture_url,website` +
           `&access_token=${token}`,
         ),
-
-        // 2. Insights diários
-        fetchGraphJson(
-          `${GRAPH_BASE}/${igUserId}/insights` +
-          `?metric=reach,impressions,profile_views,follower_count` +
-          `&period=day` +
-          `&since=${since}&until=${until}` +
-          `&access_token=${token}`,
-        ),
-
-        // 3. Audiência (lifetime — não depende do período)
+        fetchDailyInsightsWithFallback(igUserId, token, since, until),
         fetchGraphJson(
           `${GRAPH_BASE}/${igUserId}/insights` +
           `?metric=audience_city,audience_gender_age` +
           `&period=lifetime` +
           `&access_token=${token}`,
-        ).catch(() => ({ data: [] })), // audiência pode falhar se conta < 100 seguidores
+        ),
       ]);
+
+      if (profileResult.status !== 'fulfilled') {
+        throw profileResult.reason;
+      }
+
+      const profileJson = profileResult.value;
+      const insightsJson = insightsResult.status === 'fulfilled' ? insightsResult.value : { data: [] };
+      const audienceJson = audienceResult.status === 'fulfilled' ? audienceResult.value : { data: [] };
 
       // ── Perfil ────────────────────────────────────────────────────────────
       const profile: IgProfile = {
@@ -244,6 +268,10 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
       }
 
       setData({ profile, series, cities, ageGroups, gender, totalReach, totalImpressions, totalProfileViews, totalFollowerGain });
+
+      if (insightsResult.status !== 'fulfilled') {
+        setError('Conectado, mas algumas métricas do Instagram não puderam ser carregadas com a permissão atual.');
+      }
     } catch (err: any) {
       setError(err?.message || 'Erro ao buscar dados do Instagram.');
     } finally {

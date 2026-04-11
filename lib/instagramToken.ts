@@ -33,6 +33,10 @@ export function setActiveIgCompany(companyId: string | null): void {
   }
 }
 
+export function clearIgTokenCache(): void {
+  _cache = null;
+}
+
 // ── Exchange de token (chama a Edge Function) ────────────────────────────────
 
 export async function exchangeIgToken(
