@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
 import {
   ResponsiveContainer, LineChart, Line, CartesianGrid,
-  XAxis, YAxis, Tooltip, Legend,
+  XAxis, YAxis, Tooltip,
 } from 'recharts';
 import { IgDailyPoint } from '../hooks/useInstagramProfile';
 
-type MetricKey = 'reach' | 'impressions' | 'profileViews' | 'followerDelta';
+type MetricKey = 'reach' | 'views' | 'followerDelta' | 'accountsEngaged';
 
 const METRICS: { key: MetricKey; label: string; color: string }[] = [
-  { key: 'reach',         label: 'Alcance',          color: 'hsl(220 100% 65%)' },
-  { key: 'impressions',   label: 'Impressões',        color: '#a855f7' },
-  { key: 'profileViews',  label: 'Visitas ao Perfil', color: '#ec4899' },
-  { key: 'followerDelta', label: 'Seguidores',        color: '#10b981' },
+  { key: 'reach',           label: 'Alcance',           color: 'hsl(220 100% 65%)' },
+  { key: 'views',           label: 'Visualizações',      color: '#a855f7' },
+  { key: 'accountsEngaged', label: 'Contas Engajadas',   color: '#ec4899' },
+  { key: 'followerDelta',   label: 'Seguidores',         color: '#10b981' },
 ];
 
 interface InstagramReachChartProps {
@@ -28,7 +28,7 @@ export const InstagramReachChart: React.FC<InstagramReachChartProps> = ({ series
     setActive((prev) => {
       const next = new Set(prev);
       if (next.has(key)) {
-        if (next.size > 1) next.delete(key); // pelo menos 1 ativo
+        if (next.size > 1) next.delete(key);
       } else {
         next.add(key);
       }
@@ -55,11 +55,10 @@ export const InstagramReachChart: React.FC<InstagramReachChartProps> = ({ series
 
   return (
     <div className="px-6 pb-5">
-      {/* Título + toggles */}
       <div className="flex items-center justify-between mb-4">
         <div>
           <div className="w-0.5 h-5 rounded-full bg-gradient-to-b from-[hsl(var(--primary))] to-violet-500 inline-block mr-2 align-middle" />
-          <span className="text-[15px] font-bold text-[hsl(var(--foreground))]">Alcance diário</span>
+          <span className="text-[15px] font-bold text-[hsl(var(--foreground))]">Métricas diárias</span>
         </div>
         <div className="flex flex-wrap gap-2">
           {METRICS.map((m) => (
@@ -83,7 +82,6 @@ export const InstagramReachChart: React.FC<InstagramReachChartProps> = ({ series
         </div>
       </div>
 
-      {/* Gráfico */}
       <ResponsiveContainer width="100%" height={220}>
         <LineChart data={series} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />

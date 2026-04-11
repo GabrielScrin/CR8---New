@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Eye, Radio, TrendingUp, UserPlus, BarChart2 } from 'lucide-react';
+import { Eye, Radio, TrendingUp, UserPlus, BarChart2, Heart } from 'lucide-react';
 
-// Count-up animado (mesmo padrão do DashboardV2)
 const useCountUp = (to: number, durationMs = 900): number => {
   const [val, setVal] = useState(0);
   useEffect(() => {
@@ -35,7 +34,7 @@ interface KpiCardProps {
   icon: React.ElementType;
   gradient: string;
   loading: boolean;
-  sign?: boolean; // exibe + na frente se positivo
+  sign?: boolean;
 }
 
 const KpiCard: React.FC<KpiCardProps> = ({ label, value, icon: Icon, gradient, loading, sign }) => {
@@ -43,14 +42,12 @@ const KpiCard: React.FC<KpiCardProps> = ({ label, value, icon: Icon, gradient, l
 
   return (
     <div className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 flex flex-col gap-3">
-      {/* Ícone */}
       <div className="flex items-center justify-between">
         <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br ${gradient}`}>
           <Icon className="w-4 h-4 text-white" />
         </div>
       </div>
 
-      {/* Valor */}
       {loading || value == null ? (
         <div className="h-8 w-20 rounded-md animate-shimmer" />
       ) : (
@@ -59,7 +56,6 @@ const KpiCard: React.FC<KpiCardProps> = ({ label, value, icon: Icon, gradient, l
         </p>
       )}
 
-      {/* Label */}
       <p className="text-xs text-[hsl(var(--muted-foreground))] font-medium">{label}</p>
     </div>
   );
@@ -67,22 +63,24 @@ const KpiCard: React.FC<KpiCardProps> = ({ label, value, icon: Icon, gradient, l
 
 interface InstagramKPICardsProps {
   totalReach: number;
-  totalImpressions: number;
+  totalViews: number;
   totalProfileViews: number;
   totalFollowerGain: number;
+  totalAccountsEngaged: number;
   followersCount: number | null;
   loading: boolean;
 }
 
 export const InstagramKPICards: React.FC<InstagramKPICardsProps> = ({
   totalReach,
-  totalImpressions,
+  totalViews,
   totalProfileViews,
   totalFollowerGain,
+  totalAccountsEngaged,
   followersCount,
   loading,
 }) => (
-  <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 px-6 py-5">
+  <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 px-6 py-5">
     <KpiCard
       label="Alcance"
       value={totalReach}
@@ -91,8 +89,8 @@ export const InstagramKPICards: React.FC<InstagramKPICardsProps> = ({
       loading={loading}
     />
     <KpiCard
-      label="Impressões"
-      value={totalImpressions}
+      label="Visualizações"
+      value={totalViews}
       icon={Eye}
       gradient="from-violet-500 to-purple-400"
       loading={loading}
@@ -102,6 +100,13 @@ export const InstagramKPICards: React.FC<InstagramKPICardsProps> = ({
       value={totalProfileViews}
       icon={TrendingUp}
       gradient="from-pink-500 to-rose-400"
+      loading={loading}
+    />
+    <KpiCard
+      label="Contas Engajadas"
+      value={totalAccountsEngaged}
+      icon={Heart}
+      gradient="from-orange-500 to-amber-400"
       loading={loading}
     />
     <KpiCard

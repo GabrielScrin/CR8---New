@@ -19,13 +19,13 @@ export interface IgProfile {
 
 // Ponto de dado diário para séries temporais
 export interface IgDailyPoint {
-  date: string;       // "DD/MM"
-  dateIso: string;    // "YYYY-MM-DD"
-  dayOfWeek: number;  // 0=Dom ... 6=Sáb
+  date: string;          // "DD/MM"
+  dateIso: string;       // "YYYY-MM-DD"
+  dayOfWeek: number;     // 0=Dom ... 6=Sáb
   reach: number;
-  impressions: number;
-  profileViews: number;
-  followerDelta: number; // ganho/perda de seguidores naquele dia
+  views: number;         // equivalente a impressões na nova API
+  followerDelta: number; // follows_and_unfollows (ganho líquido por dia)
+  accountsEngaged: number;
 }
 
 // Dados de audiência
@@ -35,7 +35,7 @@ export interface IgAudienceCity {
 }
 
 export interface IgAudienceAge {
-  range: string;   // "18-24"
+  range: string;
   male: number;
   female: number;
   total: number;
@@ -54,13 +54,15 @@ export interface IgProfileData {
   cities: IgAudienceCity[];
   ageGroups: IgAudienceAge[];
   gender: IgAudienceGender | null;
-  // KPI totais do período
+  // KPIs totais do período
   totalReach: number;
-  totalImpressions: number;
+  totalViews: number;
   totalProfileViews: number;
   totalFollowerGain: number;
+  totalAccountsEngaged: number;
 }
 
+// ── Utilitários de data ──────────────────────────────────────────────────────
 
 function periodToDates(period: IgPeriod): { since: number; until: number } {
   const days = period === '7d' ? 7 : period === '14d' ? 14 : 30;
@@ -75,42 +77,99 @@ function formatDate(isoDate: string): string {
 }
 
 function dayOfWeek(isoDate: string): number {
-  return new Date(isoDate).getDay(); // 0=Dom ... 6=Sáb
+  return new Date(isoDate).getDay();
 }
 
-// Converte o end_time da API (ex: "2024-01-02T08:00:00+0000") para "YYYY-MM-DD"
 function endTimeToIso(endTime: string): string {
   return endTime.substring(0, 10);
 }
 
-async function fetchDailyInsightsWithFallback(
-  igUserId: string,
-  token: string,
-  since: number,
-  until: number,
-) {
-  const metricSets = [
-    'reach,impressions,profile_views,follower_count',
-    'reach,impressions,follower_count',
-  ];
+// ── Parsers ──────────────────────────────────────────────────────────────────
 
-  let lastError: unknown = null;
-  for (const metrics of metricSets) {
-    try {
-      return await fetchGraphJson(
-        `${GRAPH_BASE}/${igUserId}/insights` +
-        `?metric=${metrics}` +
-        `&period=day` +
-        `&since=${since}&until=${until}` +
-        `&access_token=${token}`,
-      );
-    } catch (err) {
-      lastError = err;
+// follows_and_unfollows pode retornar { follows: N, unfollows: N } ou número
+function extractValue(raw: any): number {
+  if (typeof raw === 'number') return raw;
+  if (typeof raw === 'object' && raw !== null) {
+    return Number(raw.follows ?? 0) - Number(raw.unfollows ?? 0);
+  }
+  return 0;
+}
+
+function parseTimeSeries(
+  dataArr: any[],
+  keys: string[],
+): Record<string, Record<string, number>> {
+  const map: Record<string, Record<string, number>> = {};
+  for (const k of keys) map[k] = {};
+
+  for (const metric of dataArr) {
+    const name: string = metric.name;
+    if (!map[name]) continue;
+    for (const point of metric.values ?? []) {
+      const iso = endTimeToIso(point.end_time);
+      map[name][iso] = (map[name][iso] ?? 0) + extractValue(point.value);
     }
   }
 
-  throw lastError ?? new Error('Erro ao buscar insights do Instagram.');
+  return map;
 }
+
+// Parseia follower_demographics (novo formato com breakdowns)
+function parseDemographics(dataArr: any[]): {
+  cities: IgAudienceCity[];
+  ageGroups: IgAudienceAge[];
+  gender: IgAudienceGender | null;
+} {
+  let cities: IgAudienceCity[] = [];
+  const ageMap: Record<string, { male: number; female: number }> = {};
+  let totalMale = 0, totalFemale = 0, totalUnknown = 0;
+
+  for (const metric of dataArr) {
+    const breakdowns: any[] = metric?.total_value?.breakdowns ?? [];
+
+    for (const bd of breakdowns) {
+      const keys: string[] = bd.dimension_keys ?? [];
+      const results: any[] = bd.results ?? [];
+
+      if (keys.length === 1 && keys[0] === 'city') {
+        cities = results
+          .map((r) => ({ city: String(r.dimension_values?.[0] ?? ''), count: Number(r.value ?? 0) }))
+          .filter((c) => c.city)
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10);
+      }
+
+      if (keys.includes('age') && keys.includes('gender')) {
+        const ageIdx = keys.indexOf('age');
+        const genderIdx = keys.indexOf('gender');
+
+        for (const r of results) {
+          const age = String(r.dimension_values?.[ageIdx] ?? '');
+          const gender = String(r.dimension_values?.[genderIdx] ?? '').toUpperCase();
+          const count = Number(r.value ?? 0);
+          if (!age) continue;
+          if (!ageMap[age]) ageMap[age] = { male: 0, female: 0 };
+          if (gender === 'M') { ageMap[age].male += count; totalMale += count; }
+          else if (gender === 'F') { ageMap[age].female += count; totalFemale += count; }
+          else totalUnknown += count;
+        }
+      }
+    }
+  }
+
+  const ageGroups: IgAudienceAge[] = Object.entries(ageMap)
+    .map(([range, { male, female }]) => ({ range, male, female, total: male + female }))
+    .sort((a, b) => (parseInt(a.range) || 0) - (parseInt(b.range) || 0));
+
+  const genderTotal = totalMale + totalFemale + totalUnknown;
+  const gender: IgAudienceGender | null = genderTotal > 0
+    ? { male: totalMale, female: totalFemale, unknown: totalUnknown, total: genderTotal }
+    : null;
+
+  return { cities, ageGroups, gender };
+}
+
+// ── Hook principal ───────────────────────────────────────────────────────────
 
 export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
   const [data, setData] = useState<IgProfileData>({
@@ -120,9 +179,10 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
     ageGroups: [],
     gender: null,
     totalReach: 0,
-    totalImpressions: 0,
+    totalViews: 0,
     totalProfileViews: 0,
     totalFollowerGain: 0,
+    totalAccountsEngaged: 0,
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -141,30 +201,48 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
       }
 
       const { since, until } = periodToDates(period);
+      const base = `&access_token=${token}`;
 
-      // ── Requisições em paralelo ────────────────────────────────────────────
-      const [profileResult, insightsResult, audienceResult] = await Promise.allSettled([
-        fetchGraphJson(
-          `${GRAPH_BASE}/${igUserId}` +
-          `?fields=username,name,biography,followers_count,follows_count,media_count,profile_picture_url,website` +
-          `&access_token=${token}`,
-        ),
-        fetchDailyInsightsWithFallback(igUserId, token, since, until),
-        fetchGraphJson(
-          `${GRAPH_BASE}/${igUserId}/insights` +
-          `?metric=audience_city,audience_gender_age` +
-          `&period=lifetime` +
-          `&access_token=${token}`,
-        ),
-      ]);
+      const [profileJson, seriesJson, profileViewsJson, demoCityJson, demoAgeJson] =
+        await Promise.all([
 
-      if (profileResult.status !== 'fulfilled') {
-        throw profileResult.reason;
-      }
+          // 1. Perfil básico
+          fetchGraphJson(
+            `${GRAPH_BASE}/${igUserId}` +
+            `?fields=username,name,biography,followers_count,follows_count,media_count,profile_picture_url,website` +
+            base,
+          ),
 
-      const profileJson = profileResult.value;
-      const insightsJson = insightsResult.status === 'fulfilled' ? insightsResult.value : { data: [] };
-      const audienceJson = audienceResult.status === 'fulfilled' ? audienceResult.value : { data: [] };
+          // 2. Série temporal diária
+          fetchGraphJson(
+            `${GRAPH_BASE}/${igUserId}/insights` +
+            `?metric=reach,views,follows_and_unfollows,accounts_engaged` +
+            `&period=day&since=${since}&until=${until}` +
+            base,
+          ),
+
+          // 3. Visitas ao perfil — total do período
+          fetchGraphJson(
+            `${GRAPH_BASE}/${igUserId}/insights` +
+            `?metric=profile_views&metric_type=total_value&period=day` +
+            `&since=${since}&until=${until}` +
+            base,
+          ).catch(() => ({ data: [] })),
+
+          // 4. Demográfico — cidades
+          fetchGraphJson(
+            `${GRAPH_BASE}/${igUserId}/insights` +
+            `?metric=follower_demographics&period=lifetime&breakdown=city` +
+            base,
+          ).catch(() => ({ data: [] })),
+
+          // 5. Demográfico — idade × gênero
+          fetchGraphJson(
+            `${GRAPH_BASE}/${igUserId}/insights` +
+            `?metric=follower_demographics&period=lifetime&breakdown=age,gender` +
+            base,
+          ).catch(() => ({ data: [] })),
+        ]);
 
       // ── Perfil ────────────────────────────────────────────────────────────
       const profile: IgProfile = {
@@ -178,29 +256,12 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
         website: profileJson.website ?? '',
       };
 
-      // ── Insights diários → série temporal ─────────────────────────────────
-      const metricsMap: Record<string, Record<string, number>> = {
-        reach: {},
-        impressions: {},
-        profile_views: {},
-        follower_count: {},
-      };
+      // ── Série temporal ────────────────────────────────────────────────────
+      const seriesKeys = ['reach', 'views', 'follows_and_unfollows', 'accounts_engaged'];
+      const metricsMap = parseTimeSeries(seriesJson.data ?? [], seriesKeys);
 
-      for (const metric of (insightsJson.data ?? [])) {
-        const name: string = metric.name;
-        if (!metricsMap[name]) continue;
-        for (const point of (metric.values ?? [])) {
-          const iso = endTimeToIso(point.end_time);
-          metricsMap[name][iso] = (metricsMap[name][iso] ?? 0) + (point.value ?? 0);
-        }
-      }
-
-      // Une todos os dias em que há pelo menos um dado
       const allDates = Array.from(
-        new Set([
-          ...Object.keys(metricsMap.reach),
-          ...Object.keys(metricsMap.impressions),
-        ]),
+        new Set([...Object.keys(metricsMap.reach), ...Object.keys(metricsMap.views)]),
       ).sort();
 
       const series: IgDailyPoint[] = allDates.map((iso) => ({
@@ -208,70 +269,36 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
         dateIso: iso,
         dayOfWeek: dayOfWeek(iso),
         reach: metricsMap.reach[iso] ?? 0,
-        impressions: metricsMap.impressions[iso] ?? 0,
-        profileViews: metricsMap.profile_views[iso] ?? 0,
-        followerDelta: metricsMap.follower_count[iso] ?? 0,
+        views: metricsMap.views[iso] ?? 0,
+        followerDelta: metricsMap.follows_and_unfollows[iso] ?? 0,
+        accountsEngaged: metricsMap.accounts_engaged[iso] ?? 0,
       }));
 
       const totalReach = series.reduce((s, p) => s + p.reach, 0);
-      const totalImpressions = series.reduce((s, p) => s + p.impressions, 0);
-      const totalProfileViews = series.reduce((s, p) => s + p.profileViews, 0);
+      const totalViews = series.reduce((s, p) => s + p.views, 0);
       const totalFollowerGain = series.reduce((s, p) => s + p.followerDelta, 0);
+      const totalAccountsEngaged = series.reduce((s, p) => s + p.accountsEngaged, 0);
 
-      // ── Audiência ─────────────────────────────────────────────────────────
-      let cities: IgAudienceCity[] = [];
-      let ageGroups: IgAudienceAge[] = [];
-      let gender: IgAudienceGender | null = null;
-
-      for (const metric of (audienceJson.data ?? [])) {
-        if (metric.name === 'audience_city' && metric.values?.[0]?.value) {
-          const raw = metric.values[0].value as Record<string, number>;
-          cities = Object.entries(raw)
-            .map(([city, count]) => ({ city, count }))
-            .sort((a, b) => b.count - a.count)
-            .slice(0, 10);
-        }
-
-        if (metric.name === 'audience_gender_age' && metric.values?.[0]?.value) {
-          const raw = metric.values[0].value as Record<string, number>;
-
-          // Agrupa por faixa etária
-          const ageMap: Record<string, { male: number; female: number }> = {};
-          let totalMale = 0, totalFemale = 0, totalUnknown = 0;
-
-          for (const [key, count] of Object.entries(raw)) {
-            const [genderCode, range] = key.split('.');
-            if (!range) continue;
-            if (!ageMap[range]) ageMap[range] = { male: 0, female: 0 };
-            if (genderCode === 'M') { ageMap[range].male += count; totalMale += count; }
-            else if (genderCode === 'F') { ageMap[range].female += count; totalFemale += count; }
-            else { totalUnknown += count; }
-          }
-
-          ageGroups = Object.entries(ageMap)
-            .map(([range, { male, female }]) => ({
-              range,
-              male,
-              female,
-              total: male + female,
-            }))
-            .sort((a, b) => {
-              // Ordena por faixa etária numericamente
-              const aStart = parseInt(a.range.split('-')[0]) || 0;
-              const bStart = parseInt(b.range.split('-')[0]) || 0;
-              return aStart - bStart;
-            });
-
-          const total = totalMale + totalFemale + totalUnknown;
-          gender = { male: totalMale, female: totalFemale, unknown: totalUnknown, total };
+      // ── Visitas ao perfil (total_value) ────────────────────────────────────
+      let totalProfileViews = 0;
+      for (const m of profileViewsJson.data ?? []) {
+        if (m.total_value?.value != null) {
+          totalProfileViews += Number(m.total_value.value);
+        } else if (Array.isArray(m.values)) {
+          totalProfileViews += m.values.reduce((s: number, v: any) => s + extractValue(v.value), 0);
         }
       }
 
-      setData({ profile, series, cities, ageGroups, gender, totalReach, totalImpressions, totalProfileViews, totalFollowerGain });
+      // ── Demográficos ───────────────────────────────────────────────────────
+      const { cities, ageGroups, gender } = parseDemographics([
+        ...((demoCityJson.data ?? []) as any[]),
+        ...((demoAgeJson.data ?? []) as any[]),
+      ]);
 
-      if (insightsResult.status !== 'fulfilled') {
-        setError('Conectado, mas algumas métricas do Instagram não puderam ser carregadas com a permissão atual.');
-      }
+      setData({
+        profile, series, cities, ageGroups, gender,
+        totalReach, totalViews, totalProfileViews, totalFollowerGain, totalAccountsEngaged,
+      });
     } catch (err: any) {
       setError(err?.message || 'Erro ao buscar dados do Instagram.');
     } finally {

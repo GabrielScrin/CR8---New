@@ -10,23 +10,23 @@ const DAY_LABELS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 interface DowPoint {
   day: string;
   reach: number;
-  impressions: number;
+  accountsEngaged: number;
 }
 
 function aggregateByDow(series: IgDailyPoint[]): DowPoint[] {
-  const map: Record<number, { reach: number; impressions: number; count: number }> = {};
-  for (let i = 0; i < 7; i++) map[i] = { reach: 0, impressions: 0, count: 0 };
+  const map: Record<number, { reach: number; accountsEngaged: number; count: number }> = {};
+  for (let i = 0; i < 7; i++) map[i] = { reach: 0, accountsEngaged: 0, count: 0 };
 
   for (const p of series) {
     map[p.dayOfWeek].reach += p.reach;
-    map[p.dayOfWeek].impressions += p.impressions;
+    map[p.dayOfWeek].accountsEngaged += p.accountsEngaged;
     map[p.dayOfWeek].count += 1;
   }
 
   return DAY_LABELS.map((day, i) => ({
     day,
     reach: map[i].count > 0 ? Math.round(map[i].reach / map[i].count) : 0,
-    impressions: map[i].count > 0 ? Math.round(map[i].impressions / map[i].count) : 0,
+    accountsEngaged: map[i].count > 0 ? Math.round(map[i].accountsEngaged / map[i].count) : 0,
   }));
 }
 
@@ -91,6 +91,12 @@ export const InstagramEngagementChart: React.FC<InstagramEngagementChartProps> =
               dataKey="reach"
               name="Alcance (média)"
               fill="hsl(220 100% 65%)"
+              radius={[4, 4, 0, 0]}
+            />
+            <Bar
+              dataKey="accountsEngaged"
+              name="Contas Engajadas (média)"
+              fill="#ec4899"
               radius={[4, 4, 0, 0]}
             />
           </BarChart>

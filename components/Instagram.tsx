@@ -66,9 +66,10 @@ const OverviewTab: React.FC<OverviewTabProps> = ({ igUserId }) => {
       {/* KPI Cards */}
       <InstagramKPICards
         totalReach={data.totalReach}
-        totalImpressions={data.totalImpressions}
+        totalViews={data.totalViews}
         totalProfileViews={data.totalProfileViews}
         totalFollowerGain={data.totalFollowerGain}
+        totalAccountsEngaged={data.totalAccountsEngaged}
         followersCount={data.profile?.followersCount ?? null}
         loading={loading}
       />
