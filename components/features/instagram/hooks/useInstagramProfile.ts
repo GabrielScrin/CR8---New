@@ -17,18 +17,16 @@ export interface IgProfile {
   website: string;
 }
 
-// Ponto de dado diário para séries temporais
 export interface IgDailyPoint {
-  date: string;          // "DD/MM"
-  dateIso: string;       // "YYYY-MM-DD"
-  dayOfWeek: number;     // 0=Dom ... 6=Sáb
+  date: string;
+  dateIso: string;
+  dayOfWeek: number;
   reach: number;
-  views: number;         // equivalente a impressões na nova API
-  followerDelta: number; // follows_and_unfollows (ganho líquido por dia)
+  views: number;
+  followerDelta: number;
   accountsEngaged: number;
 }
 
-// Dados de audiência
 export interface IgAudienceCity {
   city: string;
   count: number;
@@ -54,15 +52,12 @@ export interface IgProfileData {
   cities: IgAudienceCity[];
   ageGroups: IgAudienceAge[];
   gender: IgAudienceGender | null;
-  // KPIs totais do período
   totalReach: number;
   totalViews: number;
   totalProfileViews: number;
   totalFollowerGain: number;
   totalAccountsEngaged: number;
 }
-
-// ── Utilitários de data ──────────────────────────────────────────────────────
 
 function periodToDates(period: IgPeriod): { since: number; until: number } {
   const days = period === '7d' ? 7 : period === '14d' ? 14 : 30;
@@ -72,8 +67,8 @@ function periodToDates(period: IgPeriod): { since: number; until: number } {
 }
 
 function formatDate(isoDate: string): string {
-  const d = new Date(isoDate);
-  return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+  const date = new Date(isoDate);
+  return `${String(date.getDate()).padStart(2, '0')}/${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function dayOfWeek(isoDate: string): number {
@@ -84,9 +79,6 @@ function endTimeToIso(endTime: string): string {
   return endTime.substring(0, 10);
 }
 
-// ── Parsers ──────────────────────────────────────────────────────────────────
-
-// follows_and_unfollows pode retornar { follows: N, unfollows: N } ou número
 function extractValue(raw: any): number {
   if (typeof raw === 'number') return raw;
   if (typeof raw === 'object' && raw !== null) {
@@ -100,11 +92,12 @@ function parseTimeSeries(
   keys: string[],
 ): Record<string, Record<string, number>> {
   const map: Record<string, Record<string, number>> = {};
-  for (const k of keys) map[k] = {};
+  for (const key of keys) map[key] = {};
 
   for (const metric of dataArr) {
     const name: string = metric.name;
     if (!map[name]) continue;
+
     for (const point of metric.values ?? []) {
       const iso = endTimeToIso(point.end_time);
       map[name][iso] = (map[name][iso] ?? 0) + extractValue(point.value);
@@ -114,7 +107,21 @@ function parseTimeSeries(
   return map;
 }
 
-// Parseia follower_demographics (novo formato com breakdowns)
+function extractMetricTotal(dataArr: any[], metricName: string): number {
+  const metric = (dataArr ?? []).find((item: any) => item?.name === metricName);
+  if (!metric) return 0;
+
+  if (metric.total_value?.value != null) {
+    return Number(metric.total_value.value);
+  }
+
+  if (Array.isArray(metric.values)) {
+    return metric.values.reduce((sum: number, point: any) => sum + extractValue(point.value), 0);
+  }
+
+  return 0;
+}
+
 function parseDemographics(dataArr: any[]): {
   cities: IgAudienceCity[];
   ageGroups: IgAudienceAge[];
@@ -122,19 +129,24 @@ function parseDemographics(dataArr: any[]): {
 } {
   let cities: IgAudienceCity[] = [];
   const ageMap: Record<string, { male: number; female: number }> = {};
-  let totalMale = 0, totalFemale = 0, totalUnknown = 0;
+  let totalMale = 0;
+  let totalFemale = 0;
+  let totalUnknown = 0;
 
   for (const metric of dataArr) {
     const breakdowns: any[] = metric?.total_value?.breakdowns ?? [];
 
-    for (const bd of breakdowns) {
-      const keys: string[] = bd.dimension_keys ?? [];
-      const results: any[] = bd.results ?? [];
+    for (const breakdown of breakdowns) {
+      const keys: string[] = breakdown.dimension_keys ?? [];
+      const results: any[] = breakdown.results ?? [];
 
       if (keys.length === 1 && keys[0] === 'city') {
         cities = results
-          .map((r) => ({ city: String(r.dimension_values?.[0] ?? ''), count: Number(r.value ?? 0) }))
-          .filter((c) => c.city)
+          .map((result) => ({
+            city: String(result.dimension_values?.[0] ?? ''),
+            count: Number(result.value ?? 0),
+          }))
+          .filter((city) => city.city)
           .sort((a, b) => b.count - a.count)
           .slice(0, 10);
       }
@@ -143,15 +155,23 @@ function parseDemographics(dataArr: any[]): {
         const ageIdx = keys.indexOf('age');
         const genderIdx = keys.indexOf('gender');
 
-        for (const r of results) {
-          const age = String(r.dimension_values?.[ageIdx] ?? '');
-          const gender = String(r.dimension_values?.[genderIdx] ?? '').toUpperCase();
-          const count = Number(r.value ?? 0);
+        for (const result of results) {
+          const age = String(result.dimension_values?.[ageIdx] ?? '');
+          const gender = String(result.dimension_values?.[genderIdx] ?? '').toUpperCase();
+          const count = Number(result.value ?? 0);
+
           if (!age) continue;
           if (!ageMap[age]) ageMap[age] = { male: 0, female: 0 };
-          if (gender === 'M') { ageMap[age].male += count; totalMale += count; }
-          else if (gender === 'F') { ageMap[age].female += count; totalFemale += count; }
-          else totalUnknown += count;
+
+          if (gender === 'M') {
+            ageMap[age].male += count;
+            totalMale += count;
+          } else if (gender === 'F') {
+            ageMap[age].female += count;
+            totalFemale += count;
+          } else {
+            totalUnknown += count;
+          }
         }
       }
     }
@@ -159,7 +179,7 @@ function parseDemographics(dataArr: any[]): {
 
   const ageGroups: IgAudienceAge[] = Object.entries(ageMap)
     .map(([range, { male, female }]) => ({ range, male, female, total: male + female }))
-    .sort((a, b) => (parseInt(a.range) || 0) - (parseInt(b.range) || 0));
+    .sort((a, b) => (parseInt(a.range, 10) || 0) - (parseInt(b.range, 10) || 0));
 
   const genderTotal = totalMale + totalFemale + totalUnknown;
   const gender: IgAudienceGender | null = genderTotal > 0
@@ -168,8 +188,6 @@ function parseDemographics(dataArr: any[]): {
 
   return { cities, ageGroups, gender };
 }
-
-// ── Hook principal ───────────────────────────────────────────────────────────
 
 export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
   const [data, setData] = useState<IgProfileData>({
@@ -196,47 +214,38 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
     try {
       const token = await resolveIgToken();
       if (!token) {
-        setError('Token de autenticação não encontrado. Reconecte sua conta Facebook.');
+        setError('Token de autenticacao nao encontrado. Reconecte sua conta Facebook.');
         return;
       }
 
       const { since, until } = periodToDates(period);
       const base = `&access_token=${token}`;
 
-      const [profileJson, seriesJson, profileViewsJson, demoCityJson, demoAgeJson] =
+      const [profileJson, reachJson, totalsJson, demoCityJson, demoAgeJson] =
         await Promise.all([
-
-          // 1. Perfil básico
           fetchGraphJson(
             `${GRAPH_BASE}/${igUserId}` +
             `?fields=username,name,biography,followers_count,follows_count,media_count,profile_picture_url,website` +
             base,
           ),
-
-          // 2. Série temporal diária
           fetchGraphJson(
             `${GRAPH_BASE}/${igUserId}/insights` +
-            `?metric=reach,views,follows_and_unfollows,accounts_engaged` +
+            `?metric=reach` +
             `&period=day&since=${since}&until=${until}` +
             base,
           ),
-
-          // 3. Visitas ao perfil — total do período
           fetchGraphJson(
             `${GRAPH_BASE}/${igUserId}/insights` +
-            `?metric=profile_views&metric_type=total_value&period=day` +
+            `?metric=views,profile_views,follows_and_unfollows,accounts_engaged` +
+            `&metric_type=total_value&period=day` +
             `&since=${since}&until=${until}` +
             base,
-          ).catch(() => ({ data: [] })),
-
-          // 4. Demográfico — cidades
+          ),
           fetchGraphJson(
             `${GRAPH_BASE}/${igUserId}/insights` +
             `?metric=follower_demographics&metric_type=total_value&period=lifetime&breakdown=city` +
             base,
           ).catch(() => ({ data: [] })),
-
-          // 5. Demográfico — idade × gênero
           fetchGraphJson(
             `${GRAPH_BASE}/${igUserId}/insights` +
             `?metric=follower_demographics&metric_type=total_value&period=lifetime&breakdown=age,gender` +
@@ -244,7 +253,6 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
           ).catch(() => ({ data: [] })),
         ]);
 
-      // ── Perfil ────────────────────────────────────────────────────────────
       const profile: IgProfile = {
         username: profileJson.username ?? '',
         name: profileJson.name ?? '',
@@ -256,48 +264,42 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
         website: profileJson.website ?? '',
       };
 
-      // ── Série temporal ────────────────────────────────────────────────────
-      const seriesKeys = ['reach', 'views', 'follows_and_unfollows', 'accounts_engaged'];
-      const metricsMap = parseTimeSeries(seriesJson.data ?? [], seriesKeys);
-
-      const allDates = Array.from(
-        new Set([...Object.keys(metricsMap.reach), ...Object.keys(metricsMap.views)]),
-      ).sort();
+      const metricsMap = parseTimeSeries(reachJson.data ?? [], ['reach']);
+      const allDates = Object.keys(metricsMap.reach).sort();
 
       const series: IgDailyPoint[] = allDates.map((iso) => ({
         date: formatDate(iso),
         dateIso: iso,
         dayOfWeek: dayOfWeek(iso),
         reach: metricsMap.reach[iso] ?? 0,
-        views: metricsMap.views[iso] ?? 0,
-        followerDelta: metricsMap.follows_and_unfollows[iso] ?? 0,
-        accountsEngaged: metricsMap.accounts_engaged[iso] ?? 0,
+        // The newer Meta format returns these metrics only as total_value for the period.
+        views: 0,
+        followerDelta: 0,
+        accountsEngaged: 0,
       }));
 
-      const totalReach = series.reduce((s, p) => s + p.reach, 0);
-      const totalViews = series.reduce((s, p) => s + p.views, 0);
-      const totalFollowerGain = series.reduce((s, p) => s + p.followerDelta, 0);
-      const totalAccountsEngaged = series.reduce((s, p) => s + p.accountsEngaged, 0);
+      const totalReach = series.reduce((sum, point) => sum + point.reach, 0);
+      const totalViews = extractMetricTotal(totalsJson.data ?? [], 'views');
+      const totalProfileViews = extractMetricTotal(totalsJson.data ?? [], 'profile_views');
+      const totalFollowerGain = extractMetricTotal(totalsJson.data ?? [], 'follows_and_unfollows');
+      const totalAccountsEngaged = extractMetricTotal(totalsJson.data ?? [], 'accounts_engaged');
 
-      // ── Visitas ao perfil (total_value) ────────────────────────────────────
-      let totalProfileViews = 0;
-      for (const m of profileViewsJson.data ?? []) {
-        if (m.total_value?.value != null) {
-          totalProfileViews += Number(m.total_value.value);
-        } else if (Array.isArray(m.values)) {
-          totalProfileViews += m.values.reduce((s: number, v: any) => s + extractValue(v.value), 0);
-        }
-      }
-
-      // ── Demográficos ───────────────────────────────────────────────────────
       const { cities, ageGroups, gender } = parseDemographics([
         ...((demoCityJson.data ?? []) as any[]),
         ...((demoAgeJson.data ?? []) as any[]),
       ]);
 
       setData({
-        profile, series, cities, ageGroups, gender,
-        totalReach, totalViews, totalProfileViews, totalFollowerGain, totalAccountsEngaged,
+        profile,
+        series,
+        cities,
+        ageGroups,
+        gender,
+        totalReach,
+        totalViews,
+        totalProfileViews,
+        totalFollowerGain,
+        totalAccountsEngaged,
       });
     } catch (err: any) {
       setError(err?.message || 'Erro ao buscar dados do Instagram.');
