@@ -3,6 +3,7 @@ import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAx
 import { ArrowDown, ArrowUp, Download, ExternalLink, FileBarChart2, Filter, Link2, RefreshCw, Send, Sparkles, X } from 'lucide-react';
 import { AdMetric, NativeResultContext, NativeResultType } from '../types';
 import { loadLocalAiSettings } from '../lib/aiLocal';
+import { resolveMetaToken } from '../lib/metaToken';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
 
 interface TrafficAnalyticsProps {
@@ -683,12 +684,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     return data.user?.id ?? null;
   };
 
-  const getProviderToken = async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
-    return session?.provider_token ?? null;
-  };
+  const getProviderToken = async () => resolveMetaToken(companyId ?? null);
 
   const resolveCompanyAdAccountIdFromDb = async () => {
     let query = supabase.from('companies').select('meta_ad_account_id');

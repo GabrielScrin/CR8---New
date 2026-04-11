@@ -12,6 +12,7 @@ import {
   Users,
 } from 'lucide-react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { resolveMetaToken } from '../lib/metaToken';
 import { isSupabaseConfigured, supabase } from '../lib/supabase';
 
 interface DashboardProps {
@@ -276,11 +277,6 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
     return Array.from(points.values()).sort((a, b) => a.fullKey.localeCompare(b.fullKey));
   };
 
-  const getFacebookProviderToken = async () => {
-    const { data } = await supabase.auth.getSession();
-    return data.session?.provider_token ?? null;
-  };
-
   const fetchMetaSpend = async (adAccountId: string, providerToken: string) => {
     const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
     url.searchParams.set('level', 'account');
@@ -461,7 +457,7 @@ export const DashboardV2: React.FC<DashboardProps> = ({ companyId, variant = 'ag
       setRecentLeads(((recent ?? []) as any) ?? []);
 
       const nextAlerts: Alert[] = [];
-      const providerToken = await getFacebookProviderToken();
+      const providerToken = await resolveMetaToken(companyId ?? null);
       const adAccountId = company?.meta_ad_account_id ?? null;
 
       let spendByKey = new Map<string, number>();

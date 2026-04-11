@@ -145,10 +145,12 @@ create table if not exists public.companies (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   created_by uuid references public.users (id) on delete set null,
-  -- Meta (Facebook/Instagram) identifiers (tokens should live in secrets, not in DB)
+  -- Meta (Facebook/Instagram) identifiers + token cache para integracoes Graph client-side
   meta_ad_account_id text,
   meta_business_id text,
   meta_page_id text,
+  meta_access_token text,
+  meta_token_expires_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
