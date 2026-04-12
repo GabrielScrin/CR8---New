@@ -105,11 +105,21 @@ const getUserInitials = (name: string) => {
   return parts.map((part) => part[0]?.toUpperCase() ?? '').join('') || 'U';
 };
 
-const UserAvatar: React.FC<{ name: string; src?: string }> = ({ name, src }) => {
+const UserAvatar: React.FC<{ name: string; srcs?: string[] }> = ({ name, srcs }) => {
   const [failed, setFailed] = useState(false);
+  const [currentIndex, setCurrentIndex] = useState(0);
   const initials = getUserInitials(name);
+  const sources = (srcs ?? []).filter((value, index, array): value is string => {
+    return typeof value === 'string' && value.trim().length > 0 && array.indexOf(value) === index;
+  });
+  const currentSrc = sources[currentIndex];
 
-  if (!src || failed) {
+  useEffect(() => {
+    setFailed(false);
+    setCurrentIndex(0);
+  }, [name, sources.join('|')]);
+
+  if (!currentSrc || failed) {
     return (
       <div className="w-8 h-8 rounded-full bg-[hsl(var(--secondary))] text-[hsl(var(--foreground))] flex items-center justify-center text-xs font-bold">
         {initials}
@@ -119,10 +129,16 @@ const UserAvatar: React.FC<{ name: string; src?: string }> = ({ name, src }) => 
 
   return (
     <img
-      src={src}
+      src={currentSrc}
       alt={name}
       referrerPolicy="no-referrer"
-      onError={() => setFailed(true)}
+      onError={() => {
+        if (currentIndex < sources.length - 1) {
+          setCurrentIndex((prev) => prev + 1);
+          return;
+        }
+        setFailed(true);
+      }}
       className="w-8 h-8 rounded-full bg-[hsl(var(--muted))] object-cover"
     />
   );
@@ -411,7 +427,7 @@ export const Layout: React.FC<LayoutProps> = ({ children, user, currentView, set
                       onClick={() => setIsUserMenuOpen((open) => !open)}
                       className="flex items-center space-x-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-[hsl(var(--secondary))]"
                     >
-                        <UserAvatar name={user.name} src={user.avatar} />
+                        <UserAvatar name={user.name} srcs={[user.avatar, ...(user.avatarCandidates ?? [])]} />
                         <div className="hidden md:block text-left">
                             <p className="text-sm font-medium text-[hsl(var(--foreground))] leading-tight">{user.name}</p>
                             <p className="text-xs text-[hsl(var(--muted-foreground))] leading-tight capitalize">{user.role}</p>

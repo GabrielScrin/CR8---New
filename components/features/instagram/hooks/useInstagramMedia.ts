@@ -13,40 +13,64 @@ export interface IgMedia {
   mediaProductType: string; // 'REEL' | 'FEED' | 'STORY'
   mediaUrl: string;
   thumbnailUrl: string;
-  timestamp: string;       // ISO 8601
+  timestamp: string; // ISO 8601
   permalink: string;
-  // Insights por post (null se indisponível)
   reach: number | null;
   saved: number | null;
+  shares: number | null;
   videoViews: number | null;
-  totalInteractions: number | null; // likes + comments + shares + saves (via insights)
+  commentsCount: number | null;
+  likeCount: number | null;
+  totalInteractions: number | null; // likes + comments + shares + saves
 }
 
-// Métricas suportadas por tipo (impressions removida a partir da v22.0)
+const extractInsightValue = (item: any): number | null => {
+  const value =
+    item?.total_value?.value ??
+    item?.values?.[0]?.value ??
+    item?.value ??
+    null;
+
+  return typeof value === 'number' ? value : null;
+};
+
 async function fetchMediaInsights(
   mediaId: string,
   token: string,
+  mediaProductType: string,
   isVideo: boolean,
-): Promise<Pick<IgMedia, 'reach' | 'saved' | 'videoViews' | 'totalInteractions'>> {
-  const empty = { reach: null, saved: null, videoViews: null, totalInteractions: null };
+): Promise<Pick<IgMedia, 'reach' | 'saved' | 'shares' | 'videoViews'>> {
+  const empty = { reach: null, saved: null, shares: null, videoViews: null };
+
   try {
-    const metrics = isVideo
-      ? 'reach,saved,video_views,total_interactions'
-      : 'reach,saved,total_interactions';
+    const normalizedProductType = String(mediaProductType || '').toUpperCase();
+    const metrics = ['reach'];
+
+    if (normalizedProductType !== 'STORY') {
+      metrics.push('saved');
+    }
+
+    if (normalizedProductType === 'FEED' || normalizedProductType === 'REEL' || normalizedProductType === 'REELS') {
+      metrics.push('shares');
+    }
+
+    if (isVideo) {
+      metrics.push('video_views');
+    }
 
     const json = await fetchGraphJson(
-      `${GRAPH_BASE}/${mediaId}/insights?metric=${metrics}&access_token=${token}`,
+      `${GRAPH_BASE}/${mediaId}/insights?metric=${metrics.join(',')}&access_token=${token}`,
     );
 
     const result = { ...empty };
 
     for (const item of json.data ?? []) {
-      // A API retorna o valor em item.values[0].value (série) ou item.value (simples)
-      const val: number = item.values?.[0]?.value ?? item.value ?? null;
-      if (item.name === 'reach')              result.reach = val;
-      if (item.name === 'saved')              result.saved = val;
-      if (item.name === 'video_views')        result.videoViews = val;
-      if (item.name === 'total_interactions') result.totalInteractions = val;
+      const value = extractInsightValue(item);
+
+      if (item.name === 'reach') result.reach = value;
+      if (item.name === 'saved') result.saved = value;
+      if (item.name === 'shares') result.shares = value;
+      if (item.name === 'video_views') result.videoViews = value;
     }
 
     return result;
@@ -69,15 +93,15 @@ export function useInstagramMedia(igUserId: string | null) {
     try {
       const token = await resolveIgToken();
       if (!token) {
-        setError('Token de autenticação não encontrado. Reconecte sua conta Facebook.');
+        setError('Token de autenticaÃ§Ã£o nÃ£o encontrado. Reconecte sua conta Facebook.');
         return;
       }
 
       const mediaListJson = await fetchGraphJson(
         `${GRAPH_BASE}/${igUserId}/media` +
-        `?fields=id,caption,media_type,media_product_type,media_url,thumbnail_url,timestamp,permalink` +
-        `&limit=25` +
-        `&access_token=${token}`,
+          `?fields=id,caption,comments_count,like_count,media_type,media_product_type,media_url,thumbnail_url,timestamp,permalink` +
+          `&limit=25` +
+          `&access_token=${token}`,
       );
 
       const rawItems: any[] = mediaListJson.data ?? [];
@@ -85,7 +109,12 @@ export function useInstagramMedia(igUserId: string | null) {
       const withInsights: IgMedia[] = await Promise.all(
         rawItems.map(async (item): Promise<IgMedia> => {
           const isVideo = item.media_type === 'VIDEO';
-          const insights = await fetchMediaInsights(item.id, token, isVideo);
+          const commentsCount = typeof item.comments_count === 'number' ? item.comments_count : null;
+          const likeCount = typeof item.like_count === 'number' ? item.like_count : null;
+          const insights = await fetchMediaInsights(item.id, token, item.media_product_type ?? '', isVideo);
+          const totalInteractions = [likeCount, commentsCount, insights.saved, insights.shares]
+            .filter((value): value is number => typeof value === 'number')
+            .reduce((sum, value) => sum + value, 0);
 
           return {
             id: item.id,
@@ -96,7 +125,13 @@ export function useInstagramMedia(igUserId: string | null) {
             thumbnailUrl: item.thumbnail_url ?? item.media_url ?? '',
             timestamp: item.timestamp ?? '',
             permalink: item.permalink ?? '',
-            ...insights,
+            reach: insights.reach,
+            saved: insights.saved,
+            shares: insights.shares,
+            videoViews: insights.videoViews,
+            commentsCount,
+            likeCount,
+            totalInteractions,
           };
         }),
       );

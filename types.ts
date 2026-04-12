@@ -72,6 +72,7 @@ export interface User {
   email: string;
   role: Role;
   avatar?: string;
+  avatarCandidates?: string[];
   companyId?: string;
 }
 

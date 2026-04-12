@@ -1,8 +1,17 @@
 import React, { useState, useMemo } from 'react';
-import { ExternalLink, Image, Film, LayoutGrid, Clapperboard, RefreshCw, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import {
+  ExternalLink,
+  Image,
+  Film,
+  LayoutGrid,
+  Clapperboard,
+  RefreshCw,
+  AlertCircle,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+} from 'lucide-react';
 import { IgMedia, IgMediaType } from '../hooks/useInstagramMedia';
-
-// ── Utilitários ─────────────────────────────────────────────────────────────
 
 function effectiveType(m: IgMedia): string {
   if (m.mediaType === 'VIDEO' && m.mediaProductType === 'REEL') return 'REEL';
@@ -21,18 +30,17 @@ const fmt = (n: number | null): string => {
   return n.toLocaleString('pt-BR');
 };
 
-// ── Tipo badge ───────────────────────────────────────────────────────────────
-
 const TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
-  IMAGE:          { label: 'Imagem',    icon: Image,       color: 'hsl(220 100% 65%)', bg: 'hsl(220 100% 65% / 0.12)' },
-  VIDEO:          { label: 'Vídeo',     icon: Film,        color: '#a855f7',            bg: '#a855f720' },
-  CAROUSEL_ALBUM: { label: 'Carrossel', icon: LayoutGrid,  color: '#ec4899',            bg: '#ec489920' },
-  REEL:           { label: 'Reel',      icon: Clapperboard, color: '#f59e0b',           bg: '#f59e0b20' },
+  IMAGE: { label: 'Imagem', icon: Image, color: 'hsl(220 100% 65%)', bg: 'hsl(220 100% 65% / 0.12)' },
+  VIDEO: { label: 'Video', icon: Film, color: '#a855f7', bg: '#a855f720' },
+  CAROUSEL_ALBUM: { label: 'Carrossel', icon: LayoutGrid, color: '#ec4899', bg: '#ec489920' },
+  REEL: { label: 'Reel', icon: Clapperboard, color: '#f59e0b', bg: '#f59e0b20' },
 };
 
 const TypeBadge: React.FC<{ type: string }> = ({ type }) => {
   const cfg = TYPE_CONFIG[type] ?? TYPE_CONFIG.IMAGE;
   const Icon = cfg.icon;
+
   return (
     <span
       className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold"
@@ -44,18 +52,13 @@ const TypeBadge: React.FC<{ type: string }> = ({ type }) => {
   );
 };
 
-// ── Tipos de filtro / ordenação ──────────────────────────────────────────────
-
 type FilterType = 'ALL' | IgMediaType | 'REEL';
-
-type SortKey = 'timestamp' | 'reach' | 'totalInteractions' | 'saved';
+type SortKey = 'timestamp' | 'reach' | 'commentsCount' | 'shares' | 'totalInteractions' | 'saved';
 
 interface SortState {
   key: SortKey;
   dir: 'asc' | 'desc';
 }
-
-// ── Cabeçalho de coluna ordenável ────────────────────────────────────────────
 
 interface SortHeaderProps {
   label: string;
@@ -66,22 +69,25 @@ interface SortHeaderProps {
 
 const SortHeader: React.FC<SortHeaderProps> = ({ label, sortKey, sort, onSort }) => {
   const active = sort.key === sortKey;
+
   return (
     <button
       onClick={() => onSort(sortKey)}
       className="flex items-center gap-0.5 text-xs font-semibold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
     >
       {label}
-      {active
-        ? sort.dir === 'desc'
-          ? <ArrowDown className="w-3 h-3" />
-          : <ArrowUp className="w-3 h-3" />
-        : <ArrowUpDown className="w-3 h-3 opacity-30" />}
+      {active ? (
+        sort.dir === 'desc' ? (
+          <ArrowDown className="w-3 h-3" />
+        ) : (
+          <ArrowUp className="w-3 h-3" />
+        )
+      ) : (
+        <ArrowUpDown className="w-3 h-3 opacity-30" />
+      )}
     </button>
   );
 };
-
-// ── Linha de shimmer ─────────────────────────────────────────────────────────
 
 const ShimmerRow: React.FC = () => (
   <tr>
@@ -94,7 +100,7 @@ const ShimmerRow: React.FC = () => (
     <td className="px-3 py-2.5">
       <div className="h-5 w-16 rounded-full animate-shimmer" />
     </td>
-    {[...Array(3)].map((_, i) => (
+    {[...Array(5)].map((_, i) => (
       <td key={i} className="px-3 py-2.5 text-right">
         <div className="h-3.5 w-10 rounded animate-shimmer ml-auto" />
       </td>
@@ -104,8 +110,6 @@ const ShimmerRow: React.FC = () => (
     </td>
   </tr>
 );
-
-// ── Componente principal ─────────────────────────────────────────────────────
 
 interface InstagramPostsTableProps {
   media: IgMedia[];
@@ -131,7 +135,6 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
     );
   };
 
-  // Filtros disponíveis com contagem
   const counts = useMemo(() => {
     const c: Record<string, number> = { ALL: media.length };
     for (const m of media) {
@@ -142,21 +145,20 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
   }, [media]);
 
   const FILTER_TABS: { id: FilterType; label: string }[] = [
-    { id: 'ALL',           label: 'Todos' },
-    { id: 'IMAGE',         label: 'Imagem' },
-    { id: 'VIDEO',         label: 'Vídeo' },
-    { id: 'CAROUSEL_ALBUM',label: 'Carrossel' },
-    { id: 'REEL',          label: 'Reel' },
+    { id: 'ALL', label: 'Todos' },
+    { id: 'IMAGE', label: 'Imagem' },
+    { id: 'VIDEO', label: 'Video' },
+    { id: 'CAROUSEL_ALBUM', label: 'Carrossel' },
+    { id: 'REEL', label: 'Reel' },
   ].filter((f) => f.id === 'ALL' || (counts[f.id] ?? 0) > 0);
 
   const filtered = useMemo(() => {
-    const items =
-      filter === 'ALL'
-        ? media
-        : media.filter((m) => effectiveType(m) === filter);
+    const items = filter === 'ALL' ? media : media.filter((m) => effectiveType(m) === filter);
 
     return [...items].sort((a, b) => {
-      let va: number, vb: number;
+      let va: number;
+      let vb: number;
+
       if (sort.key === 'timestamp') {
         va = new Date(a.timestamp).getTime();
         vb = new Date(b.timestamp).getTime();
@@ -164,13 +166,13 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
         va = a[sort.key] ?? -1;
         vb = b[sort.key] ?? -1;
       }
+
       return sort.dir === 'desc' ? vb - va : va - vb;
     });
   }, [media, filter, sort]);
 
   return (
     <div>
-      {/* Cabeçalho com filtros */}
       <div className="px-6 mb-4 flex items-center justify-between flex-wrap gap-2">
         <div>
           <div className="w-0.5 h-5 rounded-full bg-gradient-to-b from-violet-500 to-purple-400 inline-block mr-2 align-middle" />
@@ -184,6 +186,7 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
           {FILTER_TABS.map(({ id, label }) => {
             const active = filter === id;
             const cfg = id !== 'ALL' ? TYPE_CONFIG[id] : null;
+
             return (
               <button
                 key={id}
@@ -196,9 +199,7 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
                 }}
               >
                 {label}
-                {counts[id] != null && (
-                  <span className="ml-1 opacity-60">{counts[id]}</span>
-                )}
+                {counts[id] != null && <span className="ml-1 opacity-60">{counts[id]}</span>}
               </button>
             );
           })}
@@ -213,7 +214,6 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
         </div>
       </div>
 
-      {/* Erro */}
       {error && (
         <div className="mx-6 mb-4 rounded-xl p-3 bg-red-500/10 border border-red-500/20 flex items-start gap-2">
           <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
@@ -221,9 +221,8 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
         </div>
       )}
 
-      {/* Tabela */}
       <div className="px-6 pb-6 overflow-x-auto">
-        <table className="w-full min-w-[640px] border-collapse">
+        <table className="w-full min-w-[820px] border-collapse">
           <thead>
             <tr className="border-b border-[hsl(var(--border))]">
               <th className="px-3 py-2 text-left w-14" />
@@ -236,7 +235,13 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
                 <SortHeader label="Alcance" sortKey="reach" sort={sort} onSort={handleSort} />
               </th>
               <th className="px-3 py-2 text-right">
-                <SortHeader label="Interações" sortKey="totalInteractions" sort={sort} onSort={handleSort} />
+                <SortHeader label="Coment." sortKey="commentsCount" sort={sort} onSort={handleSort} />
+              </th>
+              <th className="px-3 py-2 text-right">
+                <SortHeader label="Compart." sortKey="shares" sort={sort} onSort={handleSort} />
+              </th>
+              <th className="px-3 py-2 text-right">
+                <SortHeader label="Interacoes" sortKey="totalInteractions" sort={sort} onSort={handleSort} />
               </th>
               <th className="px-3 py-2 text-right">
                 <SortHeader label="Salvos" sortKey="saved" sort={sort} onSort={handleSort} />
@@ -252,22 +257,18 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
                   const thumb = m.thumbnailUrl || m.mediaUrl;
 
                   return (
-                    <tr
-                      key={m.id}
-                      className="hover:bg-[hsl(var(--secondary))/40] transition-colors group"
-                    >
-                      {/* Thumbnail */}
+                    <tr key={m.id} className="hover:bg-[hsl(var(--secondary))/40] transition-colors group">
                       <td className="px-3 py-2.5">
                         {thumb ? (
-                          <div
-                            className="w-10 h-10 rounded-lg overflow-hidden bg-[hsl(var(--secondary))] flex-shrink-0"
-                          >
+                          <div className="w-10 h-10 rounded-lg overflow-hidden bg-[hsl(var(--secondary))] flex-shrink-0">
                             <img
                               src={thumb}
                               alt=""
                               className="w-full h-full object-cover"
                               loading="lazy"
-                              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).style.display = 'none';
+                              }}
                             />
                           </div>
                         ) : (
@@ -275,39 +276,40 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
                         )}
                       </td>
 
-                      {/* Caption */}
                       <td className="px-3 py-2.5 max-w-[180px]">
                         <p className="text-xs text-[hsl(var(--foreground))] line-clamp-2 leading-relaxed">
                           {m.caption || <span className="text-[hsl(var(--muted-foreground))] italic">sem legenda</span>}
                         </p>
                       </td>
 
-                      {/* Tipo */}
                       <td className="px-3 py-2.5">
                         <TypeBadge type={type} />
                       </td>
 
-                      {/* Data */}
                       <td className="px-3 py-2.5 text-right text-xs text-[hsl(var(--muted-foreground))] tabular-nums whitespace-nowrap">
                         {formatDate(m.timestamp)}
                       </td>
 
-                      {/* Alcance */}
                       <td className="px-3 py-2.5 text-right text-xs font-semibold text-[hsl(var(--foreground))] tabular-nums">
                         {fmt(m.reach)}
                       </td>
 
-                      {/* Interações */}
+                      <td className="px-3 py-2.5 text-right text-xs text-[hsl(var(--foreground))] tabular-nums">
+                        {fmt(m.commentsCount)}
+                      </td>
+
+                      <td className="px-3 py-2.5 text-right text-xs text-[hsl(var(--foreground))] tabular-nums">
+                        {fmt(m.shares)}
+                      </td>
+
                       <td className="px-3 py-2.5 text-right text-xs text-[hsl(var(--foreground))] tabular-nums">
                         {fmt(m.totalInteractions)}
                       </td>
 
-                      {/* Salvos */}
                       <td className="px-3 py-2.5 text-right text-xs text-[hsl(var(--foreground))] tabular-nums">
                         {fmt(m.saved)}
                       </td>
 
-                      {/* Link externo */}
                       <td className="px-3 py-2.5 text-center">
                         <a
                           href={m.permalink}
@@ -322,7 +324,6 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
                   );
                 })}
 
-            {/* Estado vazio */}
             {!loading && filtered.length === 0 && (
               <tr>
                 <td colSpan={10} className="px-3 py-10 text-center text-xs text-[hsl(var(--muted-foreground))]">

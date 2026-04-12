@@ -42,7 +42,7 @@ const LoadingScreen = () => (
   </div>
 );
 
-const pickAvatarUrl = (sessionUser: any): string | undefined => {
+const collectAvatarCandidates = (sessionUser: any): string[] => {
   const meta = sessionUser?.user_metadata ?? {};
   const identities = Array.isArray(sessionUser?.identities) ? sessionUser.identities : [];
   const facebookIdentity = identities.find((identity: any) => identity?.provider === 'facebook');
@@ -77,7 +77,10 @@ const pickAvatarUrl = (sessionUser: any): string | undefined => {
     }),
   ];
 
-  return candidates.find((value) => typeof value === 'string' && value.trim())?.trim();
+  return candidates
+    .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+    .map((value) => value.trim())
+    .filter((value, index, array) => array.indexOf(value) === index);
 };
 
 export default function App() {
@@ -136,12 +139,14 @@ export default function App() {
     }
 
     const hydrateUser = async (sessionUser: any): Promise<User> => {
+      const fallbackAvatarCandidates = collectAvatarCandidates(sessionUser);
       const fallback: User = {
         id: sessionUser.id,
         name: sessionUser.user_metadata?.full_name || sessionUser.email || 'Usuário',
         email: sessionUser.email || '',
         role: 'gestor',
-        avatar: pickAvatarUrl(sessionUser),
+        avatar: fallbackAvatarCandidates[0],
+        avatarCandidates: fallbackAvatarCandidates,
       };
 
       try {
@@ -176,10 +181,19 @@ export default function App() {
         const membershipForSelectedCompany = (memberships ?? []).find((m: any) => m.company_id === companyId);
         const companyRole = (membershipForSelectedCompany?.member_role as Role | undefined) ?? null;
 
+        const avatarCandidates = [
+          profile?.avatar_url,
+          ...fallbackAvatarCandidates,
+        ]
+          .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+          .map((value) => value.trim())
+          .filter((value, index, array) => array.indexOf(value) === index);
+
         return {
           ...fallback,
           name: profile?.full_name || fallback.name,
-          avatar: profile?.avatar_url || fallback.avatar,
+          avatar: avatarCandidates[0],
+          avatarCandidates,
           // Role should be per-company (company_members.member_role), falling back to profile role for legacy paths.
           role: normalizeRole(companyRole || (profile?.role as Role) || fallback.role),
           companyId,
