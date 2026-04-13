@@ -199,6 +199,7 @@
   <button class="tab-btn active" onclick="setTab('meta')">📊 Meta Ads — Benchmark Comparativo</button>
   <button class="tab-btn" onclick="setTab('criativos')">🎯 Top Criativos — RCA Conta 04</button>
   <button class="tab-btn" onclick="setTab('google')">🔍 Google Ads — Clínica RCA</button>
+  <button class="tab-btn" onclick="setTab('comercial')">💰 Comercial — RCA Clínica</button>
 </div>
 
 <div id="tab-meta" class="tab-pane active">
@@ -2243,6 +2244,385 @@
   </div>
 </div><!-- /main -->
 </div><!-- /tab-google -->
+
+<!-- ============================================================ TAB COMERCIAL RCA ============================================================ -->
+<div id="tab-comercial" class="tab-pane">
+<div class="main">
+
+  <!-- RESUMO GERAL -->
+  <div class="section-title">Visão Geral Comercial — Fev · Mar · Abr 2026</div>
+  <div class="cards-grid" style="grid-template-columns: repeat(5,1fr);">
+    <div class="card">
+      <div class="card-name">Faturamento Total</div>
+      <div class="card-invest">R$ 18.560</div>
+      <div class="card-segment" style="margin-top:6px;">Fev + Mar + Abr (parcial)</div>
+      <div class="card-period-row">
+        <span class="card-tag tag-cons">Fev: R$9.520</span>
+        <span class="card-tag tag-desc">Mar: R$6.160</span>
+        <span class="card-tag tag-warn">Abr: R$2.880</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-name">ROAS Geral</div>
+      <div class="card-invest" style="color:var(--green)">2,78×</div>
+      <div class="card-segment" style="margin-top:6px;">Faturamento ÷ Investimento Ads</div>
+      <div class="card-period-row">
+        <span class="card-tag tag-desc">Fev: 3,49×</span>
+        <span class="card-tag tag-cons">Mar: 2,42×</span>
+        <span class="card-tag tag-warn">Abr: 2,05×</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-name">Investimento Total</div>
+      <div class="card-invest">R$ 6.673</div>
+      <div class="card-segment" style="margin-top:6px;">Fev + Mar + Abr (parcial)</div>
+      <div class="card-period-row">
+        <span class="card-tag tag-warn">Fev: R$2.727</span>
+        <span class="card-tag tag-warn">Mar: R$2.543</span>
+        <span class="card-tag tag-warn">Abr: R$1.404</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-name">Leads Reais (total)</div>
+      <div class="card-invest" style="color:var(--blue)">396</div>
+      <div class="card-segment" style="margin-top:6px;">vs 710 leads do gerenciador</div>
+      <div class="card-period-row">
+        <span class="card-tag tag-bad" style="background:rgba(239,68,68,.2);color:#f87171;">Perda: 44,2%</span>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-name">Clientes Fechados</div>
+      <div class="card-invest" style="color:var(--green)">6</div>
+      <div class="card-segment" style="margin-top:6px;">10 leads qualificados no período</div>
+      <div class="card-period-row">
+        <span class="card-tag tag-desc">Ticket médio: R$3.093</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FEVEREIRO -->
+  <div class="section-title" style="margin-top:32px;">Fevereiro 2026</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left; min-width:140px;">Semana</th>
+          <th>Investimento</th>
+          <th>Total Leads<br><small>Gerenciador</small></th>
+          <th>Leads<br><small>Reais</small></th>
+          <th>Leads<br><small>Qualificados</small></th>
+          <th>CPL<br><small>Gerenciador</small></th>
+          <th>CPL<br><small>Real</small></th>
+          <th>CPL<br><small>(Qualificado)</small></th>
+          <th>% de<br><small>Quentes</small></th>
+          <th>Quantidade de<br><small>Clientes Fechados</small></th>
+          <th>Valor Vendido</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>S1</strong> — 02/02 a 08/02</td>
+          <td>R$ 479,15</td>
+          <td>47</td>
+          <td>8</td>
+          <td>2</td>
+          <td>R$ 10,19</td>
+          <td><span class="cell-bad">R$ 59,89</span></td>
+          <td>R$ 239,58</td>
+          <td><span class="cell-bad">25,00%</span></td>
+          <td>0</td>
+          <td>R$ 0,00</td>
+        </tr>
+        <tr>
+          <td><strong>S2</strong> — 09/02 a 15/02</td>
+          <td>R$ 669,37</td>
+          <td>56</td>
+          <td>21</td>
+          <td>2</td>
+          <td>R$ 11,95</td>
+          <td><span class="cell-mid">R$ 31,87</span></td>
+          <td>R$ 334,69</td>
+          <td><span class="cell-mid">9,52%</span></td>
+          <td>1</td>
+          <td>R$ 3.360,00</td>
+        </tr>
+        <tr>
+          <td><strong>S3</strong> — 16/02 a 22/02</td>
+          <td>R$ 603,77</td>
+          <td>61</td>
+          <td>23</td>
+          <td>2</td>
+          <td>R$ 9,90</td>
+          <td><span class="cell-mid">R$ 26,25</span></td>
+          <td>R$ 301,89</td>
+          <td><span class="cell-mid">8,70%</span></td>
+          <td>2</td>
+          <td>R$ 6.160,00</td>
+        </tr>
+        <tr>
+          <td><strong>S4</strong> — 23/02 a 01/03</td>
+          <td>R$ 974,44</td>
+          <td>100</td>
+          <td>50</td>
+          <td>1</td>
+          <td>R$ 9,74</td>
+          <td><span class="cell-ok">R$ 19,49</span></td>
+          <td>R$ 974,44</td>
+          <td><span class="cell-mid">2,00%</span></td>
+          <td>0</td>
+          <td>R$ 0,00</td>
+        </tr>
+        <tr style="background:rgba(59,130,246,.06); font-weight:700; border-top:2px solid var(--blue);">
+          <td>TOTAL Fevereiro</td>
+          <td>R$ 2.726,73</td>
+          <td>264</td>
+          <td>102</td>
+          <td>7</td>
+          <td>R$ 10,33</td>
+          <td>R$ 26,73</td>
+          <td>R$ 462,65</td>
+          <td><span class="cell-mid">6,86%</span></td>
+          <td>3</td>
+          <td style="color:var(--green)">R$ 9.520,00</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- MARÇO -->
+  <div class="section-title" style="margin-top:32px;">Março 2026</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left; min-width:140px;">Semana</th>
+          <th>Investimento</th>
+          <th>Total Leads<br><small>Gerenciador</small></th>
+          <th>Leads<br><small>Reais</small></th>
+          <th>Leads<br><small>Qualificados</small></th>
+          <th>CPL<br><small>Gerenciador</small></th>
+          <th>CPL<br><small>Real</small></th>
+          <th>CPL<br><small>(Qualificado)</small></th>
+          <th>% de<br><small>Quentes</small></th>
+          <th>Quantidade de<br><small>Clientes Fechados</small></th>
+          <th>Valor Vendido</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>S1</strong> — 02/03 a 08/03</td>
+          <td>R$ 677,52</td>
+          <td>80</td>
+          <td>79</td>
+          <td>0</td>
+          <td>R$ 8,47</td>
+          <td><span class="cell-ok">R$ 8,57</span></td>
+          <td><span class="cell-null">—</span></td>
+          <td><span class="cell-bad">0,00%</span></td>
+          <td>0</td>
+          <td>R$ 0,00</td>
+        </tr>
+        <tr>
+          <td><strong>S2</strong> — 09/03 a 15/03</td>
+          <td>R$ 559,22</td>
+          <td>82</td>
+          <td>69</td>
+          <td>1</td>
+          <td>R$ 6,82</td>
+          <td><span class="cell-ok">R$ 8,10</span></td>
+          <td>R$ 559,22</td>
+          <td><span class="cell-bad">1,45%</span></td>
+          <td>1</td>
+          <td>R$ 2.800,00</td>
+        </tr>
+        <tr>
+          <td><strong>S3</strong> — 16/03 a 22/03</td>
+          <td>R$ 588,26</td>
+          <td>57</td>
+          <td>52</td>
+          <td>0</td>
+          <td>R$ 10,32</td>
+          <td><span class="cell-ok">R$ 11,31</span></td>
+          <td><span class="cell-null">—</span></td>
+          <td><span class="cell-bad">0,00%</span></td>
+          <td>0</td>
+          <td>R$ 0,00</td>
+        </tr>
+        <tr>
+          <td><strong>S4</strong> — 23/03 a 29/03</td>
+          <td>R$ 718,03</td>
+          <td>88</td>
+          <td>57</td>
+          <td>1</td>
+          <td>R$ 8,16</td>
+          <td><span class="cell-ok">R$ 12,60</span></td>
+          <td>R$ 718,03</td>
+          <td><span class="cell-bad">1,75%</span></td>
+          <td>1</td>
+          <td>R$ 3.360,00</td>
+        </tr>
+        <tr style="background:rgba(59,130,246,.06); font-weight:700; border-top:2px solid var(--blue);">
+          <td>TOTAL Março</td>
+          <td>R$ 2.543,03</td>
+          <td>307</td>
+          <td>257</td>
+          <td>2</td>
+          <td>R$ 8,28</td>
+          <td>R$ 9,90</td>
+          <td>R$ 636,63</td>
+          <td><span class="cell-bad">0,78%</span></td>
+          <td>2</td>
+          <td style="color:var(--green)">R$ 6.160,00</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ABRIL -->
+  <div class="section-title" style="margin-top:32px;">Abril 2026 (parcial)</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="text-align:left; min-width:140px;">Semana</th>
+          <th>Investimento</th>
+          <th>Total Leads<br><small>Gerenciador</small></th>
+          <th>Leads<br><small>Reais</small></th>
+          <th>Leads<br><small>Qualificados</small></th>
+          <th>CPL<br><small>Gerenciador</small></th>
+          <th>CPL<br><small>Real</small></th>
+          <th>CPL<br><small>(Qualificado)</small></th>
+          <th>% de<br><small>Quentes</small></th>
+          <th>Quantidade de<br><small>Clientes Fechados</small></th>
+          <th>Valor Vendido</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>S1</strong> — 30/03 a 05/04</td>
+          <td>R$ 676,49</td>
+          <td>58</td>
+          <td>37</td>
+          <td>1</td>
+          <td>R$ 11,66</td>
+          <td><span class="cell-ok">R$ 18,28</span></td>
+          <td>R$ 676,49</td>
+          <td><span class="cell-mid">2,70%</span></td>
+          <td>1</td>
+          <td>R$ 2.880,00</td>
+        </tr>
+        <tr>
+          <td><strong>S2</strong> — 06/04 a 12/04</td>
+          <td>R$ 727,24</td>
+          <td>81</td>
+          <td><span class="cell-null">—</span></td>
+          <td><span class="cell-null">—</span></td>
+          <td>R$ 8,98</td>
+          <td><span class="cell-null">aguardar</span></td>
+          <td><span class="cell-null">—</span></td>
+          <td><span class="cell-null">—</span></td>
+          <td><span class="cell-null">—</span></td>
+          <td><span class="cell-null">aguardar</span></td>
+        </tr>
+        <tr style="background:rgba(59,130,246,.06); font-weight:700; border-top:2px solid var(--blue);">
+          <td>TOTAL Abril (parcial)</td>
+          <td>R$ 1.403,73</td>
+          <td>139</td>
+          <td>37</td>
+          <td>1</td>
+          <td>R$ 10,10</td>
+          <td>R$ 37,94</td>
+          <td>R$ 676,49</td>
+          <td><span class="cell-mid">2,70%</span></td>
+          <td>1</td>
+          <td style="color:var(--green)">R$ 2.880,00</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- ANÁLISE COMERCIAL -->
+  <div class="section-title" style="margin-top:32px;">Análise — Comercial vs Gerenciador</div>
+  <div class="two-col">
+    <div class="alert-box">
+      <div class="alert-box-title" style="color:var(--green)">✅ Destaques Comerciais</div>
+      <div class="alert-item">
+        <div class="alert-icon">✅</div>
+        <div class="alert-text">
+          <strong>ROAS acumulado de 2,78× continua saudável</strong>
+          <span>O período Fev-Mar-Abr parcial somou R$ 18.560 em valor vendido sobre R$ 6.673 em mídia. Fevereiro foi o melhor mês em retorno (3,49×), e março manteve boa eficiência em 2,42×.</span>
+        </div>
+      </div>
+      <div class="alert-item">
+        <div class="alert-icon">✅</div>
+        <div class="alert-text">
+          <strong>CPL Real segue eficiente: R$ 26,73 em Fev, R$ 9,90 em Mar e R$ 37,94 em Abr parcial</strong>
+          <span>Mesmo com oscilações na qualidade do tráfego, o custo por lead real segue competitivo para clínica. Março foi o pico de eficiência operacional, com maior volume e menor CPL real do trimestre.</span>
+        </div>
+      </div>
+      <div class="alert-item">
+        <div class="alert-icon">✅</div>
+        <div class="alert-text">
+          <strong>Março teve a melhor aderência entre mídia e comercial: 257 leads reais de 307 reportados</strong>
+          <span>O aproveitamento de março chegou a 83,7%, muito acima de fevereiro. Isso mostra que, quando a operação acerta segmentação e mensagem, o funil comercial recebe volume com menos desperdício.</span>
+        </div>
+      </div>
+      <div class="alert-item">
+        <div class="alert-icon">✅</div>
+        <div class="alert-text">
+          <strong>Os leads quentes fecham bem: 6 clientes fechados a partir de 10 leads qualificados</strong>
+          <span>A taxa de fechamento sobre os leads qualificados ficou em 60,0%. Além disso, cada cliente fechado gerou ticket médio de R$ 3.093, reforçando que o gargalo maior está na qualificação, não no fechamento final.</span>
+        </div>
+      </div>
+    </div>
+    <div class="alert-box">
+      <div class="alert-box-title" style="color:var(--yellow)">⚠️ Pontos de Atenção</div>
+      <div class="alert-item">
+        <div class="alert-icon">🔴</div>
+        <div class="alert-text">
+          <strong>O gerenciador ainda infla muito o volume: 710 leads reportados vs 396 leads reais</strong>
+          <span>No acumulado, 44,2% do volume do Ads Manager não virou lead real no comercial. Fevereiro perdeu 61,4% e abril parcial está ainda mais pressionado, então benchmark deve ser comparado com CPL real, não com CPL de gerenciador.</span>
+        </div>
+      </div>
+      <div class="alert-item">
+        <div class="alert-icon">🟡</div>
+        <div class="alert-text">
+          <strong>O volume de leads qualificados ainda é baixo: 10 em 396 leads reais</strong>
+          <span>Apenas 2,53% dos leads reais avançaram para qualificação forte. O indicador mensal de quentes oscilou de 6,86% em fevereiro para 0,78% em março e 2,70% em abril parcial, mostrando gargalo claro no meio do funil.</span>
+        </div>
+      </div>
+      <div class="alert-item">
+        <div class="alert-icon">🟡</div>
+        <div class="alert-text">
+          <strong>Abril parcial começou mais fraco que março</strong>
+          <span>Até 13/04, abril soma 139 leads do gerenciador, mas só 37 leads reais, 1 qualificado e 1 cliente fechado. O CPL real subiu para R$ 37,94, então esse mês precisa de acompanhamento mais próximo antes de escalar verba.</span>
+        </div>
+      </div>
+      <div class="alert-item">
+        <div class="alert-icon">🟡</div>
+        <div class="alert-text">
+          <strong>Falta amarrar lead qualificado e cliente fechado à origem do anúncio</strong>
+          <span>Hoje já existe volume suficiente para análise comercial, mas ainda falta a correlação por campanha/criativo. Vale mapear os 6 fechamentos por origem para saber quais anúncios geram receita, não só leads.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- NOTA METODOLÓGICA -->
+  <div class="footnote" style="margin-top:20px; padding:14px 18px; background:var(--surface); border-radius:8px; border:1px solid var(--border); line-height:1.7;">
+    <strong>📌 Como ler esta tabela:</strong><br>
+    <strong>Leads Gerenciador</strong> = total de resultados reportados pelo Meta Ads Manager (pode incluir leads duplicados, spam ou fora do perfil).<br>
+    <strong>Leads Reais</strong> = leads validados pelo comercial após triagem (conversas qualificadas com intenção real de compra).<br>
+    <strong>Leads Qualificados</strong> = leads considerados quentes pelo comercial, já com aderência suficiente para proposta ou avanço real de venda.<br>
+    <strong>CPL Real</strong> = investimento ÷ leads reais. É o custo verdadeiro por lead qualificado.<br>
+    <strong>CPL (Qualificado)</strong> = investimento ÷ leads qualificados. Mostra o custo real para gerar oportunidade quente.<br>
+    <strong>% de Quentes</strong> = leads qualificados ÷ leads reais. Mede a eficiência do meio para o fundo do funil.<br>
+    <strong>Clientes Fechados</strong> = vendas efetivamente convertidas no comercial.<br>
+    <strong>Dados:</strong> Informações comerciais fornecidas pelo time RCA · Atualizado em 13/04/2026
+  </div>
+
+</div><!-- /main -->
+</div><!-- /tab-comercial -->
 
 <script>
   let currentPeriod = '30d';
