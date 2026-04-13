@@ -4,6 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
+    "sync:benchmark": "node scripts/sync-benchmark.mjs",
+    "predev": "npm run sync:benchmark",
+    "prebuild": "npm run sync:benchmark",
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
