@@ -4,6 +4,7 @@ import {
   Users,
   MessageSquare,
   BarChart2,
+  ExternalLink,
   Instagram,
   MessageCircle,
   Bot,
@@ -50,6 +51,8 @@ const GROUP_LABELS: Record<string, string> = {
   comunicacao: 'Comunicacao',
   ferramentas: 'Ferramentas',
 };
+
+const BENCHMARK_URL = '/benchmark-contas-2026/';
 
 const ALL_SETTINGS_SUBS = [
   { id: 'company',     label: 'Empresa',       icon: Building2 },
@@ -142,6 +145,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           );
         })}
+
+        <div className="mb-3">
+          <p className="px-5 mb-1 text-[10px] font-bold uppercase tracking-[0.12em] text-[hsl(var(--sidebar-foreground))]/35 select-none">
+            Relatorios
+          </p>
+          <a
+            href={BENCHMARK_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full flex items-center gap-3 px-4 mx-1 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 text-[hsl(var(--sidebar-foreground))]/70 hover:text-[hsl(var(--sidebar-foreground))] hover:bg-[hsl(var(--sidebar-accent))]"
+            style={{ width: 'calc(100% - 8px)' }}
+          >
+            <BarChart2 className="h-4 w-4 shrink-0 opacity-60" />
+            <span className="flex-1">Benchmark</span>
+            <ExternalLink className="h-3.5 w-3.5 shrink-0 opacity-50" />
+          </a>
+        </div>
 
         {/* Settings */}
         {showSettings && (
