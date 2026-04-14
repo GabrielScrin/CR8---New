@@ -1,0 +1,631 @@
+<!DOCTYPE html><html lang="pt-br"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700;900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#22c363",
+                        "secondary-gold": "#fbbf24",
+                        "background-light": "#f6f8f7",
+                        "background-dark": "#122018",
+                    },
+                    fontFamily: {
+                        "display": ["Public Sans", "sans-serif"]
+                    },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                },
+            },
+        }
+    </script>
+<style type="text/tailwindcss">
+        @layer utilities {
+            .glass-card {
+                @apply bg-white/10 backdrop-blur-md border border-white/20;
+            }
+            .floating {
+                animation: float 3s ease-in-out infinite;
+            }
+            @keyframes float {
+                0%, 100% { transform: translateY(0); }
+                50% { transform: translateY(-10px); }
+            }
+        }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display text-slate-900 dark:text-slate-100">
+<div class="relative flex min-h-screen w-full flex-col overflow-x-hidden">
+<header class="sticky top-0 z-50 bg-background-light/80 dark:bg-background-dark/80 backdrop-blur-md border-b border-primary/10 px-6 lg:px-40 py-4 flex items-center justify-between">
+<div class="flex items-center gap-3">
+<div class="bg-primary p-2 rounded-lg text-white">
+<span class="material-symbols-outlined" style="">trending_up</span>
+</div>
+<h2 class="text-xl font-black tracking-tight text-slate-900 dark:text-slate-100" style="">Local Traffic</h2>
+</div>
+<nav class="hidden md:flex items-center gap-8">
+<a class="text-sm font-semibold hover:text-primary transition-colors" href="#objetivos" style="">Objetivos</a>
+<a class="text-sm font-semibold hover:text-primary transition-colors" href="#planos" style="">Planos</a>
+<a class="text-sm font-semibold hover:text-primary transition-colors" href="#comparativo" style="">Comparativo</a>
+<a class="text-sm font-semibold text-secondary-gold" href="#bonus" style="">Bônus Especial</a>
+</nav>
+<button class="bg-primary hover:bg-primary/90 text-white px-6 py-2.5 rounded-lg text-sm font-bold transition-all shadow-lg shadow-primary/20" style="">
+            Solicitar Orçamento
+        </button>
+</header>
+<main class="flex-1">
+<section class="px-6 lg:px-40 py-16 lg:py-24 bg-gradient-to-b from-primary/5 to-transparent relative">
+<div class="max-w-[1200px] mx-auto grid lg:grid-cols-2 gap-12 items-center">
+<div class="flex flex-col gap-8 relative z-10">
+<div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase tracking-wider w-fit" style="">
+<span class="relative flex h-2 w-2">
+<span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+<span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+</span>
+                        Resultados Comprovados
+                    </div>
+<div class="flex flex-col gap-4">
+<h1 class="text-4xl lg:text-6xl font-black leading-tight tracking-tight text-slate-900 dark:text-slate-100" style="">
+                            Aumente seu Faturamento com <span class="text-primary" style="">Gestão de Tráfego</span>: <br>Tenha Clientes Novos todos os dias no seu <span class="text-primary" style="">Negócio Local</span>
+</h1>
+<p class="text-lg lg:text-xl text-slate-600 dark:text-slate-400 max-w-[540px]" style="">
+                            Tenha previsibilidade e controle total sobre o crescimento do seu negócio com estratégias validadas e foco em ROI.
+                        </p>
+</div>
+<div class="flex items-center gap-6 mt-2">
+<div class="flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700">
+<img alt="Google Ads" class="w-6 h-6" src="https://www.gstatic.com/marketing-cms/assets/images/b6/82/8cb99c3b400bb7c8f85bdd0733e2/ads.webp=s48-fcrop64=1,00000000ffffffff-rw" style="">
+<span class="font-bold text-sm" style="">Google Ads</span>
+</div>
+<div class="flex items-center gap-2 bg-white dark:bg-slate-800 px-4 py-2 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700">
+<img alt="Meta" class="w-6 h-6" src="https://cdn-icons-png.flaticon.com/512/6033/6033716.png" style="">
+<span class="font-bold text-sm" style="">Meta Ads</span>
+</div>
+</div>
+<div class="flex flex-wrap gap-4">
+<button class="bg-primary hover:bg-primary/90 text-white px-8 py-4 rounded-xl text-base font-bold transition-all shadow-xl shadow-primary/25 flex items-center gap-2" style="">
+<span class="" style="">Começar Agora</span>
+<span class="material-symbols-outlined" style="">arrow_forward</span>
+</button>
+<button class="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary px-8 py-4 rounded-xl text-base font-bold transition-all" style="">
+                            Ver Planos
+                        </button>
+</div>
+</div>
+<div class="relative">
+<div class="absolute -inset-4 bg-primary/20 rounded-3xl blur-3xl"></div>
+<div class="relative bg-slate-200 dark:bg-slate-800 rounded-3xl aspect-video overflow-hidden shadow-2xl border border-white/10">
+<div class="w-full h-full bg-gradient-to-br from-primary/30 to-slate-800 flex items-center justify-center relative">
+<span class="material-symbols-outlined text-white text-8xl opacity-50" style="">analytics</span>
+<div class="absolute top-10 right-10 floating">
+<div class="bg-white p-3 rounded-2xl shadow-xl">
+<img alt="" class="w-10 h-10" src="https://cdn-icons-png.flaticon.com/512/6033/6033716.png" style="">
+</div>
+</div>
+<div class="absolute bottom-10 left-10 floating" style="animation-delay: 1.5s">
+<div class="bg-white p-3 rounded-2xl shadow-xl">
+<img alt="" class="w-10 h-10" src="https://www.gstatic.com/marketing-cms/assets/images/b6/82/8cb99c3b400bb7c8f85bdd0733e2/ads.webp=s48-fcrop64=1,00000000ffffffff-rw" style="">
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="px-6 lg:px-40 py-8 bg-secondary-gold" id="bonus">
+<div class="max-w-[1200px] mx-auto flex flex-col md:flex-row items-center justify-center gap-6 text-slate-900">
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-4xl animate-bounce" style="">celebration</span>
+<h3 class="text-2xl font-black tracking-tight" style="">OFERTA ESPECIAL DE LANÇAMENTO</h3>
+</div>
+<div class="h-10 w-[2px] bg-slate-900/20 hidden md:block"></div>
+<p class="text-xl font-bold text-center md:text-left" style="">
+                    R$ 200,00 DE DESCONTO <span class="font-normal" style="">nos 3 primeiros meses em qualquer plano</span>
+</p>
+</div>
+</section>
+<section class="px-6 lg:px-40 py-24" id="objetivos">
+<div class="max-w-[1200px] mx-auto flex flex-col gap-16">
+<div class="text-center max-w-3xl mx-auto">
+<h2 class="text-3xl lg:text-5xl font-black mb-6" style="">Objetivos Estratégicos</h2>
+<p class="text-lg text-slate-600 dark:text-slate-400 font-medium" style="">Nossa metodologia foca em resultados reais que impactam o seu faturamento de forma direta e sustentável.</p>
+</div>
+<div class="grid md:grid-cols-3 gap-8">
+<div class="p-8 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary/50 transition-all group">
+<div class="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-6 group-hover:bg-primary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-3xl" style="">search</span>
+</div>
+<h3 class="text-xl font-bold mb-4" style="">Posicionamento Google</h3>
+<p class="text-slate-600 dark:text-slate-400 leading-relaxed" style="">Apareça exatamente para quem já está procurando pelo seu produto ou serviço no maior buscador do mundo.</p>
+</div>
+<div class="p-8 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary/50 transition-all group">
+<div class="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-6 group-hover:bg-primary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-3xl" style="">waterfall_chart</span>
+</div>
+<h3 class="text-xl font-bold mb-4" style="">Campanhas Estruturadas</h3>
+<p class="text-slate-600 dark:text-slate-400 leading-relaxed" style="">Funis de venda desenhados meticulosamente para converter simples visitantes em leads qualificados.</p>
+</div>
+<div class="p-8 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-primary/50 transition-all group">
+<div class="w-14 h-14 rounded-xl bg-primary/10 flex items-center justify-center text-primary mb-6 group-hover:bg-primary group-hover:text-white transition-colors">
+<span class="material-symbols-outlined text-3xl" style="">rocket_launch</span>
+</div>
+<h3 class="text-xl font-bold mb-4" style="">Impulsionamento Estratégico</h3>
+<p class="text-slate-600 dark:text-slate-400 leading-relaxed" style="">Aumente o alcance e autoridade das suas melhores publicações de forma inteligente e segmentada.</p>
+</div>
+</div>
+</div>
+</section>
+<section class="px-6 lg:px-40 py-24 bg-slate-900 text-white overflow-hidden relative" id="planos">
+<div class="absolute top-0 right-0 -translate-y-1/2 translate-x-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[120px]"></div>
+<div class="max-w-[1200px] mx-auto relative z-10">
+<div class="text-center mb-16">
+<h2 class="text-4xl lg:text-5xl font-black mb-6" style="">Escolha o Plano Ideal</h2>
+<p class="text-slate-400 max-w-2xl mx-auto" style="">Soluções escaláveis que acompanham o crescimento da sua empresa. <span class="text-secondary-gold font-bold" style="">Aproveite o desconto de R$ 200/mês!</span></p>
+</div>
+<div class="grid lg:grid-cols-3 gap-8">
+<div class="flex flex-col p-8 rounded-3xl bg-slate-800/50 border border-slate-700 hover:border-slate-500 transition-all">
+<div class="mb-4">
+<span class="inline-block px-4 py-1.5 bg-slate-700 text-slate-100 rounded-lg text-sm font-black uppercase tracking-tighter mb-2" style="">PLANO 1</span>
+<h3 class="text-4xl font-black" style="">Bronze</h3>
+</div>
+<div class="mb-8">
+<div class="flex items-baseline gap-2">
+<span class="text-5xl font-black" style="">R$ 800</span>
+<span class="text-slate-400" style="">/mês</span>
+</div>
+<p class="text-secondary-gold text-sm font-bold mt-2" style="">No bônus: R$ 600/mês</p>
+</div>
+<ul class="flex flex-col gap-4 mb-8 flex-grow">
+<li class="flex items-center gap-3 text-slate-300" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+                                Impulsionamento Instagram App
+                            </li>
+<li class="flex items-center gap-3 text-slate-300" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+                                Estratégia Comercial Básica
+                            </li>
+<li class="flex items-center gap-3 text-slate-300" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+                                Relatório Mensal de Desempenho
+                            </li>
+</ul>
+<a class="w-full py-4 text-center rounded-xl border border-primary text-primary font-bold hover:bg-primary hover:text-white transition-all" href="#detalhe-bronze" style="">Ver Detalhes do Bronze</a>
+</div>
+<div class="flex flex-col p-8 rounded-3xl bg-slate-800 border-2 border-primary relative shadow-2xl shadow-primary/10">
+<div class="absolute -top-4 left-1/2 -translate-x-1/2 bg-primary text-slate-900 px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest" style="">Recomendado</div>
+<div class="mb-4">
+<span class="inline-block px-4 py-1.5 bg-primary/20 text-primary rounded-lg text-sm font-black uppercase tracking-tighter mb-2" style="">PLANO 2</span>
+<h3 class="text-4xl font-black" style="">Prata</h3>
+</div>
+<div class="mb-8">
+<div class="flex items-baseline gap-2">
+<span class="text-5xl font-black" style="">R$ 1.000</span>
+<span class="text-slate-400" style="">/mês</span>
+</div>
+<p class="text-secondary-gold text-sm font-bold mt-2" style="">No bônus: R$ 800/mês</p>
+</div>
+<ul class="flex flex-col gap-4 mb-8 flex-grow">
+<li class="flex items-center gap-3 text-slate-300 font-bold" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+                                Google Ads OU Meta Ads
+                            </li>
+<li class="flex items-center gap-3 text-slate-300" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+                                Público Personalizado (CRM)
+                            </li>
+<li class="flex items-center gap-3 text-slate-300" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+                                Otimização de Conversão
+                            </li>
+<li class="flex items-center gap-3 text-slate-300" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+                                Suporte via WhatsApp Prioritário
+                            </li>
+</ul>
+<a class="w-full py-4 text-center rounded-xl bg-primary text-slate-900 font-bold hover:bg-primary/90 transition-all shadow-lg shadow-primary/20" href="#detalhe-prata" style="">Ver Detalhes do Prata</a>
+</div>
+<div class="flex flex-col p-8 rounded-3xl bg-slate-800/50 border border-slate-700 hover:border-slate-500 transition-all">
+<div class="mb-4">
+<span class="inline-block px-4 py-1.5 bg-secondary-gold/20 text-secondary-gold rounded-lg text-sm font-black uppercase tracking-tighter mb-2" style="">PLANO 3</span>
+<h3 class="text-4xl font-black" style="">Ouro</h3>
+</div>
+<div class="mb-8">
+<div class="flex items-baseline gap-2">
+<span class="text-5xl font-black" style="">R$ 1.200</span>
+<span class="text-slate-400" style="">/mês</span>
+</div>
+<p class="text-secondary-gold text-sm font-bold mt-2" style="">No bônus: R$ 1.000/mês</p>
+</div>
+<ul class="flex flex-col gap-4 mb-8 flex-grow">
+<li class="flex items-center gap-3 text-slate-300 font-bold" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+                                Google + Meta Ads (Full)
+                            </li>
+<li class="flex items-center gap-3 text-slate-300" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+                                Dashboard em Tempo Real
+                            </li>
+<li class="flex items-center gap-3 text-slate-300" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+                                Escala de Orçamento Semanal
+                            </li>
+<li class="flex items-center gap-3 text-slate-300" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+                                Consultoria de Vendas Inclusa
+                            </li>
+</ul>
+<a class="w-full py-4 text-center rounded-xl border border-secondary-gold text-secondary-gold font-bold hover:bg-secondary-gold hover:text-slate-900 transition-all" href="#detalhe-ouro" style="">Ver Detalhes do Ouro</a>
+</div>
+</div>
+</div>
+</section>
+<section class="px-6 lg:px-40 py-24 bg-white dark:bg-background-dark border-b border-slate-100 dark:border-slate-800" id="detalhe-bronze">
+<div class="max-w-[1200px] mx-auto">
+<div class="grid lg:grid-cols-2 gap-16 items-center">
+<div class="order-2 lg:order-1">
+<div class="bg-gradient-to-br from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 p-8 rounded-[2rem] border border-slate-200 dark:border-slate-700 shadow-2xl relative">
+<div class="flex flex-col gap-6">
+<div class="flex justify-between items-center bg-white dark:bg-slate-700 p-4 rounded-xl shadow-sm">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-full bg-gradient-to-tr from-yellow-400 via-red-500 to-purple-600"></div>
+<div class="h-2 w-24 bg-slate-200 dark:bg-slate-600 rounded"></div>
+</div>
+<span class="material-symbols-outlined text-slate-400" style="">more_horiz</span>
+</div>
+<div class="aspect-square bg-slate-300 dark:bg-slate-600 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-white text-6xl opacity-30" style="">photo_library</span>
+</div>
+<div class="grid grid-cols-4 gap-4">
+<div class="flex flex-col items-center gap-1">
+<span class="material-symbols-outlined text-primary" style="">favorite</span>
+<span class="text-[10px] font-bold" style="">1.2k</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<span class="material-symbols-outlined text-primary" style="">mode_comment</span>
+<span class="text-[10px] font-bold" style="">84</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<span class="material-symbols-outlined text-primary" style="">send</span>
+<span class="text-[10px] font-bold" style="">215</span>
+</div>
+<div class="flex flex-col items-center gap-1">
+<span class="material-symbols-outlined text-primary" style="">bookmark</span>
+<span class="text-[10px] font-bold" style="">156</span>
+</div>
+</div>
+<div class="p-4 bg-primary/10 rounded-lg border border-primary/20">
+<p class="text-xs font-bold text-primary mb-2 uppercase" style="">Video Views Analysis</p>
+<div class="w-full bg-slate-200 dark:bg-slate-700 h-2 rounded-full overflow-hidden">
+<div class="bg-primary h-full w-[75%]"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="order-1 lg:order-2 flex flex-col gap-8">
+<div>
+<span class="inline-block px-6 py-2 bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-100 font-black uppercase tracking-widest text-lg rounded-xl mb-4 border border-slate-200 dark:border-slate-700" style="">PLANO 1</span>
+<h2 class="text-4xl lg:text-5xl font-black mt-2 mb-4 text-primary leading-tight" style="">Impulsionamento Estratégico</h2>
+<p class="text-lg text-slate-600 dark:text-slate-400" style="">O foco aqui é extrair o máximo de performance do conteúdo que você já produz, transformando curtidas em oportunidades reais. <span class="font-bold text-secondary-gold" style="">(R$ 200 de desconto aplicado)</span></p>
+</div>
+<div class="flex flex-col gap-6">
+<div class="flex gap-4">
+<div class="w-12 h-12 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" style="">trending_up</span>
+</div>
+<div>
+<h4 class="font-bold text-xl mb-1" style="">1. Instagram Turbinar</h4>
+<p class="text-slate-500 dark:text-slate-400 text-sm" style="">Análise profunda de métricas de engajamento (compartilhamentos, salvamentos, visualizações) para investir no que realmente converte.</p>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="w-12 h-12 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" style="">auto_fix_high</span>
+</div>
+<div>
+<h4 class="font-bold text-xl mb-1" style="">2. Curadoria Estratégica</h4>
+<p class="text-slate-500 dark:text-slate-400 text-sm" style="">Identificamos o conteúdo certo e o momento exato para o impulsionamento, evitando desperdício de verba com posts irrelevantes.</p>
+</div>
+</div>
+<div class="flex gap-4">
+<div class="w-12 h-12 shrink-0 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+<span class="material-symbols-outlined" style="">shopping_cart</span>
+</div>
+<div>
+<h4 class="font-bold text-xl mb-1" style="">3. Estratégia de Vendas</h4>
+<p class="text-slate-500 dark:text-slate-400 text-sm" style="">Ajustes diretos no perfil e táticas de vendas online para preparar seu Instagram para receber o novo tráfego.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="px-6 lg:px-40 py-24 bg-slate-50 dark:bg-slate-900/30" id="detalhe-prata">
+<div class="max-w-[1200px] mx-auto">
+<div class="text-center mb-16">
+<span class="inline-block px-6 py-2 bg-primary text-slate-900 font-black uppercase tracking-widest text-lg rounded-xl mb-4" style="">PLANO 2</span>
+<h2 class="text-4xl lg:text-5xl font-black mt-2 mb-6 text-primary" style="">Gestão Profissional (Escolha seu Canal)</h2>
+<p class="text-lg text-slate-600 dark:text-slate-400 max-w-3xl mx-auto" style="">Domine a plataforma onde seu cliente mais está presente. Foco total em Google OU Meta para máxima dominância regional. <span class="font-bold text-secondary-gold" style="">Economize R$ 200/mês agora.</span></p>
+</div>
+<div class="grid lg:grid-cols-2 gap-8 mb-16">
+<div class="bg-white dark:bg-slate-800 p-10 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-700 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-6 opacity-20 group-hover:scale-110 transition-transform">
+<img alt="Meta" class="w-20 h-20" src="https://lh3.googleusercontent.com/aida-public/AB6AXuB2k8NUPFcXlhRlzdZQw-5zz0MXTIHPhK4b5I1D_47N4jDP1g6e4gUNJXH-wgRwnNYZenCBqFPzPxHJhj-qr103tmujMntvXgoabWCXMiXM985eQ3ko-8wSfDXs21jJPBTXX6EQfkIosjehrenYK1-ILapRXqrjaFqztVf_V7QrDl3A214xWgmoEzjYm2JzgC8-8QMDvMianb3ChX7aH_1PTG0huiin3KnH9-BGkuosKtFzCcIJXZ5-Or5Ef6zFpAaxojZIHTmNxS5Y" style="">
+</div>
+<div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 text-xs font-bold uppercase mb-6" style="">
+<img alt="" class="w-4 h-4" src="https://cdn-icons-png.flaticon.com/512/6033/6033716.png" style="">
+                            Opção A: META ADS
+                        </div>
+<h3 class="text-2xl font-black mb-6" style="">Dominância em Redes Sociais</h3>
+<ul class="flex flex-col gap-5">
+<li class="flex gap-4" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+<span class="text-slate-600 dark:text-slate-300" style=""><strong>Gerenciador de Negócios:</strong> Campanhas focadas em mensagens e conversões reais.</span>
+</li>
+<li class="flex gap-4" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+<span class="text-slate-600 dark:text-slate-300" style=""><strong>Segmentação Geográfica:</strong> Alcance o cliente no bairro ou cidade exata do seu negócio.</span>
+</li>
+<li class="flex gap-4" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+<span class="text-slate-600 dark:text-slate-300" style=""><strong>Ajustes Semanais:</strong> Otimização constante de públicos e criativos para manter o CPA baixo.</span>
+</li>
+</ul>
+</div>
+<div class="bg-white dark:bg-slate-800 p-10 rounded-[2.5rem] shadow-xl border border-slate-100 dark:border-slate-700 relative overflow-hidden group">
+<div class="absolute top-0 right-0 p-6 opacity-20 group-hover:scale-110 transition-transform">
+<img alt="Google" class="w-20 h-20" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBD34hCdhvdaRrwWMzhlHVWXEMJWz79Biby98_9C06KsvDfYhx7s3IFa5dAGGPvasesKafGcokvihQ7w7ylcE5PogJKC-apmJVhNPA-kDuUYdzSQaODvX9SaWsL-Hs8P4xwJJs6pHIj4Yh-1-s_Lr7pvOr7ba-ULAQe1qJS6L23SWbZN16vwrsyJEhSt_0mUFdqa_UuFGHBnQSajtT4cQgQwWjPyhzLQrnGzV85jo_OZ3AW7ctn-hAxCpWKu2I4MPczFFLr4j9ryl-p" style="">
+</div>
+<div class="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-bold uppercase mb-6" style="">
+<img alt="" class="w-4 h-4" src="https://www.gstatic.com/marketing-cms/assets/images/b6/82/8cb99c3b400bb7c8f85bdd0733e2/ads.webp=s48-fcrop64=1,00000000ffffffff-rw" style="">
+                            Opção B: GOOGLE ADS
+                        </div>
+<h3 class="text-2xl font-black mb-6" style="">Liderança na Intenção de Compra</h3>
+<ul class="flex flex-col gap-5">
+<li class="flex gap-4" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+<span class="text-slate-600 dark:text-slate-300" style=""><strong>Search Ads:</strong> Gestão de palavras-chave e exclusão estratégica de termos negativos.</span>
+</li>
+<li class="flex gap-4" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+<span class="text-slate-600 dark:text-slate-300" style=""><strong>Google Meu Negócio:</strong> Otimização completa do perfil para autoridade local máxima.</span>
+</li>
+<li class="flex gap-4" style="">
+<span class="material-symbols-outlined text-primary" style="">check_circle</span>
+<span class="text-slate-600 dark:text-slate-300" style=""><strong>Manutenção Mensal:</strong> Posts estratégicos no perfil e gestão de avaliações.</span>
+</li>
+</ul>
+</div>
+</div>
+<div class="bg-slate-900 rounded-[2rem] p-8 lg:p-12 text-white border border-white/10 shadow-2xl">
+<div class="flex flex-col md:flex-row justify-between items-center gap-8">
+<div class="flex flex-col gap-4">
+<h4 class="text-2xl font-bold" style="">Relatórios que fazem sentido</h4>
+<p class="text-slate-400 max-w-md" style="">Você não recebe apenas números, recebe clareza. Dashboards que mostram exatamente de onde veio cada centavo de retorno.</p>
+</div>
+<div class="grid grid-cols-2 md:grid-cols-3 gap-6 w-full md:w-auto">
+<div class="bg-white/5 p-6 rounded-2xl border border-white/10 text-center">
+<p class="text-slate-400 text-xs uppercase font-bold mb-2" style="">Impressões</p>
+<p class="text-3xl font-black text-primary" style="">+45k</p>
+</div>
+<div class="bg-white/5 p-6 rounded-2xl border border-white/10 text-center">
+<p class="text-slate-400 text-xs uppercase font-bold mb-2" style="">Leads</p>
+<p class="text-3xl font-black text-secondary-gold" style="">328</p>
+</div>
+<div class="bg-white/5 p-6 rounded-2xl border border-white/10 text-center col-span-2 md:col-span-1">
+<p class="text-slate-400 text-xs uppercase font-bold mb-2" style="">Custo/Lead</p>
+<p class="text-3xl font-black" style="">R$ 3,45</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="px-6 lg:px-40 py-24 bg-background-dark text-white overflow-hidden relative" id="detalhe-ouro">
+<div class="absolute inset-0 bg-gradient-to-br from-secondary-gold/10 via-transparent to-primary/10 opacity-30"></div>
+<div class="max-w-[1200px] mx-auto relative z-10">
+<div class="grid lg:grid-cols-2 gap-16 items-center">
+<div class="flex flex-col gap-10">
+<div>
+<span class="inline-block px-6 py-2 bg-secondary-gold text-slate-900 font-black uppercase tracking-widest text-lg rounded-xl mb-4 shadow-lg shadow-secondary-gold/20" style="">PLANO 3</span>
+<h2 class="text-4xl lg:text-6xl font-black mt-2 mb-6 border-l-4 border-secondary-gold pl-6" style="">Gestão Completa <span class="text-secondary-gold block" style="">(Ecossistema Integrado)</span></h2>
+<p class="text-xl text-slate-400" style="">O auge da estratégia local. Alinhamento total entre busca e descoberta para domínio absoluto do seu mercado. <span class="text-secondary-gold font-bold" style="">Bônus exclusivo de R$ 200 OFF incluso.</span></p>
+</div>
+<div class="grid gap-8">
+<div class="flex gap-6 group">
+<div class="w-14 h-14 shrink-0 rounded-2xl bg-secondary-gold flex items-center justify-center shadow-lg shadow-secondary-gold/30 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-slate-900 text-3xl" style="">all_inclusive</span>
+</div>
+<div>
+<h4 class="text-xl font-bold mb-2 text-secondary-gold" style="">Google + Meta Ads Integrados</h4>
+<p class="text-slate-400" style="">Capturamos quem busca no Google e perseguimos com autoridade no Meta através de remarketing inteligente.</p>
+</div>
+</div>
+<div class="flex gap-6 group">
+<div class="w-14 h-14 shrink-0 rounded-2xl bg-white/10 flex items-center justify-center border border-secondary-gold/30 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-secondary-gold text-3xl" style="">biotech</span>
+</div>
+<div>
+<h4 class="text-xl font-bold mb-2" style="">Testes de Criativos A/B</h4>
+<p class="text-slate-400" style="">Testamos exaustivamente diferentes imagens e textos para encontrar a combinação que gera o menor custo por agendamento.</p>
+</div>
+</div>
+<div class="flex gap-6 group">
+<div class="w-14 h-14 shrink-0 rounded-2xl bg-white/10 flex items-center justify-center border border-secondary-gold/30 group-hover:scale-110 transition-transform">
+<span class="material-symbols-outlined text-white text-3xl" style="">groups</span>
+</div>
+<div>
+<h4 class="text-xl font-bold mb-2" style="">Reuniões Estratégicas Mensais</h4>
+<p class="text-slate-400" style="">Encontros dedicados para analisar o funil completo e ajustar a rota para escala de faturamento.</p>
+</div>
+</div>
+</div>
+</div>
+<div class="relative">
+<div class="absolute -inset-10 bg-secondary-gold/10 rounded-full blur-[100px]"></div>
+<div class="relative bg-slate-800/50 backdrop-blur-xl p-10 rounded-[3rem] border border-secondary-gold/20 shadow-inner">
+<div class="flex flex-col gap-12 items-center">
+<div class="flex justify-between w-full">
+<div class="flex flex-col items-center gap-3">
+<div class="w-20 h-20 rounded-full bg-white flex items-center justify-center shadow-xl">
+<img alt="" class="w-10 h-10" src="https://www.gstatic.com/marketing-cms/assets/images/b6/82/8cb99c3b400bb7c8f85bdd0733e2/ads.webp=s48-fcrop64=1,00000000ffffffff-rw" style="">
+</div>
+<span class="text-xs font-bold text-slate-400 uppercase" style="">Google Ads</span>
+</div>
+<div class="flex flex-col items-center gap-3">
+<div class="w-20 h-20 rounded-full bg-white flex items-center justify-center shadow-xl">
+<img alt="" class="w-10 h-10" src="https://cdn-icons-png.flaticon.com/512/6033/6033716.png" style="">
+</div>
+<span class="text-xs font-bold text-slate-400 uppercase" style="">Meta Ads</span>
+</div>
+</div>
+<div class="relative py-4">
+<div class="absolute inset-0 flex items-center">
+<div class="w-full border-t-2 border-dashed border-secondary-gold/40"></div>
+</div>
+<div class="relative flex justify-center">
+<div class="bg-secondary-gold text-slate-900 font-black px-6 py-2 rounded-full text-sm" style="">SINERGIA TOTAL</div>
+</div>
+</div>
+<div class="bg-secondary-gold/10 p-8 rounded-3xl border border-secondary-gold/30 w-full text-center">
+<span class="material-symbols-outlined text-secondary-gold text-5xl mb-4" style="">stars</span>
+<h5 class="text-2xl font-black mb-1 text-secondary-gold" style="">Autoridade Premium</h5>
+<p class="text-slate-400 text-sm" style="">Sua empresa omnipresente em todas as plataformas.</p>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<section class="px-6 lg:px-40 py-24 bg-white dark:bg-slate-900/50" id="comparativo">
+<div class="max-w-[1000px] mx-auto">
+<div class="text-center mb-16">
+<h2 class="text-4xl font-black mb-4" style="">Matriz de Funcionalidades</h2>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="border-b border-slate-200 dark:border-slate-700">
+<th class="py-6 px-4 text-slate-500 font-medium" style="">Recurso</th>
+<th class="py-6 px-4 font-black text-center text-slate-400" style="">BRONZE</th>
+<th class="py-6 px-4 font-black text-center text-primary" style="">PRATA</th>
+<th class="py-6 px-4 font-black text-center text-secondary-gold" style="">OURO</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-slate-100 dark:divide-slate-800">
+<tr>
+<td class="py-5 px-4 font-semibold" style="">Impulsionamento App</td>
+<td class="py-5 px-4 text-center text-primary" style=""><span class="material-symbols-outlined" style="">check</span></td>
+<td class="py-5 px-4 text-center text-primary" style=""><span class="material-symbols-outlined" style="">check</span></td>
+<td class="py-5 px-4 text-center text-primary" style=""><span class="material-symbols-outlined" style="">check</span></td>
+</tr>
+<tr>
+<td class="py-5 px-4 font-semibold" style="">Relatório Mensal</td>
+<td class="py-5 px-4 text-center text-primary" style=""><span class="material-symbols-outlined" style="">check</span></td>
+<td class="py-5 px-4 text-center text-primary" style=""><span class="material-symbols-outlined" style="">check</span></td>
+<td class="py-5 px-4 text-center text-primary" style=""><span class="material-symbols-outlined" style="">check</span></td>
+</tr>
+<tr>
+<td class="py-5 px-4 font-semibold" style="">Gerenciador de Negócios</td>
+<td class="py-5 px-4 text-center text-slate-300 dark:text-slate-600" style=""><span class="material-symbols-outlined" style="">close</span></td>
+<td class="py-5 px-4 text-center text-primary" style=""><span class="material-symbols-outlined" style="">check</span></td>
+<td class="py-5 px-4 text-center text-primary" style=""><span class="material-symbols-outlined" style="">check</span></td>
+</tr>
+<tr>
+<td class="py-5 px-4 font-semibold" style="">Google Ads Search</td>
+<td class="py-5 px-4 text-center text-slate-300 dark:text-slate-600" style=""><span class="material-symbols-outlined" style="">close</span></td>
+<td class="py-5 px-4 text-center text-primary italic text-xs" style="">Opcional</td>
+<td class="py-5 px-4 text-center text-primary" style=""><span class="material-symbols-outlined" style="">check</span></td>
+</tr>
+<tr>
+<td class="py-5 px-4 font-semibold" style="">Landing Page Integrada</td>
+<td class="py-5 px-4 text-center text-slate-300 dark:text-slate-600" style=""><span class="material-symbols-outlined" style="">close</span></td>
+<td class="py-5 px-4 text-center text-slate-300 dark:text-slate-600" style=""><span class="material-symbols-outlined" style="">close</span></td>
+<td class="py-5 px-4 text-center text-primary" style=""><span class="material-symbols-outlined" style="">check</span></td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</section>
+<section class="px-6 lg:px-40 py-16 bg-slate-50 dark:bg-slate-800/30">
+<div class="max-w-[1000px] mx-auto p-10 rounded-3xl bg-white dark:bg-slate-800 shadow-xl border border-slate-200 dark:border-slate-700">
+<div class="flex items-center gap-3 mb-8">
+<span class="material-symbols-outlined text-primary" style="">info</span>
+<h3 class="text-2xl font-black" style="">Notas Importantes</h3>
+</div>
+<div class="grid md:grid-cols-2 gap-8">
+<div class="flex gap-4">
+<div class="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" style="">payments</span>
+</div>
+<p class="text-sm text-slate-600 dark:text-slate-400" style="">Verba de anúncios (Google/Meta) é paga diretamente às plataformas e não está inclusa no valor da gestão.</p>
+</div>
+<div class="flex gap-4">
+<div class="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" style="">palette</span>
+</div>
+<p class="text-sm text-slate-600 dark:text-slate-400" style="">O serviço contempla a gestão de tráfego. Criação de artes e vídeos deve ser fornecida pelo cliente ou contratada à parte.</p>
+</div>
+<div class="flex gap-4">
+<div class="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" style="">calendar_month</span>
+</div>
+<p class="text-sm text-slate-600 dark:text-slate-400" style="">Fidelidade mínima sugerida de 3 meses para maturação das inteligências das plataformas e otimização de custos.</p>
+</div>
+<div class="flex gap-4">
+<div class="flex-shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center">
+<span class="material-symbols-outlined text-sm" style="">shield</span>
+</div>
+<p class="text-sm text-slate-600 dark:text-slate-400" style="">Garantia de implementação das melhores práticas do mercado e monitoramento diário das suas campanhas.</p>
+</div>
+</div>
+</div>
+</section>
+</main>
+<footer class="bg-background-light dark:bg-background-dark px-6 lg:px-40 py-16 border-t border-primary/10">
+<div class="max-w-[1200px] mx-auto flex flex-col md:flex-row justify-between items-center gap-12">
+<div class="flex flex-col gap-4 items-center md:items-start text-center md:text-left">
+<div class="flex items-center gap-3">
+<div class="bg-primary p-2 rounded-lg text-white">
+<span class="material-symbols-outlined" style="">trending_up</span>
+</div>
+<h2 class="text-2xl font-black tracking-tight text-slate-900 dark:text-white" style=""><br></h2>
+</div>
+<p class="text-slate-600 dark:text-slate-400 max-w-sm" style="">Especialistas em escalar negócios locais através do tráfego pago de alta performance.</p>
+<div class="flex gap-4 mt-2">
+<a class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center hover:bg-primary hover:text-white transition-all" href="#" style="">
+<span class="material-symbols-outlined text-[20px]" style="">chat</span>
+</a>
+<a class="w-10 h-10 rounded-full bg-slate-200 dark:bg-slate-800 flex items-center justify-center hover:bg-primary hover:text-white transition-all" href="#" style="">
+<span class="material-symbols-outlined text-[20px]" style="">alternate_email</span>
+</a>
+</div>
+</div>
+<div class="flex flex-col items-center md:items-end gap-6">
+<div class="text-center md:text-right">
+<h4 class="text-lg font-bold mb-1" style="">Pronto para o próximo nível?</h4>
+<p class="text-slate-600 dark:text-slate-400" style="">Fale com um especialista e garanta seu bônus de <span class="text-primary font-bold" style="">R$ 200 de desconto</span>.</p>
+</div>
+<button class="bg-primary hover:bg-primary/90 text-white px-10 py-4 rounded-xl text-lg font-bold transition-all shadow-xl shadow-primary/25" style="">
+                    Solicitar Orçamento Agora
+                </button>
+</div>
+</div>
+<div class="max-w-[1200px] mx-auto mt-16 pt-8 border-t border-slate-200 dark:border-slate-800 flex flex-col md:flex-row justify-between items-center gap-4 text-slate-400 text-sm">
+<p class="" style="">© 2024 Local Traffic Agency. Todos os direitos reservados.</p>
+<div class="flex gap-8">
+<a class="hover:text-primary transition-colors" href="#" style="">Privacidade</a>
+<a class="hover:text-primary transition-colors" href="#" style="">Termos de Uso</a>
+</div>
+</div>
+</footer>
+</div>
+
+</body></html>
