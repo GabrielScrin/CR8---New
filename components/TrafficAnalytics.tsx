@@ -5,6 +5,7 @@ import { AdMetric, NativeResultContext, NativeResultType } from '../types';
 import { loadLocalAiSettings } from '../lib/aiLocal';
 import { resolveMetaToken } from '../lib/metaToken';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
+import { ClientPortalManager } from './ClientPortalManager';
 
 interface TrafficAnalyticsProps {
   companyId?: string;
@@ -2437,6 +2438,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   return (
     <div className="space-y-5">
       {/* Page Header */}
+      <div className="sticky top-16 z-20 rounded-[28px] border border-[hsl(var(--border))] bg-[hsl(var(--background))]/90 p-4 backdrop-blur-xl shadow-[0_24px_70px_-36px_rgba(0,0,0,0.8)]">
       <div className="flex flex-wrap justify-between items-start gap-3">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
@@ -2514,6 +2516,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           )}
         </div>
       </div>
+      </div>
+
+      {!demoMode && isSupabaseConfigured() && <ClientPortalManager companyId={companyId} />}
 
       <div className="rounded-2xl p-5 border border-[hsl(var(--border))]" style={{ background: 'hsl(220 18% 7%)' }}>
         <h3 className="text-sm font-bold text-[hsl(var(--foreground))] mb-4 flex items-center gap-2">
