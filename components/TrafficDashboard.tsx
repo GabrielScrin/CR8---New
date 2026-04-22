@@ -21,11 +21,36 @@ import {
   Zap,
 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import type { AdMetric } from '../types';
+import type { AdMetric, NativeResultType } from '../types';
 
 interface TrafficDashboardProps {
   rows: AdMetric[];
   comparisonData: { name: string; metaSpend: number; metaLeads: number }[];
+  summary?: {
+    media: {
+      invest: number;
+      impressions: number;
+      reach: number;
+      clicks: number;
+      linkClicks: number;
+      ctr: number;
+      cpc: number;
+      cpm: number;
+      frequency: number;
+    };
+    platform: {
+      messagesStarted: number;
+      leadForms: number;
+      siteLeads: number;
+      businessLeads: number;
+      profileVisits: number;
+      followers: number;
+      videoViews: number;
+      thruplays: number;
+      purchases: number;
+    };
+    dominantNativeType: NativeResultType | null;
+  } | null;
   selectedAdAccountId: string | null;
   adAccountName: string;
   datePreset: string;
@@ -120,9 +145,33 @@ const sectionLabel: React.CSSProperties = {
   marginBottom: 14,
 };
 
+const getSummaryResultMeta = (
+  summary: NonNullable<TrafficDashboardProps['summary']>,
+): { value: number; label: string } => {
+  switch (summary.dominantNativeType) {
+    case 'messages_started':
+      return { value: summary.platform.messagesStarted, label: 'Mensagens iniciadas' };
+    case 'lead_forms':
+      return { value: summary.platform.leadForms, label: 'Lead Forms' };
+    case 'site_leads':
+      return { value: summary.platform.siteLeads, label: 'Conversoes de site' };
+    case 'profile_visits':
+      return { value: summary.platform.profileVisits, label: 'Visitas ao perfil' };
+    case 'followers':
+      return { value: summary.platform.followers, label: 'Seguidores' };
+    case 'video_views':
+      return { value: summary.platform.thruplays > 0 ? summary.platform.thruplays : summary.platform.videoViews, label: summary.platform.thruplays > 0 ? 'ThruPlays' : 'Views 3s' };
+    case 'purchases':
+      return { value: summary.platform.purchases, label: 'Compras' };
+    default:
+      return { value: summary.platform.businessLeads, label: 'Leads de negocio' };
+  }
+};
+
 export function TrafficDashboard({
   rows: rawRows,
   comparisonData: rawSeries,
+  summary,
   selectedAdAccountId,
   datePreset,
   dateSince,
@@ -134,8 +183,15 @@ export function TrafficDashboard({
   const series = demoMode && rawSeries.length === 0 ? DEMO_SERIES : rawSeries;
 
   const dateLabel = useMemo(() => {
+    if (datePreset === 'today')       return 'Hoje';
+    if (datePreset === 'yesterday')   return 'Ontem';
+    if (datePreset === 'today_yesterday') return 'Hoje e ontem';
     if (datePreset === 'last_7d')    return 'Últimos 7 dias';
+    if (datePreset === 'last_14d')   return 'Últimos 14 dias';
+    if (datePreset === 'last_28d')   return 'Últimos 28 dias';
     if (datePreset === 'last_30d')   return 'Últimos 30 dias';
+    if (datePreset === 'this_week')  return 'Esta semana';
+    if (datePreset === 'last_week')  return 'Semana passada';
     if (datePreset === 'this_month') return 'Este mês';
     if (datePreset === 'last_month') return 'Mês passado';
     if (dateSince && dateUntil)      return `${dateSince} → ${dateUntil}`;
@@ -146,17 +202,20 @@ export function TrafficDashboard({
     const active = rows.filter((r) => r.spend > 0);
     if (!active.length) return null;
 
-    const spend       = active.reduce((s, r) => s + r.spend, 0);
-    const impressions = active.reduce((s, r) => s + r.impressions, 0);
-    const reach       = active.reduce((s, r) => s + (r.reach ?? 0), 0);
-    const clicks      = active.reduce((s, r) => s + (r.inlineLinkClicks ?? r.clicks ?? 0), 0);
-    const results     = active.reduce((s, r) => s + (r.results ?? r.leads ?? 0), 0);
+    const summaryResult = summary ? getSummaryResultMeta(summary) : null;
+    const spend       = summary?.media.invest ?? active.reduce((s, r) => s + r.spend, 0);
+    const impressions = summary?.media.impressions ?? active.reduce((s, r) => s + r.impressions, 0);
+    const reach       = summary?.media.reach ?? active.reduce((s, r) => s + (r.reach ?? 0), 0);
+    const clicks      = summary != null
+      ? (summary.media.linkClicks > 0 ? summary.media.linkClicks : summary.media.clicks)
+      : active.reduce((s, r) => s + (r.inlineLinkClicks ?? r.clicks ?? 0), 0);
+    const results     = summaryResult?.value ?? active.reduce((s, r) => s + (r.results ?? r.leads ?? 0), 0);
 
-    const ctr       = impressions > 0 ? clicks / impressions : 0;
-    const cpm       = impressions > 0 ? (spend / impressions) * 1000 : 0;
-    const cpc       = clicks > 0 ? spend / clicks : 0;
+    const ctr       = summary != null ? summary.media.ctr / 100 : impressions > 0 ? clicks / impressions : 0;
+    const cpm       = summary?.media.cpm ?? (impressions > 0 ? (spend / impressions) * 1000 : 0);
+    const cpc       = summary?.media.cpc ?? (clicks > 0 ? spend / clicks : 0);
     const cpr       = results > 0 ? spend / results : 0;
-    const frequency = reach > 0 ? impressions / reach : 0;
+    const frequency = summary?.media.frequency ?? (reach > 0 ? impressions / reach : 0);
 
     const withIdc = active.filter((r) => r.idc != null);
     const avgIdc  = withIdc.length ? withIdc.reduce((s, r) => s + (r.idc ?? 0), 0) / withIdc.length : null;
@@ -183,12 +242,14 @@ export function TrafficDashboard({
     const ranking = [...rankMap.values()].sort((a, b) => b.spend - a.spend).slice(0, 6);
 
     const labels = active.map((r) => r.resultLabel).filter(Boolean) as string[];
-    const resultLabel = labels.length
-      ? (labels.sort((a, b) => labels.filter((v) => v === b).length - labels.filter((v) => v === a).length)[0] ?? 'Resultados')
-      : 'Resultados';
+    const resultLabel = summaryResult?.label ?? (
+      labels.length
+        ? (labels.sort((a, b) => labels.filter((v) => v === b).length - labels.filter((v) => v === a).length)[0] ?? 'Resultados')
+        : 'Resultados'
+    );
 
     return { spend, impressions, reach, clicks, results, ctr, cpm, cpc, cpr, frequency, avgIdc, classCount, hasClass, ranking, resultLabel };
-  }, [rows]);
+  }, [rows, summary]);
 
   const health = useMemo(() => {
     if (!m) return null;

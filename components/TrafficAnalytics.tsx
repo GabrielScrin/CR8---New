@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Download, ExternalLink, FileBarChart2, Filter, Link2, RefreshCw, Send, Sparkles, X } from 'lucide-react';
+import { ArrowDown, ArrowUp, CalendarRange, Download, ExternalLink, FileBarChart2, Filter, Link2, RefreshCw, Send, Sparkles, X } from 'lucide-react';
 import { TrafficDashboard } from './TrafficDashboard';
 import { AdMetric, NativeResultContext, NativeResultType } from '../types';
 import { loadLocalAiSettings } from '../lib/aiLocal';
 import { resolveMetaToken } from '../lib/metaToken';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 
 interface TrafficAnalyticsProps {
   companyId?: string;
@@ -13,7 +14,19 @@ interface TrafficAnalyticsProps {
 type MetaLevel = 'campaign' | 'adset' | 'ad';
 type InsightsScopeLevel = MetaLevel | 'account';
 type TrafficTab = 'meta' | 'platform';
-type DatePreset = 'last_7d' | 'last_30d' | 'this_month' | 'last_month' | 'custom';
+type DatePreset =
+  | 'today'
+  | 'yesterday'
+  | 'today_yesterday'
+  | 'last_7d'
+  | 'last_14d'
+  | 'last_28d'
+  | 'last_30d'
+  | 'this_week'
+  | 'last_week'
+  | 'this_month'
+  | 'last_month'
+  | 'custom';
 type DateRange = { start: string; end: string };
 
 type OptionalMetricKey =
@@ -46,21 +59,65 @@ const getTodayUtc = () => {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 };
 
+const shiftUtcDate = (value: Date, days: number) => {
+  const next = new Date(value);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+};
+
+const getStartOfWeekUtc = (value: Date) => {
+  const weekday = value.getUTCDay();
+  const offset = weekday === 0 ? -6 : 1 - weekday;
+  return shiftUtcDate(value, offset);
+};
+
 const getRangeForPreset = (preset: Exclude<DatePreset, 'custom'>): DateRange => {
   const today = getTodayUtc();
   const year = today.getUTCFullYear();
   const month = today.getUTCMonth();
 
+  if (preset === 'today') {
+    return { start: isoUtcDate(today), end: isoUtcDate(today) };
+  }
+
+  if (preset === 'yesterday') {
+    const yesterday = shiftUtcDate(today, -1);
+    return { start: isoUtcDate(yesterday), end: isoUtcDate(yesterday) };
+  }
+
+  if (preset === 'today_yesterday') {
+    return { start: isoUtcDate(shiftUtcDate(today, -1)), end: isoUtcDate(today) };
+  }
+
   if (preset === 'last_7d') {
-    const start = new Date(today);
-    start.setUTCDate(start.getUTCDate() - 6);
+    const start = shiftUtcDate(today, -6);
+    return { start: isoUtcDate(start), end: isoUtcDate(today) };
+  }
+
+  if (preset === 'last_14d') {
+    const start = shiftUtcDate(today, -13);
+    return { start: isoUtcDate(start), end: isoUtcDate(today) };
+  }
+
+  if (preset === 'last_28d') {
+    const start = shiftUtcDate(today, -27);
     return { start: isoUtcDate(start), end: isoUtcDate(today) };
   }
 
   if (preset === 'last_30d') {
-    const start = new Date(today);
-    start.setUTCDate(start.getUTCDate() - 29);
+    const start = shiftUtcDate(today, -29);
     return { start: isoUtcDate(start), end: isoUtcDate(today) };
+  }
+
+  if (preset === 'this_week') {
+    return { start: isoUtcDate(getStartOfWeekUtc(today)), end: isoUtcDate(today) };
+  }
+
+  if (preset === 'last_week') {
+    const thisWeekStart = getStartOfWeekUtc(today);
+    const start = shiftUtcDate(thisWeekStart, -7);
+    const end = shiftUtcDate(thisWeekStart, -1);
+    return { start: isoUtcDate(start), end: isoUtcDate(end) };
   }
 
   if (preset === 'this_month') {
@@ -76,6 +133,57 @@ const getRangeForPreset = (preset: Exclude<DatePreset, 'custom'>): DateRange => 
 const normalizeDateRange = (start?: string, end?: string): DateRange | null => {
   if (!start || !end) return null;
   return start <= end ? { start, end } : { start: end, end: start };
+};
+
+const getDatePresetLabel = (preset: DatePreset) => {
+  switch (preset) {
+    case 'today':
+      return 'Hoje';
+    case 'yesterday':
+      return 'Ontem';
+    case 'today_yesterday':
+      return 'Hoje e ontem';
+    case 'last_7d':
+      return 'Ultimos 7 dias';
+    case 'last_14d':
+      return 'Ultimos 14 dias';
+    case 'last_28d':
+      return 'Ultimos 28 dias';
+    case 'last_30d':
+      return 'Ultimos 30 dias';
+    case 'this_week':
+      return 'Esta semana';
+    case 'last_week':
+      return 'Semana passada';
+    case 'this_month':
+      return 'Este mes';
+    case 'last_month':
+      return 'Mes passado';
+    case 'custom':
+      return 'Personalizado';
+    default:
+      return 'Periodo';
+  }
+};
+
+const DATE_PRESET_OPTIONS: DatePreset[] = [
+  'today',
+  'yesterday',
+  'today_yesterday',
+  'last_7d',
+  'last_14d',
+  'last_28d',
+  'last_30d',
+  'this_week',
+  'last_week',
+  'this_month',
+  'last_month',
+  'custom',
+];
+
+const formatDateRangeLabel = (range: DateRange | null) => {
+  if (!range) return 'Selecione o periodo';
+  return `${range.start} ate ${range.end}`;
 };
 
 const buildComparisonSeries = (
@@ -180,6 +288,12 @@ type ReportBusinessSummary = {
   revenue: number;
   pendingFollowup: number;
   leadSignals: number;
+};
+
+type TrafficDashboardSummary = {
+  media: ReportMediaSummary;
+  platform: ReportPlatformSummary;
+  dominantNativeType: NativeResultType | null;
 };
 
 type CampaignMetaNode = {
@@ -302,6 +416,23 @@ const extractActionSum = (actions: any[] | undefined, matcher: (actionType: stri
   return matches.reduce((sum, a) => sum + parseNumber(a.value), 0);
 };
 
+const extractPreferredActionValue = (
+  actions: any[] | undefined,
+  exactPriority: string[],
+  fallbackMatcher?: (actionType: string) => boolean,
+) => {
+  if (!Array.isArray(actions) || actions.length === 0) return undefined;
+
+  for (const actionType of exactPriority) {
+    const match = actions.find((entry) => normalizeActionType(entry?.action_type) === actionType);
+    if (match != null) return parseNumber(match.value);
+  }
+
+  if (!fallbackMatcher) return undefined;
+  const match = actions.find((entry) => fallbackMatcher(normalizeActionType(entry?.action_type)));
+  return match != null ? parseNumber(match.value) : undefined;
+};
+
 const extractActionTotal = (actions: any[] | undefined) => {
   if (!Array.isArray(actions) || actions.length === 0) return undefined;
   return actions.reduce((sum, a) => sum + parseNumber(a?.value), 0);
@@ -333,13 +464,13 @@ const extractPurchasesFromActions = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t === 'purchase' || t.endsWith('.purchase') || t.includes('purchase'));
 
 const extractMessagingConversationsFromActions = (actions: any[] | undefined) =>
-  extractActionSum(
+  extractPreferredActionValue(
     actions,
-    (t) =>
-      t === 'onsite_conversion.messaging_conversation_started_7d' ||
-      t === 'onsite_conversion.messaging_conversation_started_1d' ||
-      t === 'onsite_conversion.messaging_first_reply' ||
-      t.includes('messaging_conversation_started'),
+    [
+      'onsite_conversion.messaging_conversation_started_7d',
+      'onsite_conversion.messaging_conversation_started_1d',
+    ],
+    (t) => t.includes('messaging_conversation_started'),
   );
 
 // Visitas ao perfil reais do Instagram; nao incluir page engagement / view content genericos.
@@ -582,6 +713,28 @@ const resolvePrimaryResult = (row: any, computed: {
   return pick(undefined, 'Resultados');
 };
 
+const resolveDominantNativeType = (rows: AdMetric[]): NativeResultType | null => {
+  const spendByType = new Map<NativeResultType, number>();
+
+  for (const row of rows) {
+    if (row.spend <= 0) continue;
+    const nativeType = row.nativeType ?? 'unknown';
+    if (nativeType === 'unknown') continue;
+    spendByType.set(nativeType, (spendByType.get(nativeType) ?? 0) + row.spend);
+  }
+
+  let dominant: NativeResultType | null = null;
+  let maxSpend = -1;
+  for (const [nativeType, spend] of spendByType.entries()) {
+    if (spend > maxSpend) {
+      dominant = nativeType;
+      maxSpend = spend;
+    }
+  }
+
+  return dominant;
+};
+
 const extractRoas = (purchaseRoas: any[] | undefined) => {
   if (!Array.isArray(purchaseRoas) || purchaseRoas.length === 0) return undefined;
   return purchaseRoas.reduce((sum, r) => sum + parseNumber(r.value), 0);
@@ -624,6 +777,10 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   const [datePreset, setDatePreset] = useState<DatePreset>('last_7d');
   const [dateSince, setDateSince] = useState<string>('');
   const [dateUntil, setDateUntil] = useState<string>('');
+  const [dateDialogOpen, setDateDialogOpen] = useState(false);
+  const [draftDatePreset, setDraftDatePreset] = useState<DatePreset>('last_7d');
+  const [draftDateSince, setDraftDateSince] = useState<string>('');
+  const [draftDateUntil, setDraftDateUntil] = useState<string>('');
 
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -636,6 +793,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
 
   const [rows, setRows] = useState<AdMetric[]>([]);
+  const [dashboardSummary, setDashboardSummary] = useState<TrafficDashboardSummary | null>(null);
 
   // Column presets (per-user)
   const [userId, setUserId] = useState<string | null>(null);
@@ -654,10 +812,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     return getRangeForPreset(datePreset);
   }, [datePreset, dateSince, dateUntil]);
 
-  const selectedDateRangeLabel = useMemo(() => {
-    if (!selectedDateRange) return 'Selecione o período';
-    return `${selectedDateRange.start} até ${selectedDateRange.end}`;
-  }, [selectedDateRange]);
+  const selectedDateRangeLabel = useMemo(() => formatDateRangeLabel(selectedDateRange), [selectedDateRange]);
 
   const optionalColumnsDef: Record<OptionalMetricKey, TableColumn> = useMemo(
     () => ({
@@ -1123,7 +1278,6 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       const impressions = Math.floor(parseNumber(row.impressions));
       const spend = parseNumber(row.spend);
       const buckets = buildPlatformBuckets(row);
-      const ctr = typeof row.ctr === 'string' || typeof row.ctr === 'number' ? parseNumber(row.ctr) : undefined;
       const roas = extractRoas(row.purchase_roas);
 
       const hookRate = impressions > 0 && buckets.videoViews > 0 ? buckets.videoViews / impressions : undefined;
@@ -1131,6 +1285,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
       const linkClicks = row.inline_link_clicks != null ? Math.floor(parseNumber(row.inline_link_clicks)) : undefined;
       const clicks = row.clicks != null ? Math.floor(parseNumber(row.clicks)) : undefined;
+      const performanceClicks = typeof linkClicks === 'number' && linkClicks > 0 ? linkClicks : clicks;
+      const ctr = typeof performanceClicks === 'number' && impressions > 0 ? (performanceClicks / impressions) * 100 : undefined;
       const nativeContext = resolveNativeContextForInsightRow(row, level, adsetMeta, campaignMeta, nativeOverrides);
       const primary = resolvePrimaryResult(row, {
         leadForms: buckets.leadForms,
@@ -1214,7 +1370,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         siteLeads: buckets.siteLeads,
         videoViews: buckets.videoViews,
         thruplays: buckets.thruplays,
-        cpc: row.cpc != null ? parseNumber(row.cpc) : undefined,
+        cpc: typeof performanceClicks === 'number' && performanceClicks > 0 ? spend / performanceClicks : undefined,
         ctr,
         roas,
         cpa: buckets.businessLeads > 0 ? spend / buckets.businessLeads : undefined,
@@ -1312,6 +1468,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     const reach = parseNumber(row.reach);
     const invest = parseNumber(row.spend);
     const linkClicks = parseNumber(row.inline_link_clicks);
+    const performanceClicks = linkClicks > 0 ? linkClicks : clicks;
 
     return {
       media: {
@@ -1320,8 +1477,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         reach,
         clicks,
         linkClicks,
-        ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
-        cpc: clicks > 0 ? invest / clicks : 0,
+        ctr: impressions > 0 ? (performanceClicks / impressions) * 100 : 0,
+        cpc: performanceClicks > 0 ? invest / performanceClicks : 0,
         cpm: impressions > 0 ? (invest / impressions) * 1000 : 0,
         frequency: reach > 0 ? impressions / reach : 0,
       },
@@ -1596,6 +1753,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     if (demoMode) {
       setRows(computeScores(mockAds));
       setComparisonData(mockComparisonData);
+      setDashboardSummary(null);
       return;
     }
 
@@ -1610,6 +1768,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       const providerToken = await getProviderToken();
       if (!providerToken) {
         setRows([]);
+        setDashboardSummary(null);
         setNeedsReauth(true);
         setErrorMsg('Para carregar dados reais, faça login com Facebook (escopo ads_read).');
         return;
@@ -1634,6 +1793,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
       if (!adAccountId) {
         setRows([]);
+        setDashboardSummary(null);
         setErrorMsg(accounts.length === 0 ? 'Nenhuma conta de anúncio encontrada para esse usuário do Facebook.' : 'Selecione uma conta de anúncio.');
         return;
       }
@@ -1676,7 +1836,15 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         setComparisonData([]);
       }
 
-      const nextMapped = await fetchTrafficRowsFromMeta(providerToken, adAccountId, adAccountName);
+      const [accountSummary, nextMapped] = await Promise.all([
+        fetchAccountSummary(providerToken, adAccountId, selectedDateRange ?? getRangeForPreset('last_7d')),
+        fetchTrafficRowsFromMeta(providerToken, adAccountId, adAccountName),
+      ]);
+      setDashboardSummary({
+        media: accountSummary.media,
+        platform: accountSummary.platform,
+        dominantNativeType: resolveDominantNativeType(nextMapped),
+      });
       setRows(computeScores(nextMapped));
       if (nextMapped.length === 0) setErrorMsg('Sem dados para esse período.');
       return;
@@ -1684,6 +1852,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     } catch (e: any) {
       console.error(e);
       setRows([]);
+      setDashboardSummary(null);
 
       const metaCode = e?.metaError?.code;
       if (metaCode === 200) {
@@ -1749,6 +1918,47 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     setDateUntil(value);
     if (!value) return;
     setDateSince((prev) => (!prev || prev > value ? value : prev));
+  };
+
+  const openDateDialog = () => {
+    setDraftDatePreset(datePreset);
+    setDraftDateSince(dateSince || selectedDateRange?.start || getRangeForPreset('last_7d').start);
+    setDraftDateUntil(dateUntil || selectedDateRange?.end || getRangeForPreset('last_7d').end);
+    setDateDialogOpen(true);
+  };
+
+  const onChangeDraftDatePreset = (nextPreset: DatePreset) => {
+    setDraftDatePreset(nextPreset);
+    if (nextPreset === 'custom') {
+      const fallbackRange = normalizeDateRange(draftDateSince, draftDateUntil) ?? selectedDateRange ?? getRangeForPreset('this_month');
+      setDraftDateSince(fallbackRange.start);
+      setDraftDateUntil(fallbackRange.end);
+      return;
+    }
+
+    const nextRange = getRangeForPreset(nextPreset);
+    setDraftDateSince(nextRange.start);
+    setDraftDateUntil(nextRange.end);
+  };
+
+  const applyDateFilter = () => {
+    if (draftDatePreset === 'custom') {
+      const normalized = normalizeDateRange(draftDateSince, draftDateUntil);
+      if (!normalized) {
+        setErrorMsg('Selecione a data inicial e final do período.');
+        return;
+      }
+      setDatePreset('custom');
+      setDateSince(normalized.start);
+      setDateUntil(normalized.end);
+      setDateDialogOpen(false);
+      return;
+    }
+
+    setDatePreset(draftDatePreset);
+    setDateSince('');
+    setDateUntil('');
+    setDateDialogOpen(false);
   };
 
   const toggleCampaignSelection = (id: string) => {
@@ -2579,39 +2789,24 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
             </div>
           )}
 
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-3 py-2">
-            <span className="text-xs font-medium text-[hsl(var(--muted-foreground))] whitespace-nowrap">Periodo</span>
-            <select
-              value={datePreset}
-              onChange={(e) => onChangeDatePreset(e.target.value as DatePreset)}
-              className="min-w-[140px] bg-transparent text-sm text-[hsl(var(--foreground))] outline-none"
-            >
-              <option value="last_7d">Ultimos 7 dias</option>
-              <option value="last_30d">Ultimos 30 dias</option>
-              <option value="this_month">Este mes</option>
-              <option value="last_month">Mes passado</option>
-              <option value="custom">Personalizado</option>
-            </select>
-            {datePreset === 'custom' && (
-              <>
-                <input
-                  type="date"
-                  value={dateSince}
-                  max={dateUntil || undefined}
-                  onChange={(e) => onChangeDateSince(e.target.value)}
-                  className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-1.5 text-sm text-[hsl(var(--foreground))] outline-none"
-                />
-                <span className="text-xs text-[hsl(var(--muted-foreground))]">ate</span>
-                <input
-                  type="date"
-                  value={dateUntil}
-                  min={dateSince || undefined}
-                  onChange={(e) => onChangeDateUntil(e.target.value)}
-                  className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-1.5 text-sm text-[hsl(var(--foreground))] outline-none"
-                />
-              </>
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={openDateDialog}
+            className="flex min-w-[240px] items-center gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-3 py-2 text-left transition-all hover:bg-[hsl(var(--secondary))]"
+          >
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-indigo-500/15 bg-indigo-500/10">
+              <CalendarRange className="h-4 w-4 text-indigo-300" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] font-medium uppercase tracking-[0.08em] text-[hsl(var(--muted-foreground))]">
+                Periodo
+              </div>
+              <div className="truncate text-sm text-[hsl(var(--foreground))]">
+                {getDatePresetLabel(datePreset)} · {selectedDateRangeLabel}
+              </div>
+            </div>
+            <ArrowDown className="h-3.5 w-3.5 shrink-0 text-[hsl(var(--muted-foreground))]" />
+          </button>
 
           {needsReauth && !demoMode && (
             <button
@@ -2664,6 +2859,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       <TrafficDashboard
         rows={rows}
         comparisonData={comparisonData}
+        summary={dashboardSummary}
         selectedAdAccountId={selectedAdAccountId}
         adAccountName={adAccounts.find((a) => a.id === selectedAdAccountId)?.name ?? ''}
         datePreset={datePreset}
@@ -3341,6 +3537,112 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       )}
 
       {/* Report Generation Modal */}
+      <Dialog open={dateDialogOpen} onOpenChange={setDateDialogOpen}>
+        <DialogContent className="max-w-4xl border-[hsl(var(--border))] bg-[hsl(var(--card))] p-0 text-[hsl(var(--foreground))]">
+          <DialogHeader className="border-b border-[hsl(var(--border))] px-6 py-5">
+            <DialogTitle className="text-base font-semibold">Selecionar periodo</DialogTitle>
+          </DialogHeader>
+
+          <div className="grid gap-0 md:grid-cols-[220px_minmax(0,1fr)]">
+            <div className="border-r border-[hsl(var(--border))] p-4">
+              <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[hsl(var(--muted-foreground))]">
+                Usados recentemente
+              </div>
+              <div className="space-y-1.5">
+                {DATE_PRESET_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => onChangeDraftDatePreset(option)}
+                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-all ${
+                      draftDatePreset === option
+                        ? 'bg-indigo-500/10 text-indigo-300 border border-indigo-500/20'
+                        : 'border border-transparent text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))]'
+                    }`}
+                  >
+                    <span>{getDatePresetLabel(option)}</span>
+                    {draftDatePreset === option && <span className="text-[10px] font-semibold uppercase tracking-[0.08em]">ativo</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="p-5">
+              <div className="grid gap-4 lg:grid-cols-2">
+                <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[hsl(var(--muted-foreground))]">
+                    Preset
+                  </div>
+                  <div className="mt-2 text-lg font-semibold text-[hsl(var(--foreground))]">
+                    {getDatePresetLabel(draftDatePreset)}
+                  </div>
+                  <div className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
+                    {formatDateRangeLabel(normalizeDateRange(draftDateSince, draftDateUntil))}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[hsl(var(--muted-foreground))]">
+                    Intervalo
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    <label className="grid gap-1.5 text-xs text-[hsl(var(--muted-foreground))]">
+                      Data inicial
+                      <input
+                        type="date"
+                        value={draftDateSince}
+                        max={draftDateUntil || undefined}
+                        onChange={(e) => {
+                          setDraftDatePreset('custom');
+                          setDraftDateSince(e.target.value);
+                          setDraftDateUntil((prev) => (!prev || prev < e.target.value ? e.target.value : prev));
+                        }}
+                        className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-3 py-2 text-sm text-[hsl(var(--foreground))] outline-none"
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-xs text-[hsl(var(--muted-foreground))]">
+                      Data final
+                      <input
+                        type="date"
+                        value={draftDateUntil}
+                        min={draftDateSince || undefined}
+                        onChange={(e) => {
+                          setDraftDatePreset('custom');
+                          setDraftDateUntil(e.target.value);
+                          setDraftDateSince((prev) => (!prev || prev > e.target.value ? e.target.value : prev));
+                        }}
+                        className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-3 py-2 text-sm text-[hsl(var(--foreground))] outline-none"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-4 py-3 text-xs text-[hsl(var(--muted-foreground))]">
+                Sem comparacao. O filtro aplica somente ao periodo principal da analise, como no Meta Ads.
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t border-[hsl(var(--border))] px-6 py-4">
+            <button
+              type="button"
+              onClick={() => setDateDialogOpen(false)}
+              className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--secondary))] px-4 py-2 text-sm text-[hsl(var(--foreground))]"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={applyDateFilter}
+              className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+            >
+              Aplicar
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {reportModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)' }}>
           <div className="w-full max-w-md rounded-2xl border border-[hsl(var(--border))] shadow-2xl" style={{ background: 'hsl(220 18% 9%)' }}>
