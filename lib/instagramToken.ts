@@ -53,9 +53,13 @@ export async function exchangeIgToken(
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${jwt}`,
+        'x-supabase-auth': `Bearer ${jwt}`,
       },
-      body: JSON.stringify({ company_id: companyId, short_lived_token: shortLivedToken }),
+      body: JSON.stringify({
+        company_id: companyId,
+        short_lived_token: shortLivedToken,
+        access_token: jwt,
+      }),
     });
 
     // Invalida o cache para que a próxima chamada leia o token novo do DB

@@ -21,11 +21,12 @@ export async function exchangeMetaToken(companyId: string, shortLivedToken: stri
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        authorization: `Bearer ${jwt}`,
+        'x-supabase-auth': `Bearer ${jwt}`,
       },
       body: JSON.stringify({
         company_id: companyId,
         short_lived_token: shortLivedToken,
+        access_token: jwt,
       }),
     });
 

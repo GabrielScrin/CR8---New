@@ -23,6 +23,13 @@ const jsonResponse = (status: number, data: unknown) =>
     headers: { ...corsHeaders, 'content-type': 'application/json' },
   });
 
+const extractBearerToken = (value: string | null): string | null => {
+  const source = value?.trim() ?? '';
+  if (!source) return null;
+  const match = source.match(/^Bearer\s+(.+)$/i);
+  return match?.[1]?.trim() ?? source;
+};
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
   if (req.method !== 'POST') return jsonResponse(405, { ok: false, error: 'method not allowed' });
@@ -35,17 +42,21 @@ serve(async (req) => {
       return jsonResponse(500, { ok: false, error: 'missing META_APP_ID / META_APP_SECRET' });
     }
 
-    const authHeader = req.headers.get('authorization') ?? '';
-    const jwt = authHeader.replace(/^Bearer\s+/i, '').trim();
+    const body = await req.json().catch(() => ({}));
+    const jwt =
+      extractBearerToken(req.headers.get('authorization')) ??
+      extractBearerToken(req.headers.get('Authorization')) ??
+      extractBearerToken(req.headers.get('x-supabase-auth')) ??
+      extractBearerToken(req.headers.get('x-access-token')) ??
+      (typeof body?.access_token === 'string' ? body.access_token.trim() : '');
     if (!jwt) return jsonResponse(401, { ok: false, error: 'missing bearer token' });
 
     const { data: userData, error: authError } = await supabaseAdmin.auth.getUser(jwt);
     if (authError || !userData?.user?.id) {
-      return jsonResponse(401, { ok: false, error: 'invalid token' });
+      return jsonResponse(401, { ok: false, error: `invalid token: ${authError?.message ?? 'unknown auth error'}` });
     }
     const userId = userData.user.id;
 
-    const body = await req.json().catch(() => ({}));
     const companyId = typeof body?.company_id === 'string' ? body.company_id.trim() : '';
     const shortToken = typeof body?.short_lived_token === 'string' ? body.short_lived_token.trim() : '';
 
