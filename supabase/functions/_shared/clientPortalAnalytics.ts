@@ -1577,13 +1577,11 @@ const resolveInstagramApiToken = (row: any): string | null => {
   const instagramToken = asString(row?.instagram_access_token);
   const instagramExpiresAtRaw = asString(row?.instagram_token_expires_at);
   const instagramExpiresAtMs = instagramExpiresAtRaw ? new Date(instagramExpiresAtRaw).getTime() : 0;
-  const metaToken = asString(row?.meta_access_token);
-  const metaExpiresAtRaw = asString(row?.meta_token_expires_at);
-  const metaExpiresAtMs = metaExpiresAtRaw ? new Date(metaExpiresAtRaw).getTime() : 0;
 
+  // Usa somente o instagram_access_token dedicado.
+  // Não usa meta_access_token como fallback porque ele pertence ao usuário que conectou
+  // o Meta Ads — que pode ser diferente do dono da conta Instagram → erro (403)/(#10).
   if (instagramToken && instagramExpiresAtMs > now) return instagramToken;
-  if (metaToken && metaExpiresAtMs > now) return metaToken;
-  if (metaToken) return metaToken;
   return null;
 };
 

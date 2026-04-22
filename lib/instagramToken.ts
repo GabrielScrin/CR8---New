@@ -53,11 +53,11 @@ export async function exchangeIgToken(
       method: 'POST',
       headers: {
         'content-type': 'application/json',
+        authorization: `Bearer ${jwt}`,
       },
       body: JSON.stringify({
         company_id: companyId,
         short_lived_token: shortLivedToken,
-        access_token: jwt,
       }),
     });
 
@@ -78,8 +78,6 @@ export async function resolveIgToken(): Promise<string | null> {
   const companyId = _activeCompanyId;
   let storedIgToken: string | null = null;
   let storedIgExpiresAtMs = 0;
-  let storedMetaToken: string | null = null;
-  let storedMetaExpiresAtMs = 0;
 
   // Cache válido?
   if (
@@ -90,20 +88,18 @@ export async function resolveIgToken(): Promise<string | null> {
     return _cache.token;
   }
 
-  // 1. Token armazenado no banco (longa duração)
+  // 1. Token de Instagram armazenado no banco (longa duração, específico para IG)
   if (companyId) {
     const { data, error } = await supabase
       .from('companies')
-      .select('instagram_access_token, instagram_token_expires_at, meta_access_token, meta_token_expires_at')
+      .select('instagram_access_token, instagram_token_expires_at')
       .eq('id', companyId)
       .maybeSingle();
 
     const missingColumns =
       error &&
       (String(error.message ?? '').includes('instagram_access_token') ||
-        String(error.message ?? '').includes('instagram_token_expires_at') ||
-        String(error.message ?? '').includes('meta_access_token') ||
-        String(error.message ?? '').includes('meta_token_expires_at'));
+        String(error.message ?? '').includes('instagram_token_expires_at'));
 
     if (error && !missingColumns) {
       throw error;
@@ -113,24 +109,16 @@ export async function resolveIgToken(): Promise<string | null> {
     const igExpiresAtRaw = (data as any)?.instagram_token_expires_at as string | null;
     storedIgExpiresAtMs = igExpiresAtRaw ? new Date(igExpiresAtRaw).getTime() : 0;
 
-    storedMetaToken = (data as any)?.meta_access_token as string | null;
-    const metaExpiresAtRaw = (data as any)?.meta_token_expires_at as string | null;
-    storedMetaExpiresAtMs = metaExpiresAtRaw ? new Date(metaExpiresAtRaw).getTime() : 0;
-
     const minValidity = 24 * 60 * 60 * 1000; // exige pelo menos 24h restantes
-    const usableStoredIgToken =
-      storedIgToken && storedIgExpiresAtMs > Date.now() + minValidity ? storedIgToken : null;
-    const usableStoredMetaToken =
-      storedMetaToken && storedMetaExpiresAtMs > Date.now() + minValidity ? storedMetaToken : null;
-
-    if (usableStoredIgToken || usableStoredMetaToken) {
-      const resolvedStoredToken = usableStoredIgToken ?? usableStoredMetaToken;
-      _cache = { token: resolvedStoredToken!, companyId, fetchedAt: Date.now() };
-      return resolvedStoredToken!;
+    if (storedIgToken && storedIgExpiresAtMs > Date.now() + minValidity) {
+      _cache = { token: storedIgToken, companyId, fetchedAt: Date.now() };
+      return storedIgToken;
     }
   }
 
-  // 2. Fallback: provider_token da sessão
+  // 2. Fallback: provider_token da sessão (token do usuário atualmente logado)
+  // Não usamos meta_access_token como fallback porque ele pertence ao usuário
+  // que conectou o Meta Ads — que pode ser diferente do dono da conta Instagram.
   const { data: sessionData } = await supabase.auth.getSession();
   const sessionToken = sessionData.session?.provider_token ?? null;
 
@@ -141,15 +129,6 @@ export async function resolveIgToken(): Promise<string | null> {
     return sessionToken;
   }
 
-  const usableStoredMetaToken =
-    storedMetaToken && storedMetaExpiresAtMs > Date.now() ? storedMetaToken : null;
-
-  if (usableStoredMetaToken) {
-    _cache = { token: usableStoredMetaToken, companyId, fetchedAt: Date.now() };
-    return usableStoredMetaToken;
-  }
-
-  // Tokens legados de página (sem expires_at) não são usados no /media.
   return null;
 }
 
