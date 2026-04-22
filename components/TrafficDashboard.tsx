@@ -304,7 +304,7 @@ export function TrafficDashboard({
             </div>
           </div>
           <ResponsiveContainer width="100%" height={168}>
-            <AreaChart data={series} margin={{ top: 5, right: 0, left: -22, bottom: 0 }}>
+            <AreaChart data={series} margin={{ top: 5, right: 0, left: -22, bottom: 8 }}>
               <defs>
                 <linearGradient id="tdGs" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%"  stopColor={C.blue}    stopOpacity={0.22} />
@@ -316,7 +316,18 @@ export function TrafficDashboard({
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: C.muted, fontSize: 10 }} />
+              <XAxis
+                dataKey="name"
+                axisLine={false}
+                tickLine={false}
+                interval={0}
+                angle={-35}
+                textAnchor="end"
+                height={44}
+                tickMargin={8}
+                tick={{ fill: C.muted, fontSize: 10 }}
+                tickFormatter={(value) => (typeof value === 'string' ? value.split('/')[0] : value)}
+              />
               <YAxis axisLine={false} tickLine={false} tick={{ fill: C.muted, fontSize: 10 }} tickFormatter={(v) => `R$${v}`} />
               <Tooltip content={<SpendTooltip />} />
               <Area type="monotone" dataKey="metaSpend" stroke={C.blue}    strokeWidth={2} fill="url(#tdGs)" dot={false} activeDot={{ r: 4, fill: C.blue    }} />

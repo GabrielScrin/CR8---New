@@ -13,6 +13,8 @@ interface TrafficAnalyticsProps {
 type MetaLevel = 'campaign' | 'adset' | 'ad';
 type InsightsScopeLevel = MetaLevel | 'account';
 type TrafficTab = 'meta' | 'platform';
+type DatePreset = 'last_7d' | 'last_30d' | 'this_month' | 'last_month' | 'custom';
+type DateRange = { start: string; end: string };
 
 type OptionalMetricKey =
   | 'impressions'
@@ -36,6 +38,81 @@ const OPTIONAL_METRICS_ORDER: OptionalMetricKey[] = [
   'frequency',
   'roas',
 ];
+
+const isoUtcDate = (value: Date) => value.toISOString().slice(0, 10);
+
+const getTodayUtc = () => {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+};
+
+const getRangeForPreset = (preset: Exclude<DatePreset, 'custom'>): DateRange => {
+  const today = getTodayUtc();
+  const year = today.getUTCFullYear();
+  const month = today.getUTCMonth();
+
+  if (preset === 'last_7d') {
+    const start = new Date(today);
+    start.setUTCDate(start.getUTCDate() - 6);
+    return { start: isoUtcDate(start), end: isoUtcDate(today) };
+  }
+
+  if (preset === 'last_30d') {
+    const start = new Date(today);
+    start.setUTCDate(start.getUTCDate() - 29);
+    return { start: isoUtcDate(start), end: isoUtcDate(today) };
+  }
+
+  if (preset === 'this_month') {
+    return { start: isoUtcDate(new Date(Date.UTC(year, month, 1))), end: isoUtcDate(today) };
+  }
+
+  return {
+    start: isoUtcDate(new Date(Date.UTC(year, month - 1, 1))),
+    end: isoUtcDate(new Date(Date.UTC(year, month, 0))),
+  };
+};
+
+const normalizeDateRange = (start?: string, end?: string): DateRange | null => {
+  if (!start || !end) return null;
+  return start <= end ? { start, end } : { start: end, end: start };
+};
+
+const buildComparisonSeries = (
+  rows: any[],
+  range: DateRange,
+  mapValue: (row: any) => { metaSpend: number; metaLeads: number },
+) => {
+  const byDay = new Map<string, { metaSpend: number; metaLeads: number }>();
+
+  for (const row of rows) {
+    const key = String(row?.date_start ?? '').slice(0, 10);
+    if (!key) continue;
+    const current = byDay.get(key) ?? { metaSpend: 0, metaLeads: 0 };
+    const next = mapValue(row);
+    byDay.set(key, {
+      metaSpend: current.metaSpend + next.metaSpend,
+      metaLeads: current.metaLeads + next.metaLeads,
+    });
+  }
+
+  const output: Array<{ name: string; metaSpend: number; metaLeads: number }> = [];
+  const cursor = new Date(`${range.start}T00:00:00.000Z`);
+  const endDate = new Date(`${range.end}T00:00:00.000Z`);
+
+  while (cursor <= endDate) {
+    const iso = isoUtcDate(cursor);
+    const point = byDay.get(iso) ?? { metaSpend: 0, metaLeads: 0 };
+    output.push({
+      name: `${iso.slice(8, 10)}/${iso.slice(5, 7)}`,
+      metaSpend: point.metaSpend,
+      metaLeads: point.metaLeads,
+    });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return output;
+};
 
 type TrafficViewPreset = {
   id: string;
@@ -544,7 +621,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   const [selectedCampaignIds, setSelectedCampaignIds] = useState<string[]>([]);
   const [selectedAdsetIds, setSelectedAdsetIds] = useState<string[]>([]);
 
-  const [datePreset, setDatePreset] = useState<'last_7d' | 'last_30d' | 'this_month' | 'last_month' | 'custom'>('last_7d');
+  const [datePreset, setDatePreset] = useState<DatePreset>('last_7d');
   const [dateSince, setDateSince] = useState<string>('');
   const [dateUntil, setDateUntil] = useState<string>('');
 
@@ -572,6 +649,15 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   const [savingPreset, setSavingPreset] = useState(false);
 
   const facebookScopes = useMemo(() => normalizeScopes(META_SCOPES), []);
+  const selectedDateRange = useMemo<DateRange | null>(() => {
+    if (datePreset === 'custom') return normalizeDateRange(dateSince, dateUntil);
+    return getRangeForPreset(datePreset);
+  }, [datePreset, dateSince, dateUntil]);
+
+  const selectedDateRangeLabel = useMemo(() => {
+    if (!selectedDateRange) return 'Selecione o período';
+    return `${selectedDateRange.start} até ${selectedDateRange.end}`;
+  }, [selectedDateRange]);
 
   const optionalColumnsDef: Record<OptionalMetricKey, TableColumn> = useMemo(
     () => ({
@@ -950,18 +1036,13 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   };
 
   const applyTimeRange = (url: URL, override?: { start?: string; end?: string }) => {
-    const start = override?.start;
-    const end = override?.end;
-    if (start && end) {
-      url.searchParams.set('time_range', JSON.stringify({ since: start, until: end }));
+    const range = normalizeDateRange(override?.start, override?.end) ?? selectedDateRange;
+    if (range) {
+      url.searchParams.set('time_range', JSON.stringify({ since: range.start, until: range.end }));
       return;
     }
 
-    if (datePreset === 'custom' && dateSince && dateUntil) {
-      url.searchParams.set('time_range', JSON.stringify({ since: dateSince, until: dateUntil }));
-    } else {
-      url.searchParams.set('date_preset', datePreset === 'custom' ? 'last_7d' : datePreset);
-    }
+    url.searchParams.set('date_preset', 'last_7d');
   };
 
   const fetchMetaCollection = async (startUrl: string, pageLimit = 20) => {
@@ -1264,14 +1345,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     url.searchParams.set('access_token', providerToken);
 
     const rows = await fetchMetaCollection(url.toString());
-    return rows.map((row: any) => {
+    return buildComparisonSeries(rows, periodOverride, (row: any) => {
       const buckets = buildPlatformBuckets(row);
       return {
-        name: (() => {
-          const s = String(row.date_start ?? '');
-          const p = s.split('-');
-          return p.length === 3 ? `${p[2]}/${p[1]}` : s.slice(5).replace('-', '/');
-        })(),
         metaSpend: parseNumber(row.spend),
         metaLeads: buckets.businessLeads,
       };
@@ -1524,6 +1600,10 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     }
 
     if (activeTab !== 'meta') return;
+    if (datePreset === 'custom' && !selectedDateRange) {
+      setErrorMsg('Selecione a data inicial e final do período.');
+      return;
+    }
 
     setLoading(true);
     try {
@@ -1570,11 +1650,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       const timeseriesUrl = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
       timeseriesUrl.searchParams.set('level', 'account');
       timeseriesUrl.searchParams.set('fields', 'date_start,spend,impressions,actions');
-      if (datePreset === 'custom' && dateSince && dateUntil) {
-        timeseriesUrl.searchParams.set('time_range', JSON.stringify({ since: dateSince, until: dateUntil }));
-      } else {
-        timeseriesUrl.searchParams.set('date_preset', datePreset === 'custom' ? 'last_7d' : datePreset);
-      }
+      applyTimeRange(timeseriesUrl);
       timeseriesUrl.searchParams.set('time_increment', '1');
       timeseriesUrl.searchParams.set('limit', '50');
       timeseriesUrl.searchParams.set('access_token', providerToken);
@@ -1584,14 +1660,17 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       if (tsRes.ok && !tsJson?.error) {
         const ts = Array.isArray(tsJson?.data) ? tsJson.data : [];
         setComparisonData(
-          ts.map((row: any) => ({
-            name: (() => { const s = String(row.date_start ?? ''); const p = s.split('-'); return p.length === 3 ? `${p[2]}/${p[1]}` : s.slice(5).replace('-', '/'); })(),
-            metaSpend: parseNumber(row.spend),
-            metaLeads:
-              (extractLeadFormsFromActions(row.actions) ?? 0) +
-              (extractMessagingConversationsFromActions(row.actions) ?? 0) +
-              (extractSiteLeadsFromActions(row.actions) ?? 0),
-          })),
+          buildComparisonSeries(
+            ts,
+            selectedDateRange ?? getRangeForPreset('last_7d'),
+            (row: any) => ({
+              metaSpend: parseNumber(row.spend),
+              metaLeads:
+                (extractLeadFormsFromActions(row.actions) ?? 0) +
+                (extractMessagingConversationsFromActions(row.actions) ?? 0) +
+                (extractSiteLeadsFromActions(row.actions) ?? 0),
+            }),
+          ),
         );
       } else {
         setComparisonData([]);
@@ -1649,6 +1728,27 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   const onChangeLevel = (level: MetaLevel) => {
     setSelectedLevel(level);
     if (level !== 'ad') setAdsetFilterId('');
+  };
+
+  const onChangeDatePreset = (nextPreset: DatePreset) => {
+    setDatePreset(nextPreset);
+    if (nextPreset !== 'custom') return;
+
+    const fallbackRange = selectedDateRange ?? getRangeForPreset('this_month');
+    setDateSince((prev) => prev || fallbackRange.start);
+    setDateUntil((prev) => prev || fallbackRange.end);
+  };
+
+  const onChangeDateSince = (value: string) => {
+    setDateSince(value);
+    if (!value) return;
+    setDateUntil((prev) => (!prev || prev < value ? value : prev));
+  };
+
+  const onChangeDateUntil = (value: string) => {
+    setDateUntil(value);
+    if (!value) return;
+    setDateSince((prev) => (!prev || prev > value ? value : prev));
   };
 
   const toggleCampaignSelection = (id: string) => {
@@ -2220,44 +2320,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     setCreativeSaveOk(null);
   };
 
-  const currentAnalysisPeriod = (): { start?: string; end?: string } => {
-    const now = new Date();
-    const y = now.getUTCFullYear();
-    const m = now.getUTCMonth(); // 0-based
-    const d = now.getUTCDate();
-    const today = new Date(Date.UTC(y, m, d));
-    const iso = (dt: Date) => dt.toISOString().slice(0, 10);
-
-    if (datePreset === 'custom' && dateSince && dateUntil) return { start: dateSince, end: dateUntil };
-
-    if (datePreset === 'last_7d') {
-      const start = new Date(today);
-      start.setUTCDate(start.getUTCDate() - 6);
-      return { start: iso(start), end: iso(today) };
-    }
-
-    if (datePreset === 'last_30d') {
-      const start = new Date(today);
-      start.setUTCDate(start.getUTCDate() - 29);
-      return { start: iso(start), end: iso(today) };
-    }
-
-    if (datePreset === 'this_month') {
-      const start = new Date(Date.UTC(y, m, 1));
-      return { start: iso(start), end: iso(today) };
-    }
-
-    if (datePreset === 'last_month') {
-      const start = new Date(Date.UTC(y, m - 1, 1));
-      const end = new Date(Date.UTC(y, m, 0)); // last day of previous month
-      return { start: iso(start), end: iso(end) };
-    }
-
-    // Fallback
-    const start = new Date(today);
-    start.setUTCDate(start.getUTCDate() - 6);
-    return { start: iso(start), end: iso(today) };
-  };
+  const currentAnalysisPeriod = (): { start?: string; end?: string } =>
+    selectedDateRange ?? getRangeForPreset('last_7d');
 
   const refreshCreativeHistory = async (row: AdMetric) => {
     if (demoMode || !companyId || !isSupabaseConfigured()) return;
@@ -2437,21 +2501,26 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   };
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {/* Page Header */}
-      <div className="sticky top-16 z-20 rounded-[28px] border border-[hsl(var(--border))] bg-[hsl(var(--background))]/90 p-4 backdrop-blur-xl shadow-[0_24px_70px_-36px_rgba(0,0,0,0.8)]">
+      <div className="sticky top-0 z-20 rounded-[28px] border border-[hsl(var(--border))] bg-[hsl(var(--background))]/95 p-4 backdrop-blur-xl shadow-[0_24px_70px_-36px_rgba(0,0,0,0.8)]">
       <div className="flex flex-wrap justify-between items-start gap-3">
-        <div className="flex items-center gap-3">
+        <div className="flex items-start gap-3 min-w-0">
           <div className="w-9 h-9 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center shrink-0">
             <ArrowUp className="w-4 h-4 text-indigo-400" />
           </div>
-          <div>
-            <h2 className="text-lg font-bold text-[hsl(var(--foreground))] leading-none">Analise de Trafego</h2>
-            {errorMsg && <p className="text-xs text-red-400 mt-0.5">{errorMsg}</p>}
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <h2 className="text-lg font-bold text-[hsl(var(--foreground))] leading-tight whitespace-nowrap">Analise de Trafego</h2>
+              <span className="inline-flex items-center rounded-full border border-indigo-500/20 bg-indigo-500/10 px-2.5 py-1 text-[11px] font-medium text-indigo-300">
+                {selectedDateRangeLabel}
+              </span>
+            </div>
+            {errorMsg && <p className="text-xs text-red-400 mt-1">{errorMsg}</p>}
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-2 items-center">
+        <div className="flex flex-wrap gap-2 items-center justify-end">
           {!demoMode && (
             <div className="relative">
               <button
@@ -2509,6 +2578,40 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
               )}
             </div>
           )}
+
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-3 py-2">
+            <span className="text-xs font-medium text-[hsl(var(--muted-foreground))] whitespace-nowrap">Periodo</span>
+            <select
+              value={datePreset}
+              onChange={(e) => onChangeDatePreset(e.target.value as DatePreset)}
+              className="min-w-[140px] bg-transparent text-sm text-[hsl(var(--foreground))] outline-none"
+            >
+              <option value="last_7d">Ultimos 7 dias</option>
+              <option value="last_30d">Ultimos 30 dias</option>
+              <option value="this_month">Este mes</option>
+              <option value="last_month">Mes passado</option>
+              <option value="custom">Personalizado</option>
+            </select>
+            {datePreset === 'custom' && (
+              <>
+                <input
+                  type="date"
+                  value={dateSince}
+                  max={dateUntil || undefined}
+                  onChange={(e) => onChangeDateSince(e.target.value)}
+                  className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-1.5 text-sm text-[hsl(var(--foreground))] outline-none"
+                />
+                <span className="text-xs text-[hsl(var(--muted-foreground))]">ate</span>
+                <input
+                  type="date"
+                  value={dateUntil}
+                  min={dateSince || undefined}
+                  onChange={(e) => onChangeDateUntil(e.target.value)}
+                  className="rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 py-1.5 text-sm text-[hsl(var(--foreground))] outline-none"
+                />
+              </>
+            )}
+          </div>
 
           {needsReauth && !demoMode && (
             <button
@@ -2645,11 +2748,11 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                 </div>
               )}
 
-              <div className="flex items-center gap-2">
+              <div className="hidden">
                 <span className="text-xs text-[hsl(var(--muted-foreground))]">Período:</span>
                 <select
                   value={datePreset}
-                  onChange={(e) => setDatePreset(e.target.value as any)}
+                  onChange={(e) => onChangeDatePreset(e.target.value as DatePreset)}
                   className="px-3 py-2 bg-[hsl(var(--input))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
                 >
                   <option value="last_7d">Últimos 7 dias</option>
@@ -2663,14 +2766,16 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                     <input
                       type="date"
                       value={dateSince}
-                      onChange={(e) => setDateSince(e.target.value)}
+                      max={dateUntil || undefined}
+                      onChange={(e) => onChangeDateSince(e.target.value)}
                       className="px-3 py-2 bg-[hsl(var(--input))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
                     />
                     <span className="text-xs text-[hsl(var(--muted-foreground))]">até</span>
                     <input
                       type="date"
                       value={dateUntil}
-                      onChange={(e) => setDateUntil(e.target.value)}
+                      min={dateSince || undefined}
+                      onChange={(e) => onChangeDateUntil(e.target.value)}
                       className="px-3 py-2 bg-[hsl(var(--input))] border border-[hsl(var(--border))] rounded-md text-sm text-[hsl(var(--foreground))] shadow-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
                     />
                   </div>
