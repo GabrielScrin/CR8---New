@@ -1453,29 +1453,39 @@ export const loadDashboardBootstrap = async (supabaseAdmin: SupabaseClient, toke
   const link = await getPortalLinkRow(supabaseAdmin, token);
   let metaAccountName = link.meta_ad_account_name || link.meta_ad_account_id;
   let instagramProfile: InstagramOverview['profile'] | null = null;
+  const { data: companyTokens, error: companyTokensError } = await supabaseAdmin
+    .from('companies')
+    .select('meta_access_token,instagram_access_token')
+    .eq('id', link.company_id)
+    .maybeSingle();
 
-  try {
-    const metaToken = await getCompanyMetaToken(supabaseAdmin, link.company_id);
-    metaAccountName = await getMetaAccountName(metaToken, link.meta_ad_account_id);
+  if (companyTokensError) throw companyTokensError;
 
-    if (link.instagram_business_account_id) {
-      const igToken = await getCompanyInstagramToken(supabaseAdmin, link.company_id).catch(() => metaToken);
-      const baseUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/${link.instagram_business_account_id}`;
-      const profileJson = await fetchJson(
-        `${baseUrl}?fields=username,name,followers_count,media_count,profile_picture_url&access_token=${igToken}`,
-      ).catch(() => null);
-      if (profileJson) {
-        instagramProfile = {
-          username: asString(profileJson?.username),
-          name: asString(profileJson?.name),
-          followersCount: asNumber(profileJson?.followers_count),
-          mediaCount: asNumber(profileJson?.media_count),
-          profilePictureUrl: asString(profileJson?.profile_picture_url),
-        };
-      }
+  const metaToken = asString((companyTokens as any)?.meta_access_token);
+  const instagramToken = asString((companyTokens as any)?.instagram_access_token) || metaToken;
+
+  if (metaToken) {
+    try {
+      metaAccountName = await getMetaAccountName(metaToken, link.meta_ad_account_id);
+    } catch {
+      // keep persisted name if the live lookup fails
     }
-  } catch {
-    // return partial data even if Meta calls fail
+  }
+
+  if (link.instagram_business_account_id && instagramToken) {
+    const baseUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/${link.instagram_business_account_id}`;
+    const profileJson = await fetchJson(
+      `${baseUrl}?fields=username,name,followers_count,media_count,profile_picture_url&access_token=${instagramToken}`,
+    ).catch(() => null);
+    if (profileJson) {
+      instagramProfile = {
+        username: asString(profileJson?.username),
+        name: asString(profileJson?.name),
+        followersCount: asNumber(profileJson?.followers_count),
+        mediaCount: asNumber(profileJson?.media_count),
+        profilePictureUrl: asString(profileJson?.profile_picture_url),
+      };
+    }
   }
 
   return {
@@ -1498,17 +1508,24 @@ export const loadDashboardData = async (
   campaignIds?: string[],
 ) => {
   const link = await getPortalLinkRow(supabaseAdmin, token);
-  const metaToken = await getCompanyMetaToken(supabaseAdmin, link.company_id);
   const window = buildDateWindow(dateFromRaw, dateToRaw);
   const { metaCampaignIds } = splitCampaignIds(campaignIds ?? []);
+  const { data: companyTokens, error: companyTokensError } = await supabaseAdmin
+    .from('companies')
+    .select('meta_access_token,instagram_access_token')
+    .eq('id', link.company_id)
+    .maybeSingle();
 
-  const igToken = link.instagram_business_account_id
-    ? await getCompanyInstagramToken(supabaseAdmin, link.company_id).catch(() => metaToken)
-    : metaToken;
+  if (companyTokensError) throw companyTokensError;
+
+  const metaToken = asString((companyTokens as any)?.meta_access_token);
+  const igToken = asString((companyTokens as any)?.instagram_access_token) || metaToken;
 
   const [meta, instagram] = await Promise.all([
-    aggregateMetaOverview(metaToken, link.meta_ad_account_id, window.dateFrom, window.dateTo, metaCampaignIds),
-    link.instagram_business_account_id
+    metaToken
+      ? aggregateMetaOverview(metaToken, link.meta_ad_account_id, window.dateFrom, window.dateTo, metaCampaignIds)
+      : Promise.resolve(buildEmptyMetaOverview('Meta Ads nao configurado para esta empresa.')),
+    link.instagram_business_account_id && igToken
       ? buildInstagramOverview(igToken, link.instagram_business_account_id, window.dateFrom, window.dateTo)
       : Promise.resolve(buildEmptyInstagramOverview('Instagram não configurado para este portal')),
   ]);
@@ -1523,8 +1540,10 @@ export const loadDashboardData = async (
   const prevDateTo = prevEnd.toISOString().slice(0, 10);
 
   const [prevMeta, prevInstagram] = await Promise.all([
-    aggregateMetaOverview(metaToken, link.meta_ad_account_id, prevDateFrom, prevDateTo, []),
-    link.instagram_business_account_id
+    metaToken
+      ? aggregateMetaOverview(metaToken, link.meta_ad_account_id, prevDateFrom, prevDateTo, [])
+      : Promise.resolve(buildEmptyMetaOverview('Meta Ads nao configurado para esta empresa.')),
+    link.instagram_business_account_id && igToken
       ? buildInstagramOverview(igToken, link.instagram_business_account_id, prevDateFrom, prevDateTo)
       : Promise.resolve(buildEmptyInstagramOverview('')),
   ]);
@@ -1543,7 +1562,15 @@ export const loadDashboardData = async (
 
 export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: string) => {
   const link = await getPortalLinkRow(supabaseAdmin, token);
-  const metaToken = await getCompanyMetaToken(supabaseAdmin, link.company_id);
+  const { data: companyTokens, error: companyTokensError } = await supabaseAdmin
+    .from('companies')
+    .select('meta_access_token,instagram_access_token')
+    .eq('id', link.company_id)
+    .maybeSingle();
+
+  if (companyTokensError) throw companyTokensError;
+
+  const metaToken = asString((companyTokens as any)?.meta_access_token);
 
   const today = new Date();
   const periodEnd = new Date(today);
@@ -1553,13 +1580,13 @@ export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: 
   const periodStartStr = periodStart.toISOString().slice(0, 10);
   const periodEndStr = periodEnd.toISOString().slice(0, 10);
 
-  const igToken = link.instagram_business_account_id
-    ? await getCompanyInstagramToken(supabaseAdmin, link.company_id).catch(() => metaToken)
-    : metaToken;
+  const igToken = asString((companyTokens as any)?.instagram_access_token) || metaToken;
 
   const [meta, instagram] = await Promise.all([
-    aggregateMetaOverview(metaToken, link.meta_ad_account_id, periodStartStr, periodEndStr, []),
-    link.instagram_business_account_id
+    metaToken
+      ? aggregateMetaOverview(metaToken, link.meta_ad_account_id, periodStartStr, periodEndStr, [])
+      : Promise.resolve(buildEmptyMetaOverview('Meta Ads nao configurado para esta empresa.')),
+    link.instagram_business_account_id && igToken
       ? buildInstagramOverview(igToken, link.instagram_business_account_id, periodStartStr, periodEndStr)
       : Promise.resolve(buildEmptyInstagramOverview('')),
   ]);

@@ -5,7 +5,6 @@ import { AdMetric, NativeResultContext, NativeResultType } from '../types';
 import { loadLocalAiSettings } from '../lib/aiLocal';
 import { resolveMetaToken } from '../lib/metaToken';
 import { getSupabaseAnonKey, getSupabaseUrl, isSupabaseConfigured, supabase } from '../lib/supabase';
-import { ClientPortalManager } from './ClientPortalManager';
 
 interface TrafficAnalyticsProps {
   companyId?: string;
@@ -2558,8 +2557,6 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         </div>
       </div>
       </div>
-
-      {!demoMode && isSupabaseConfigured() && <ClientPortalManager companyId={companyId} />}
 
       <div className="rounded-2xl p-5 border border-[hsl(var(--border))]" style={{ background: 'hsl(220 18% 7%)' }}>
         <h3 className="text-sm font-bold text-[hsl(var(--foreground))] mb-4 flex items-center gap-2">
