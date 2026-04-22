@@ -556,6 +556,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
   const [adAccounts, setAdAccounts] = useState<MetaAdAccount[]>([]);
   const [selectedAdAccountId, setSelectedAdAccountId] = useState<string>('');
   const [loadingAdAccounts, setLoadingAdAccounts] = useState(false);
+  const [accountSearch, setAccountSearch] = useState('');
+  const [accountDropdownOpen, setAccountDropdownOpen] = useState(false);
 
   const [rows, setRows] = useState<AdMetric[]>([]);
 
@@ -2452,22 +2454,61 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
         <div className="flex flex-wrap gap-2 items-center">
           {!demoMode && (
-            <select
-              value={selectedAdAccountId}
-              onChange={(e) => void onChangeAdAccount(e.target.value)}
-              disabled={loadingAdAccounts || adAccounts.length === 0}
-              className="max-w-[260px] px-3 py-2 rounded-xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--foreground))] focus:outline-none focus:ring-2 focus:ring-[hsl(var(--ring))]"
-              title={adAccounts.length === 0 ? 'Nenhuma conta encontrada' : 'Selecione a conta de anuncio'}
-            >
-              <option value="" disabled>
-                {loadingAdAccounts ? 'Carregando contas...' : adAccounts.length === 0 ? 'Nenhuma conta encontrada' : 'Selecione a conta'}
-              </option>
-              {adAccounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {(a.name ? `${a.name} - ` : '') + a.id}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => { setAccountDropdownOpen((o) => !o); setAccountSearch(''); }}
+                disabled={loadingAdAccounts}
+                className="flex items-center gap-2 max-w-[280px] min-w-[200px] px-3 py-2 rounded-xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-all"
+              >
+                <span className="truncate flex-1 text-left">
+                  {loadingAdAccounts
+                    ? 'Carregando contas...'
+                    : selectedAdAccountId
+                      ? (adAccounts.find((a) => a.id === selectedAdAccountId)?.name ?? selectedAdAccountId)
+                      : 'Selecione a conta'}
+                </span>
+                <ArrowDown className={`w-3.5 h-3.5 shrink-0 text-[hsl(var(--muted-foreground))] transition-transform ${accountDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {accountDropdownOpen && (
+                <div className="absolute left-0 top-[calc(100%+6px)] z-50 w-[320px] rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl py-2">
+                  <div className="px-3 pb-2">
+                    <input
+                      autoFocus
+                      type="text"
+                      value={accountSearch}
+                      onChange={(e) => setAccountSearch(e.target.value)}
+                      placeholder="Buscar conta..."
+                      className="w-full px-3 py-2 rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))] outline-none"
+                    />
+                  </div>
+                  <div className="max-h-64 overflow-y-auto">
+                    {adAccounts
+                      .filter((a) => {
+                        const q = accountSearch.toLowerCase();
+                        return !q || (a.name ?? '').toLowerCase().includes(q) || a.id.toLowerCase().includes(q);
+                      })
+                      .map((a) => (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => { void onChangeAdAccount(a.id); setAccountDropdownOpen(false); }}
+                          className={`w-full text-left px-4 py-2.5 text-sm hover:bg-[hsl(var(--secondary))] transition-colors ${selectedAdAccountId === a.id ? 'text-indigo-400 font-semibold' : 'text-[hsl(var(--foreground))]'}`}
+                        >
+                          <div className="truncate">{a.name ?? a.id}</div>
+                          <div className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">{a.id}</div>
+                        </button>
+                      ))}
+                    {adAccounts.filter((a) => {
+                      const q = accountSearch.toLowerCase();
+                      return !q || (a.name ?? '').toLowerCase().includes(q) || a.id.toLowerCase().includes(q);
+                    }).length === 0 && (
+                      <div className="px-4 py-3 text-sm text-[hsl(var(--muted-foreground))]">Nenhuma conta encontrada.</div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
           )}
 
           {needsReauth && !demoMode && (

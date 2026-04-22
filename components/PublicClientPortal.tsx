@@ -11,6 +11,7 @@ import {
   YAxis,
 } from 'recharts';
 import {
+  BarChart2,
   CalendarRange,
   ChevronDown,
   ExternalLink,
@@ -20,7 +21,10 @@ import {
   Loader2,
   RefreshCw,
   WalletCards,
+  FileBarChart2,
 } from 'lucide-react';
+
+type PortalTab = 'campanhas' | 'instagram' | 'relatorios';
 import {
   fetchClientPortalBootstrap,
   fetchClientPortalOverview,
@@ -90,6 +94,7 @@ export const PublicClientPortal: React.FC<PublicClientPortalProps> = ({ token })
 
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [activeTab, setActiveTab] = useState<PortalTab>('campanhas');
 
   useEffect(() => {
     let alive = true;
@@ -393,272 +398,282 @@ export const PublicClientPortal: React.FC<PublicClientPortalProps> = ({ token })
           </div>
         )}
 
-        <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_420px]">
-          <div className="space-y-6">
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {metricCard('Meta Investido', brl(overview?.overview.meta.summary.spend ?? 0), overview?.overview.meta.available ? 'Mídia Meta no período' : overview?.overview.meta.reason ?? 'Não configurado', accent)}
-              {metricCard('Google Investido', brl(overview?.overview.googleAds.summary.spend ?? 0), overview?.overview.googleAds.available ? 'Mídia Google Ads no período' : overview?.overview.googleAds.reason ?? 'Não configurado', '#34d399')}
-              {metricCard('Leads / Conversões', int((overview?.overview.meta.summary.results ?? 0) + (overview?.overview.googleAds.summary.conversions ?? 0)), 'Meta + Google Ads', '#f59e0b')}
-              {metricCard('Receita CRM', brl(overview?.overview.business.revenue ?? 0), `${int(overview?.overview.business.won ?? 0)} ganhos no CRM`, '#f472b6')}
+        {/* Tabs */}
+        <div className="mb-6 flex gap-1 rounded-[22px] border border-white/10 bg-white/[0.03] p-1.5">
+          {([
+            { id: 'campanhas', label: 'Campanhas', icon: BarChart2 },
+            { id: 'instagram', label: 'Instagram', icon: Instagram },
+            { id: 'relatorios', label: 'Relatórios', icon: FileBarChart2 },
+          ] as { id: PortalTab; label: string; icon: React.ElementType }[]).map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-[18px] px-4 py-2.5 text-sm font-semibold transition-all ${
+                activeTab === tab.id
+                  ? 'bg-white/10 text-white shadow-sm'
+                  : 'text-white/50 hover:text-white/75'
+              }`}
+            >
+              <tab.icon className="h-4 w-4" />
+              <span className="hidden sm:inline">{tab.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* Tab: Campanhas */}
+        {activeTab === 'campanhas' && (
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {metricCard('Meta Investido', brl(overview?.overview.meta.summary.spend ?? 0), overview?.overview.meta.available ? 'Mídia Meta no período' : overview?.overview.meta.reason ?? 'Não configurado', accent)}
+            {metricCard('Google Investido', brl(overview?.overview.googleAds.summary.spend ?? 0), overview?.overview.googleAds.available ? 'Mídia Google Ads no período' : overview?.overview.googleAds.reason ?? 'Não configurado', '#34d399')}
+            {metricCard('Leads / Conversões', int((overview?.overview.meta.summary.results ?? 0) + (overview?.overview.googleAds.summary.conversions ?? 0)), 'Meta + Google Ads', '#f59e0b')}
+            {metricCard('Impressões', int((overview?.overview.meta.summary.impressions ?? 0) + (overview?.overview.googleAds.summary.impressions ?? 0)), 'Total no período', '#f472b6')}
+          </div>
+
+          {/* Gráfico evolução diária */}
+          <div className="rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Mídia Paga</div>
+                <div className="mt-1 text-xl font-black tracking-[-0.04em]">Evolução diária</div>
+              </div>
+              {loadingOverview && <Loader2 className="h-4 w-4 animate-spin text-white/50" />}
             </div>
-
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-              <div className="rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Mídia Paga</div>
-                    <div className="mt-1 text-xl font-black tracking-[-0.04em]">Evolução diária</div>
-                  </div>
-                  {loadingOverview && <Loader2 className="h-4 w-4 animate-spin text-white/50" />}
-                </div>
-                <div className="h-[300px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <ComposedChart data={combinedSeries}>
-                      <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                      <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 12 }} axisLine={false} tickLine={false} />
-                      <Tooltip
-                        cursor={{ fill: 'rgba(255,255,255,0.05)' }}
-                        contentStyle={{ background: '#0d1320', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 18, color: '#fff' }}
-                      />
-                      <Bar dataKey="metaSpend" fill={accent} name="Meta Spend" radius={[6, 6, 0, 0]} />
-                      <Bar dataKey="googleSpend" fill="#34d399" name="Google Spend" radius={[6, 6, 0, 0]} />
-                      <Line type="monotone" dataKey="metaResults" stroke="#f59e0b" strokeWidth={2.5} dot={false} name="Meta Resultados" />
-                      <Line type="monotone" dataKey="googleResults" stroke="#f472b6" strokeWidth={2.5} dot={false} name="Google Conversões" />
-                    </ComposedChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              <div className="rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
-                <div className="mb-4 flex items-center gap-3">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-2xl" style={{ background: 'linear-gradient(135deg,#f09433,#dc2743,#bc1888)' }}>
-                    <Instagram className="h-4 w-4 text-white" />
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Instagram</div>
-                    <div className="mt-0.5 text-lg font-black tracking-[-0.04em]">
-                      {overview?.overview.instagram.profile?.username ? `@${overview.overview.instagram.profile.username}` : 'Instagram'}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {metricCard('Alcance', int(overview?.overview.instagram.summary.totalReach ?? 0), 'Contas alcançadas', '#fb7185')}
-                  {metricCard('Views', int(overview?.overview.instagram.summary.totalViews ?? 0), 'Visualizações totais', '#f59e0b')}
-                  {metricCard('Perfil', int(overview?.overview.instagram.summary.totalProfileViews ?? 0), 'Visitas ao perfil', '#38bdf8')}
-                  {metricCard('Seguidores', int(overview?.overview.instagram.summary.totalFollowerGain ?? 0), 'Saldo de seguidores', '#34d399')}
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
-              <div className="rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Meta + Google Ads</div>
-                    <div className="mt-1 text-xl font-black tracking-[-0.04em]">Campanhas do período</div>
-                  </div>
-                  <div className="text-xs text-white/45">{campaignOptions.length} campanhas listadas</div>
-                </div>
-                <div className="overflow-hidden rounded-[22px] border border-white/8">
-                  <div className="grid grid-cols-[minmax(0,1.6fr)_0.6fr_0.55fr_0.55fr] gap-3 bg-white/[0.04] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
-                    <div>Campanha</div>
-                    <div>Invest.</div>
-                    <div>CTR</div>
-                    <div>Resultados</div>
-                  </div>
-                  <div className="max-h-[390px] overflow-auto">
-                    {[...(overview?.overview.meta.campaigns ?? []).map((campaign) => ({
-                      key: `meta:${campaign.id}`,
-                      label: `Meta · ${campaign.name}`,
-                      spend: campaign.spend,
-                      ctr: campaign.ctr,
-                      results: campaign.results,
-                    })), ...(overview?.overview.googleAds.campaigns ?? []).map((campaign) => ({
-                      key: `google:${campaign.id}`,
-                      label: `Google · ${campaign.name}`,
-                      spend: campaign.spend,
-                      ctr: campaign.ctr,
-                      results: campaign.conversions,
-                    }))].map((campaign) => (
-                      <button
-                        key={campaign.key}
-                        type="button"
-                        onClick={() => toggleCampaign(campaign.key)}
-                        className={`grid w-full grid-cols-[minmax(0,1.6fr)_0.6fr_0.55fr_0.55fr] gap-3 border-t border-white/6 px-4 py-3 text-left transition-colors hover:bg-white/[0.03] ${
-                          selectedCampaignIds.includes(campaign.key) ? 'bg-white/[0.05]' : ''
-                        }`}
-                      >
-                        <div className="min-w-0 truncate text-sm font-medium text-white/88">{campaign.label}</div>
-                        <div className="text-sm text-white/75">{brl(campaign.spend)}</div>
-                        <div className="text-sm text-white/75">{pct(campaign.ctr)}</div>
-                        <div className="text-sm text-white/75">{int(campaign.results)}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div className="rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
-                <div className="mb-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Instagram</div>
-                  <div className="mt-1 text-xl font-black tracking-[-0.04em]">Conteúdos recentes</div>
-                </div>
-                <div className="grid gap-3">
-                  {(overview?.overview.instagram.media ?? []).slice(0, 4).map((media) => (
-                    <a
-                      key={media.id}
-                      href={media.permalink || undefined}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="grid grid-cols-[76px_minmax(0,1fr)] gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] p-3 transition-colors hover:bg-white/[0.05]"
-                    >
-                      <img src={media.thumbnailUrl || media.mediaUrl} alt="" className="h-[76px] w-[76px] rounded-[18px] object-cover" />
-                      <div className="min-w-0">
-                        <div className="line-clamp-2 text-sm font-medium text-white/86">{media.caption || 'Conteúdo sem legenda'}</div>
-                        <div className="mt-2 flex flex-wrap gap-3 text-xs text-white/48">
-                          <span>Reach {int(media.reach ?? 0)}</span>
-                          <span>Interações {int(media.totalInteractions ?? 0)}</span>
-                          <span className="inline-flex items-center gap-1">
-                            Abrir <ExternalLink className="h-3 w-3" />
-                          </span>
-                        </div>
-                      </div>
-                    </a>
-                  ))}
-                  {(overview?.overview.instagram.media ?? []).length === 0 && (
-                    <div className="rounded-[22px] border border-dashed border-white/10 px-4 py-8 text-center text-sm text-white/45">
-                      Nenhum conteúdo disponível para esta conta.
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Instagram</div>
-                  <div className="mt-1 text-xl font-black tracking-[-0.04em]">Alcance diário</div>
-                </div>
-                <div className="text-xs text-white/45">{overview?.overview.instagram.profile?.followersCount ? `${int(overview.overview.instagram.profile.followersCount)} seguidores atuais` : 'Conta conectada'}</div>
-              </div>
-              <div className="h-[280px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={overview?.overview.instagram.series ?? []}>
-                    <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 12 }} axisLine={false} tickLine={false} />
-                    <Tooltip contentStyle={{ background: '#0d1320', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 18, color: '#fff' }} />
-                    <Line type="monotone" dataKey="reach" stroke="#fb7185" strokeWidth={3} dot={false} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+            <div className="h-[300px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={combinedSeries}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <Tooltip
+                    cursor={{ fill: 'rgba(255,255,255,0.05)' }}
+                    contentStyle={{ background: '#0d1320', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 18, color: '#fff' }}
+                  />
+                  <Bar dataKey="metaSpend" fill={accent} name="Meta Invest." radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="googleSpend" fill="#34d399" name="Google Invest." radius={[6, 6, 0, 0]} />
+                  <Line type="monotone" dataKey="metaResults" stroke="#f59e0b" strokeWidth={2.5} dot={false} name="Meta Resultados" />
+                  <Line type="monotone" dataKey="googleResults" stroke="#f472b6" strokeWidth={2.5} dot={false} name="Google Conversões" />
+                </ComposedChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
-          <div className="space-y-6">
-            <div className="rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
-              <div className="mb-4 flex items-center justify-between">
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Relatório Semanal</div>
-                  <div className="mt-1 text-xl font-black tracking-[-0.04em]">Histórico automático</div>
-                </div>
-                {loadingWeekly && <Loader2 className="h-4 w-4 animate-spin text-white/50" />}
+          {/* Tabela de campanhas */}
+          <div className="rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Meta + Google Ads</div>
+                <div className="mt-1 text-xl font-black tracking-[-0.04em]">Campanhas do período</div>
               </div>
-
-              <div className="space-y-2">
-                {weeklyItems.map((item) => (
+              <div className="text-xs text-white/45">{campaignOptions.length} campanhas</div>
+            </div>
+            <div className="overflow-hidden rounded-[22px] border border-white/8">
+              <div className="grid grid-cols-[minmax(0,1.8fr)_0.65fr_0.6fr_0.6fr] gap-3 bg-white/[0.04] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/40">
+                <div>Campanha</div>
+                <div>Invest.</div>
+                <div>CTR</div>
+                <div>Resultados</div>
+              </div>
+              <div className="max-h-[460px] overflow-auto">
+                {[
+                  ...(overview?.overview.meta.campaigns ?? []).map((c) => ({ key: `meta:${c.id}`, label: `Meta · ${c.name}`, spend: c.spend, ctr: c.ctr, results: c.results })),
+                  ...(overview?.overview.googleAds.campaigns ?? []).map((c) => ({ key: `google:${c.id}`, label: `Google · ${c.name}`, spend: c.spend, ctr: c.ctr, results: c.conversions })),
+                ].map((c) => (
                   <button
-                    key={item.id}
+                    key={c.key}
                     type="button"
-                    onClick={() => setSelectedWeeklyId(item.id)}
-                    className={`w-full rounded-[22px] border px-4 py-3 text-left transition-colors ${
-                      selectedWeeklyId === item.id ? 'border-white/20 bg-white/[0.06]' : 'border-white/8 bg-white/[0.03] hover:bg-white/[0.05]'
-                    }`}
+                    onClick={() => toggleCampaign(c.key)}
+                    className={`grid w-full grid-cols-[minmax(0,1.8fr)_0.65fr_0.6fr_0.6fr] gap-3 border-t border-white/6 px-4 py-3 text-left transition-colors hover:bg-white/[0.03] ${selectedCampaignIds.includes(c.key) ? 'bg-white/[0.05]' : ''}`}
                   >
-                    <div className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">
-                      {item.periodStart} até {item.periodEnd}
-                    </div>
-                    <div className="mt-2 text-sm text-white/80">{item.summary ?? 'Semana gerada automaticamente.'}</div>
+                    <div className="min-w-0 truncate text-sm font-medium text-white/88">{c.label}</div>
+                    <div className="text-sm text-white/75">{brl(c.spend)}</div>
+                    <div className="text-sm text-white/75">{pct(c.ctr)}</div>
+                    <div className="text-sm text-white/75">{int(c.results)}</div>
                   </button>
                 ))}
-
-                {weeklyItems.length === 0 && (
-                  <div className="rounded-[22px] border border-dashed border-white/10 px-4 py-8 text-center text-sm text-white/45">
-                    Nenhum relatório semanal salvo para esta conta ainda.
-                  </div>
+                {campaignOptions.length === 0 && (
+                  <div className="px-4 py-8 text-center text-sm text-white/45">Nenhuma campanha encontrada para o período.</div>
                 )}
               </div>
             </div>
+          </div>
+        </div>
+        )}
 
-            <div className="rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
-              <div className="mb-4">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Semana selecionada</div>
-                <div className="mt-1 text-xl font-black tracking-[-0.04em]">
-                  {weeklyReport ? `${weeklyReport.period_start} até ${weeklyReport.period_end}` : 'Selecione uma semana'}
+        {/* Tab: Instagram */}
+        {activeTab === 'instagram' && (
+        <div className="space-y-6">
+          {/* Profile header */}
+          {overview?.overview.instagram.profile && (
+            <div className="flex items-center gap-4 rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
+              {overview.overview.instagram.profile.profilePictureUrl ? (
+                <img src={overview.overview.instagram.profile.profilePictureUrl} alt="" className="h-16 w-16 rounded-full object-cover border-2 border-white/10" />
+              ) : (
+                <div className="flex h-16 w-16 items-center justify-center rounded-full" style={{ background: 'linear-gradient(135deg,#f09433,#dc2743,#bc1888)' }}>
+                  <Instagram className="h-7 w-7 text-white" />
+                </div>
+              )}
+              <div>
+                <div className="text-xl font-black tracking-[-0.04em]">@{overview.overview.instagram.profile.username}</div>
+                <div className="mt-1 text-sm text-white/55">{overview.overview.instagram.profile.name}</div>
+                <div className="mt-1 flex gap-4 text-xs text-white/45">
+                  <span><strong className="text-white/75">{int(overview.overview.instagram.profile.followersCount)}</strong> seguidores</span>
+                  <span><strong className="text-white/75">{int(overview.overview.instagram.profile.mediaCount)}</strong> publicações</span>
                 </div>
               </div>
+            </div>
+          )}
 
-              {weeklyReport ? (
-                <div className="space-y-5">
-                  <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4 text-sm leading-6 text-white/82">
-                    {weeklyReport.summary ?? 'Resumo indisponível para esta semana.'}
+          {/* KPI cards */}
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            {metricCard('Alcance', int(overview?.overview.instagram.summary.totalReach ?? 0), 'Contas alcançadas', '#fb7185')}
+            {metricCard('Views', int(overview?.overview.instagram.summary.totalViews ?? 0), 'Visualizações totais', '#f59e0b')}
+            {metricCard('Visitas ao Perfil', int(overview?.overview.instagram.summary.totalProfileViews ?? 0), 'No período', '#38bdf8')}
+            {metricCard('Seguidores', int(overview?.overview.instagram.summary.totalFollowerGain ?? 0), 'Saldo no período', '#34d399')}
+          </div>
+
+          {/* Gráfico alcance diário */}
+          <div className="rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Instagram Orgânico</div>
+                <div className="mt-1 text-xl font-black tracking-[-0.04em]">Alcance diário</div>
+              </div>
+              <div className="text-xs text-white/45">{overview?.overview.instagram.profile?.followersCount ? `${int(overview.overview.instagram.profile.followersCount)} seguidores` : ''}</div>
+            </div>
+            <div className="h-[280px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={overview?.overview.instagram.series ?? []}>
+                  <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                  <Tooltip contentStyle={{ background: '#0d1320', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 18, color: '#fff' }} />
+                  <Line type="monotone" dataKey="reach" stroke="#fb7185" strokeWidth={3} dot={false} name="Alcance" />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Conteúdos recentes */}
+          <div className="rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
+            <div className="mb-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Instagram Orgânico</div>
+              <div className="mt-1 text-xl font-black tracking-[-0.04em]">Conteúdos recentes</div>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {(overview?.overview.instagram.media ?? []).map((media) => (
+                <a
+                  key={media.id}
+                  href={media.permalink || undefined}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex gap-3 rounded-[22px] border border-white/8 bg-white/[0.03] p-3 transition-colors hover:bg-white/[0.05]"
+                >
+                  <img src={media.thumbnailUrl || media.mediaUrl} alt="" className="h-[72px] w-[72px] shrink-0 rounded-[16px] object-cover" />
+                  <div className="min-w-0">
+                    <div className="line-clamp-2 text-sm font-medium text-white/86">{media.caption || 'Sem legenda'}</div>
+                    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/48">
+                      <span>Reach {int(media.reach ?? 0)}</span>
+                      <span>Interações {int(media.totalInteractions ?? 0)}</span>
+                      <span className="inline-flex items-center gap-1">Abrir <ExternalLink className="h-3 w-3" /></span>
+                    </div>
                   </div>
-
-                  <div className="grid gap-4">
-                    <div>
-                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Highlights</div>
-                      <div className="space-y-2">
-                        {(weeklyReport.highlights ?? []).map((item) => (
-                          <div key={item} className="rounded-[18px] border border-emerald-500/15 bg-emerald-500/8 px-4 py-3 text-sm text-emerald-100">
-                            {item}
-                          </div>
-                        ))}
-                        {(weeklyReport.highlights ?? []).length === 0 && (
-                          <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/45">Sem highlights registrados.</div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Riscos</div>
-                      <div className="space-y-2">
-                        {(weeklyReport.risks ?? []).map((item) => (
-                          <div key={item} className="rounded-[18px] border border-amber-500/15 bg-amber-500/8 px-4 py-3 text-sm text-amber-100">
-                            {item}
-                          </div>
-                        ))}
-                        {(weeklyReport.risks ?? []).length === 0 && (
-                          <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/45">Sem riscos destacados.</div>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Próxima semana</div>
-                      <div className="space-y-2">
-                        {(weeklyReport.next_week ?? []).map((item) => (
-                          <div key={item} className="rounded-[18px] border px-4 py-3 text-sm" style={{ borderColor: accentSoft, background: `${accent}12`, color: '#eff6ff' }}>
-                            {item}
-                          </div>
-                        ))}
-                        {(weeklyReport.next_week ?? []).length === 0 && (
-                          <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/45">Sem ações sugeridas.</div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-[22px] border border-dashed border-white/10 px-4 py-10 text-center text-sm text-white/45">
-                  Selecione um relatório semanal para ver o resumo completo.
+                </a>
+              ))}
+              {(overview?.overview.instagram.media ?? []).length === 0 && (
+                <div className="col-span-full rounded-[22px] border border-dashed border-white/10 px-4 py-8 text-center text-sm text-white/45">
+                  Nenhum conteúdo disponível para esta conta.
                 </div>
               )}
             </div>
           </div>
         </div>
+        )}
+
+        {/* Tab: Relatórios */}
+        {activeTab === 'relatorios' && (
+        <div className="grid gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
+          {/* Lista de relatórios */}
+          <div className="rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Relatório Semanal</div>
+                <div className="mt-1 text-xl font-black tracking-[-0.04em]">Histórico</div>
+              </div>
+              {loadingWeekly && <Loader2 className="h-4 w-4 animate-spin text-white/50" />}
+            </div>
+            <div className="space-y-2">
+              {weeklyItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setSelectedWeeklyId(item.id)}
+                  className={`w-full rounded-[22px] border px-4 py-3 text-left transition-colors ${selectedWeeklyId === item.id ? 'border-white/20 bg-white/[0.06]' : 'border-white/8 bg-white/[0.03] hover:bg-white/[0.05]'}`}
+                >
+                  <div className="text-xs font-semibold uppercase tracking-[0.16em] text-white/45">{item.periodStart} até {item.periodEnd}</div>
+                  <div className="mt-1.5 line-clamp-2 text-sm text-white/80">{item.summary ?? 'Semana gerada automaticamente.'}</div>
+                </button>
+              ))}
+              {weeklyItems.length === 0 && (
+                <div className="rounded-[22px] border border-dashed border-white/10 px-4 py-8 text-center text-sm text-white/45">
+                  Nenhum relatório semanal salvo para esta conta ainda.
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Detalhe do relatório selecionado */}
+          <div className="rounded-[28px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(12,16,24,0.96), rgba(8,10,16,0.98))' }}>
+            <div className="mb-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Semana selecionada</div>
+              <div className="mt-1 text-xl font-black tracking-[-0.04em]">
+                {weeklyReport ? `${weeklyReport.period_start} até ${weeklyReport.period_end}` : 'Selecione uma semana'}
+              </div>
+            </div>
+            {weeklyReport ? (
+              <div className="space-y-5">
+                <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4 text-sm leading-6 text-white/82">
+                  {weeklyReport.summary ?? 'Resumo indisponível para esta semana.'}
+                </div>
+                <div className="grid gap-4 sm:grid-cols-3">
+                  <div>
+                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Highlights</div>
+                    <div className="space-y-2">
+                      {(weeklyReport.highlights ?? []).map((item) => (
+                        <div key={item} className="rounded-[18px] border border-emerald-500/15 bg-emerald-500/8 px-4 py-3 text-sm text-emerald-100">{item}</div>
+                      ))}
+                      {(weeklyReport.highlights ?? []).length === 0 && <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/45">Sem highlights.</div>}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Riscos</div>
+                    <div className="space-y-2">
+                      {(weeklyReport.risks ?? []).map((item) => (
+                        <div key={item} className="rounded-[18px] border border-amber-500/15 bg-amber-500/8 px-4 py-3 text-sm text-amber-100">{item}</div>
+                      ))}
+                      {(weeklyReport.risks ?? []).length === 0 && <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/45">Sem riscos.</div>}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Próxima semana</div>
+                    <div className="space-y-2">
+                      {(weeklyReport.next_week ?? []).map((item) => (
+                        <div key={item} className="rounded-[18px] border px-4 py-3 text-sm" style={{ borderColor: accentSoft, background: `${accent}12`, color: '#eff6ff' }}>{item}</div>
+                      ))}
+                      {(weeklyReport.next_week ?? []).length === 0 && <div className="rounded-[18px] border border-white/8 bg-white/[0.03] px-4 py-3 text-sm text-white/45">Sem ações sugeridas.</div>}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-[22px] border border-dashed border-white/10 px-4 py-10 text-center text-sm text-white/45">
+                Selecione um relatório semanal para ver o resumo completo.
+              </div>
+            )}
+          </div>
+        </div>
+        )}
       </div>
     </div>
   );
