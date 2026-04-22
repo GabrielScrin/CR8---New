@@ -230,16 +230,25 @@ export function TrafficDashboard({
 
     // Group by campaign if available, else by row
     const hasCampNames = active.some((r) => r.campaignName);
-    const rankMap = new Map<string, { name: string; spend: number; results: number }>();
+    const rankMap = new Map<string, { name: string; spend: number; results: number; clicks: number; impressions: number }>();
     for (const r of active) {
       const key  = String(hasCampNames ? (r.campaignId ?? r.campaignName ?? r.adId) : r.adId);
       const name = (hasCampNames ? r.campaignName ?? 'Sem campanha' : r.adName).slice(0, 30);
-      const cur  = rankMap.get(key) ?? { name, spend: 0, results: 0 };
-      cur.spend   += r.spend;
-      cur.results += r.results ?? r.leads ?? 0;
+      const cur  = rankMap.get(key) ?? { name, spend: 0, results: 0, clicks: 0, impressions: 0 };
+      cur.spend       += r.spend;
+      cur.results     += r.results ?? r.leads ?? 0;
+      cur.clicks      += r.inlineLinkClicks ?? r.clicks ?? 0;
+      cur.impressions += r.impressions;
       rankMap.set(key, cur);
     }
-    const ranking = [...rankMap.values()].sort((a, b) => b.spend - a.spend).slice(0, 6);
+    const ranking = [...rankMap.values()]
+      .map((r) => ({
+        ...r,
+        ctr: r.impressions > 0 ? r.clicks / r.impressions : 0,
+        cpr: r.results > 0 ? r.spend / r.results : 0,
+      }))
+      .sort((a, b) => b.spend - a.spend)
+      .slice(0, 6);
 
     const labels = active.map((r) => r.resultLabel).filter(Boolean) as string[];
     const resultLabel = summaryResult?.label ?? (
@@ -248,7 +257,14 @@ export function TrafficDashboard({
         : 'Resultados'
     );
 
-    return { spend, impressions, reach, clicks, results, ctr, cpm, cpc, cpr, frequency, avgIdc, classCount, hasClass, ranking, resultLabel };
+    const withHook = active.filter((r) => r.hookRate != null);
+    const avgHookRate = withHook.length ? withHook.reduce((s, r) => s + (r.hookRate ?? 0), 0) / withHook.length : null;
+    const withHold = active.filter((r) => r.holdRate != null);
+    const avgHoldRate = withHold.length ? withHold.reduce((s, r) => s + (r.holdRate ?? 0), 0) / withHold.length : null;
+    const withRoas = active.filter((r) => (r.roas ?? 0) > 0);
+    const avgRoas = withRoas.length ? withRoas.reduce((s, r) => s + (r.roas ?? 0), 0) / withRoas.length : null;
+
+    return { spend, impressions, reach, clicks, results, ctr, cpm, cpc, cpr, frequency, avgIdc, classCount, hasClass, ranking, resultLabel, avgHookRate, avgHoldRate, avgRoas };
   }, [rows, summary]);
 
   const health = useMemo(() => {
@@ -427,6 +443,113 @@ export function TrafficDashboard({
           </ResponsiveContainer>
         </motion.div>
       </div>
+
+      {/* ── Performance Row ── */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.44, duration: 0.32, ease: 'easeOut' }}
+        style={{ ...panel({ padding: 20 }), marginBottom: 12 }}
+      >
+        <div style={sectionLabel}>Desempenho por Campanha</div>
+        <div style={{ display: 'grid', gridTemplateColumns: m.avgHookRate != null || m.avgHoldRate != null || m.avgRoas != null ? '1fr 230px' : '1fr', gap: 24 }}>
+
+          {/* Tabela de campanhas */}
+          <div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 88px 70px 88px 52px', gap: 8, paddingBottom: 8, borderBottom: `1px solid ${C.border}`, marginBottom: 2 }}>
+              {['Campanha', 'Investido', 'Result.', 'CPR', 'CTR'].map((h) => (
+                <span key={h} style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</span>
+              ))}
+            </div>
+            {(() => {
+              const bestCpr = [...m.ranking].filter((c) => c.cpr > 0).sort((a, b) => a.cpr - b.cpr)[0]?.cpr ?? 0;
+              const maxSpend = m.ranking[0]?.spend ?? 1;
+              return m.ranking.map((camp, i) => {
+                const cprColor = camp.cpr === 0 ? C.muted : camp.cpr <= bestCpr * 1.3 ? C.emerald : camp.cpr <= bestCpr * 2 ? C.amber : C.red;
+                const spendPct = (camp.spend / maxSpend) * 100;
+                return (
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 88px 70px 88px 52px', gap: 8, padding: '9px 0', borderBottom: '1px solid rgba(255,255,255,0.03)', alignItems: 'center' }}>
+                    <div>
+                      <div style={{ fontSize: 12, color: C.text, fontWeight: 500, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {camp.name}
+                      </div>
+                      <div style={{ height: 2, background: 'rgba(255,255,255,0.05)', borderRadius: 1, overflow: 'hidden' }}>
+                        <div style={{ width: `${spendPct}%`, height: '100%', background: C.blue, borderRadius: 1 }} />
+                      </div>
+                    </div>
+                    <span style={{ fontSize: 12, color: C.sub, fontVariantNumeric: 'tabular-nums' }}>{fmtBRL(camp.spend)}</span>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{fmtNum(camp.results)}</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: cprColor, fontVariantNumeric: 'tabular-nums' }}>{camp.cpr > 0 ? fmtBRL(camp.cpr) : '—'}</span>
+                    <span style={{ fontSize: 12, color: C.sub, fontVariantNumeric: 'tabular-nums' }}>{fmtPct(camp.ctr)}</span>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+
+          {/* Métricas de vídeo / ROAS */}
+          {(m.avgHookRate != null || m.avgHoldRate != null || m.avgRoas != null) && (
+            <div style={{ borderLeft: `1px solid ${C.border}`, paddingLeft: 24 }}>
+              <div style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: '0.09em', textTransform: 'uppercase', marginBottom: 16 }}>
+                Vídeo & ROAS
+              </div>
+
+              {m.avgHookRate != null && (() => {
+                const pct = m.avgHookRate * 100;
+                const color = pct >= 30 ? C.emerald : pct >= 20 ? C.amber : C.red;
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <span style={{ fontSize: 12, color: C.sub }}>Hook Rate</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</span>
+                    </div>
+                    <div style={{ height: 5, background: 'rgba(255,255,255,0.05)', borderRadius: 3, overflow: 'hidden' }}>
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(100, pct / 50 * 100)}%` }} transition={{ delay: 0.6, duration: 0.5 }}
+                        style={{ height: '100%', background: color, borderRadius: 3 }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 3 }}>Meta: ≥ 30%</div>
+                  </div>
+                );
+              })()}
+
+              {m.avgHoldRate != null && (() => {
+                const pct = m.avgHoldRate * 100;
+                const color = pct >= 15 ? C.emerald : pct >= 8 ? C.amber : C.red;
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <span style={{ fontSize: 12, color: C.sub }}>Hold Rate</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{pct.toFixed(1)}%</span>
+                    </div>
+                    <div style={{ height: 5, background: 'rgba(255,255,255,0.05)', borderRadius: 3, overflow: 'hidden' }}>
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(100, pct / 25 * 100)}%` }} transition={{ delay: 0.65, duration: 0.5 }}
+                        style={{ height: '100%', background: color, borderRadius: 3 }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 3 }}>Meta: ≥ 15%</div>
+                  </div>
+                );
+              })()}
+
+              {m.avgRoas != null && (() => {
+                const color = m.avgRoas >= 3 ? C.emerald : m.avgRoas >= 1.5 ? C.amber : C.red;
+                return (
+                  <div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <span style={{ fontSize: 12, color: C.sub }}>ROAS médio</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color, fontVariantNumeric: 'tabular-nums' }}>{m.avgRoas.toFixed(2)}x</span>
+                    </div>
+                    <div style={{ height: 5, background: 'rgba(255,255,255,0.05)', borderRadius: 3, overflow: 'hidden' }}>
+                      <motion.div initial={{ width: 0 }} animate={{ width: `${Math.min(100, (m.avgRoas / 5) * 100)}%` }} transition={{ delay: 0.7, duration: 0.5 }}
+                        style={{ height: '100%', background: color, borderRadius: 3 }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: C.muted, marginTop: 3 }}>Meta: ≥ 3x</div>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+        </div>
+      </motion.div>
 
       {/* ── Bottom Row ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 0.72fr', gap: 10 }}>
