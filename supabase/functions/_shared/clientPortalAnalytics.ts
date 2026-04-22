@@ -1020,9 +1020,17 @@ const buildInstagramOverview = async (
     // Phase 3: Media listing — optional
     let media: InstagramOverview['media'] = [];
     try {
-      const mediaJson = await fetchInstagramJson(
-        `${graphBase}/${instagramBusinessAccountId}/media?fields=id,caption,comments_count,like_count,media_type,media_product_type,media_url,thumbnail_url,timestamp,permalink&limit=9&access_token=${instagramAccessToken}`,
-      );
+      let mediaJson: any;
+      try {
+        mediaJson = await fetchInstagramJson(
+          `${graphBase}/${instagramBusinessAccountId}/media?fields=id,caption,comments_count,like_count,media_type,media_product_type,media_url,thumbnail_url,timestamp,permalink&limit=25&access_token=${instagramAccessToken}`,
+        );
+      } catch {
+        // Fallback para contas que falham com campos mais ricos no endpoint de media.
+        mediaJson = await fetchInstagramJson(
+          `${graphBase}/${instagramBusinessAccountId}/media?fields=id,caption,media_type,media_url,thumbnail_url,timestamp,permalink&limit=25&access_token=${instagramAccessToken}`,
+        );
+      }
 
       media = await Promise.all(
         ((Array.isArray(mediaJson?.data) ? mediaJson.data : []) as any[]).map(async (item: any) => {

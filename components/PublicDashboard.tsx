@@ -34,6 +34,7 @@ import {
   fetchDashboardData,
   fetchDashboardWeekly,
 } from '../lib/portalDashboard';
+import { PublicTrafficReport } from './PublicTrafficReport';
 
 type Tab = 'campanhas' | 'instagram' | 'relatorio';
 type ViewMode = 'performance' | 'distribuicao';
@@ -396,7 +397,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                 <KpiCard label="CTR Médio" value={pct(metrics?.ctr ?? 0)} delta={delta(metrics?.ctr ?? 0, metrics?.prevCtr ?? 0)} accent="#06b6d4" />
                 <KpiCard label="Cliques no Link" value={num(metrics?.linkClicks ?? 0)} delta={delta(metrics?.linkClicks ?? 0, metrics?.prevLinkClicks ?? 0)} accent="#3b82f6" />
                 <KpiCard label="Vis. Pág. Destino" value={num(metrics?.landingPageViews ?? 0)} delta={delta(metrics?.landingPageViews ?? 0, metrics?.prevLandingPageViews ?? 0)} accent="#10b981" />
-                <KpiCard label="Connect Rate" value={pct(metrics?.connectRate ?? 0)} accent="#10b981" hint="LPV / cliques no link" />
+                <KpiCard label="Connect Rate" value={pct(metrics?.connectRate ?? 0)} accent="#10b981" />
                 <KpiCard label="CPM Médio" value={brl(metrics?.cpm ?? 0)} delta={delta(metrics?.cpm ?? 0, metrics?.prevCpm ?? 0)} accent="#a855f7" invertDelta />
                 <KpiCard label="CPC Médio" value={brl(metrics?.cpc ?? 0)} accent="#f59e0b" invertDelta />
                 <KpiCard label="Visitas ao Perfil" value={num(metrics?.profileVisits ?? 0)} delta={delta(metrics?.profileVisits ?? 0, metrics?.prevProfileVisits ?? 0)} accent="#f43f5e" />
@@ -441,7 +442,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <KpiCard label="CPM Médio" value={brl(metrics?.cpm ?? 0)} delta={delta(metrics?.cpm ?? 0, metrics?.prevCpm ?? 0)} accent="#f59e0b" invertDelta />
                 <KpiCard label="CPC Médio" value={brl(metrics?.cpc ?? 0)} accent="#f43f5e" invertDelta />
-                <KpiCard label="Connect Rate" value={pct(metrics?.connectRate ?? 0)} accent="#10b981" hint="LPV / cliques no link" />
+                <KpiCard label="Connect Rate" value={pct(metrics?.connectRate ?? 0)} accent="#10b981" />
                 <KpiCard label="Resultados" value={num(metrics?.results ?? 0)} accent="#06b6d4" />
               </div>
             </div>
@@ -748,8 +749,8 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
       ) : weekly ? (
         <>
           {weekly.trafficReport?.publicId ? (
-            <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02]">
-              <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
+            <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
+              <div className="mb-5 flex items-center justify-between gap-4">
                 <div>
                   <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Relatório final</div>
                   <div className="mt-0.5 text-base font-black text-white">{weekly.trafficReport.title || 'Visualização de tráfego'}</div>
@@ -764,11 +765,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                   Abrir separado
                 </a>
               </div>
-              <iframe
-                src={`/traffic-report/${weekly.trafficReport.publicId}`}
-                title="Relatório de tráfego"
-                className="h-[1200px] w-full bg-[#06080d]"
-              />
+              <PublicTrafficReport publicId={weekly.trafficReport.publicId} embedded />
             </div>
           ) : null}
 

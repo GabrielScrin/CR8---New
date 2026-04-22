@@ -3,6 +3,7 @@ import { getSupabaseAnonKey, getSupabaseUrl } from '../lib/supabase';
 
 interface PublicTrafficReportProps {
   publicId: string;
+  embedded?: boolean;
 }
 
 type PeriodSummary = {
@@ -181,7 +182,7 @@ const MetricGrid: React.FC<{ items: MetricCard[]; hasPrevious: boolean }> = ({ i
   </div>
 );
 
-export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ publicId }) => {
+export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ publicId, embedded = false }) => {
   const [report, setReport] = useState<TrafficReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -214,10 +215,10 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
   };
 
   if (loading) {
-    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#06080d', color: '#4d5a6e', fontFamily: 'DM Sans, system-ui, sans-serif' }}>Carregando relatorio...</div>;
+    return <div style={{ minHeight: embedded ? '360px' : '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: embedded ? 'transparent' : '#06080d', color: '#4d5a6e', fontFamily: 'DM Sans, system-ui, sans-serif' }}>Carregando relatorio...</div>;
   }
   if (error || !report) {
-    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#06080d', color: '#e8edf5', fontFamily: 'DM Sans, system-ui, sans-serif' }}>{error ?? 'Relatorio nao encontrado.'}</div>;
+    return <div style={{ minHeight: embedded ? '360px' : '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: embedded ? 'transparent' : '#06080d', color: '#e8edf5', fontFamily: 'DM Sans, system-ui, sans-serif' }}>{error ?? 'Relatorio nao encontrado.'}</div>;
   }
 
   const d = report.report_data;
@@ -277,17 +278,19 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
   ];
 
   return (
-    <div style={{ background: '#06080d', color: '#e8edf5', minHeight: '100vh', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div style={{ background: embedded ? 'transparent' : '#06080d', color: '#e8edf5', minHeight: embedded ? 'auto' : '100vh', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap');*{box-sizing:border-box}@media print{.no-print{display:none!important}.page-break{page-break-before:always}body{background:#fff!important;color:#000!important}*{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`}</style>
-      <div className="no-print" style={{ position: 'sticky', top: 0, zIndex: 10, background: '#0d1117', borderBottom: '1px solid #1e2733', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><div style={{ width: 28, height: 28, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11 }}>{agencyInitials}</div><span style={{ fontSize: 13, fontWeight: 600, color: '#8a95a8' }}>Relatorio de Trafego</span></div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={copyLink} style={{ padding: '8px 14px', borderRadius: 8, background: 'transparent', border: '1px solid #253040', color: copied ? '#22c55e' : '#8a95a8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{copied ? 'Copiado!' : 'Copiar link'}</button>
-          <button onClick={() => window.print()} style={{ padding: '8px 14px', borderRadius: 8, background: '#3b82f6', border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Baixar PDF</button>
+      {!embedded && (
+        <div className="no-print" style={{ position: 'sticky', top: 0, zIndex: 10, background: '#0d1117', borderBottom: '1px solid #1e2733', padding: '12px 24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}><div style={{ width: 28, height: 28, background: 'linear-gradient(135deg,#3b82f6,#6366f1)', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 11 }}>{agencyInitials}</div><span style={{ fontSize: 13, fontWeight: 600, color: '#8a95a8' }}>Relatorio de Trafego</span></div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={copyLink} style={{ padding: '8px 14px', borderRadius: 8, background: 'transparent', border: '1px solid #253040', color: copied ? '#22c55e' : '#8a95a8', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>{copied ? 'Copiado!' : 'Copiar link'}</button>
+            <button onClick={() => window.print()} style={{ padding: '8px 14px', borderRadius: 8, background: '#3b82f6', border: 'none', color: '#fff', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>Baixar PDF</button>
+          </div>
         </div>
-      </div>
+      )}
 
-      <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 24px 60px' }}>
+      <div style={{ maxWidth: embedded ? '100%' : 900, margin: '0 auto', padding: embedded ? '0' : '0 24px 60px' }}>
         <div style={{ position: 'relative', padding: '48px 0 36px', borderBottom: '1px solid #1e2733', marginBottom: 40 }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -300,10 +303,12 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
           <div style={{ marginTop: 10, fontSize: 15, color: '#8a95a8' }}><strong style={{ color: '#e8edf5' }}>{fmtDate(d.periodCurrent.start)} a {fmtDate(d.periodCurrent.end)}</strong>{d.periodPrevious ? `  |  Comparado com ${fmtDate(d.periodPrevious.start)} a ${fmtDate(d.periodPrevious.end)}` : ''}</div>
         </div>
 
-        <div className="no-print" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 36 }}>
-          <button onClick={() => window.print()} style={{ padding: '10px 18px', borderRadius: 10, background: '#3b82f6', border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Baixar PDF</button>
-          <button onClick={copyLink} style={{ padding: '10px 18px', borderRadius: 10, background: 'transparent', border: '1px solid #253040', color: '#8a95a8', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{copied ? 'Link copiado!' : 'Copiar Link para WhatsApp'}</button>
-        </div>
+        {!embedded && (
+          <div className="no-print" style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 36 }}>
+            <button onClick={() => window.print()} style={{ padding: '10px 18px', borderRadius: 10, background: '#3b82f6', border: 'none', color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>Baixar PDF</button>
+            <button onClick={copyLink} style={{ padding: '10px 18px', borderRadius: 10, background: 'transparent', border: '1px solid #253040', color: '#8a95a8', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>{copied ? 'Link copiado!' : 'Copiar Link para WhatsApp'}</button>
+          </div>
+        )}
 
         <SectionTitle label="Midia universal" />
         <MetricGrid items={mediaCards} hasPrevious={hasPrevious} />
