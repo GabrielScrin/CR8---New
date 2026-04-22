@@ -3545,12 +3545,12 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
       {/* Report Generation Modal */}
       <Dialog open={dateDialogOpen} onOpenChange={setDateDialogOpen}>
-        <DialogContent className="flex max-h-[85vh] w-[min(92vw,860px)] max-w-none flex-col overflow-hidden border-[hsl(var(--border))] bg-[hsl(var(--card))] p-0 text-[hsl(var(--foreground))]">
+        <DialogContent className="flex max-h-[85vh] w-[860px] max-w-[92vw] flex-col overflow-hidden border-[hsl(var(--border))] bg-[hsl(var(--card))] p-0 text-[hsl(var(--foreground))] sm:max-w-[92vw]">
           <DialogHeader className="border-b border-[hsl(var(--border))] px-6 py-5">
             <DialogTitle className="text-base font-semibold">Selecionar periodo</DialogTitle>
           </DialogHeader>
 
-          <div className="grid min-h-0 flex-1 gap-0 md:grid-cols-[220px_minmax(0,1fr)]">
+          <div className="grid min-h-0 flex-1 gap-0 overflow-x-hidden md:grid-cols-[220px_minmax(0,1fr)]">
             <div className="overflow-y-auto border-b border-[hsl(var(--border))] p-4 md:border-b-0 md:border-r">
               <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[hsl(var(--muted-foreground))]">
                 Usados recentemente
@@ -3574,8 +3574,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
               </div>
             </div>
 
-            <div className="min-h-0 overflow-y-auto p-5">
-              <div className="grid gap-4 xl:grid-cols-2">
+            <div className="min-h-0 overflow-x-hidden overflow-y-auto p-5">
+              <div className="grid grid-cols-1 gap-4">
                 <div className="min-w-0 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-4">
                   <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[hsl(var(--muted-foreground))]">
                     Preset
