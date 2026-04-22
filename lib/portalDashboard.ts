@@ -34,17 +34,20 @@ export type MetaSummary = {
   spend: number; impressions: number; reach: number; clicks: number;
   linkClicks: number; ctr: number; cpc: number; cpm: number;
   frequency: number; results: number; messagesStarted: number;
-  leadForms: number; siteLeads: number; profileVisits: number; followers: number;
+  leadForms: number; siteLeads: number; landingPageViews: number;
+  profileVisits: number; followers: number; videoViews: number; thruplays: number;
+  hookRate: number; holdRate: number;
 };
 
-export type DailyPoint = { date: string; spend: number; results: number };
+export type DailyPoint = { date: string; spend: number; results: number; leads: number; messages: number };
 
 export type Campaign = {
   id: string; name: string; spend: number; impressions: number; reach: number;
   clicks: number; linkClicks: number; ctr: number; cpc: number; cpm: number;
   frequency: number; results: number;
-  leadForms: number; messagesStarted: number; siteLeads: number;
-  profileVisits: number; followers: number;
+  leadForms: number; messagesStarted: number; siteLeads: number; landingPageViews: number;
+  profileVisits: number; followers: number; videoViews: number; thruplays: number;
+  hookRate: number; holdRate: number;
 };
 
 export type InstagramMedia = {
@@ -86,6 +89,7 @@ export type DashboardWeekly = {
   summary: string; highlights: string[]; risks: string[]; next_week: string[];
   meta: { spend: number; impressions: number; reach: number; results: number; ctr: number; cpc: number; campaigns: number };
   instagram: { totalReach: number; totalViews: number; totalProfileViews: number; totalFollowerGain: number };
+  trafficReport: { publicId: string; title: string | null; createdAt: string } | null;
 };
 
 export const fetchDashboardBootstrap = (token: string) =>

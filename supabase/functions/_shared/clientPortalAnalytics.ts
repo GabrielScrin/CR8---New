@@ -63,8 +63,13 @@ type MetaCampaignRow = {
   messagesStarted: number;
   leadForms: number;
   siteLeads: number;
+  landingPageViews: number;
   profileVisits: number;
   followers: number;
+  videoViews: number;
+  thruplays: number;
+  hookRate: number;
+  holdRate: number;
 };
 
 type GoogleCampaignRow = {
@@ -85,6 +90,8 @@ type DailyPoint = {
   date: string;
   spend: number;
   results: number;
+  leads: number;
+  messages: number;
 };
 
 type MetaOverview = {
@@ -106,8 +113,13 @@ type MetaOverview = {
     messagesStarted: number;
     leadForms: number;
     siteLeads: number;
+    landingPageViews: number;
     profileVisits: number;
     followers: number;
+    videoViews: number;
+    thruplays: number;
+    hookRate: number;
+    holdRate: number;
   };
   timeseries: DailyPoint[];
   campaigns: MetaCampaignRow[];
@@ -187,6 +199,12 @@ type WeeklyReportRow = {
   updated_at: string;
 };
 
+type TrafficReportRow = {
+  public_id: string;
+  title: string | null;
+  created_at: string;
+};
+
 let cachedGoogleAccessToken: { token: string; expiresAtMs: number } | null = null;
 
 export const createSupabaseAdmin = () =>
@@ -251,6 +269,37 @@ const extractActionSum = (actions: any[] | undefined, matcher: (actionType: stri
   }, 0);
 };
 
+const extractPreferredActionValue = (
+  actions: any[] | undefined,
+  exactPriority: string[],
+  fallbackMatcher?: (actionType: string) => boolean,
+) => {
+  if (!Array.isArray(actions) || actions.length === 0) return 0;
+  for (const actionType of exactPriority) {
+    const match = actions.find((entry) => normalizeActionType(entry?.action_type) === actionType);
+    if (match != null) return asNumber(match?.value);
+  }
+  if (!fallbackMatcher) return 0;
+  const match = actions.find((entry) => fallbackMatcher(normalizeActionType(entry?.action_type)));
+  return match != null ? asNumber(match?.value) : 0;
+};
+
+const extractActionTotal = (actions: any[] | undefined) => {
+  if (!Array.isArray(actions) || actions.length === 0) return 0;
+  return actions.reduce((sum, item) => sum + asNumber(item?.value), 0);
+};
+
+const deriveCountFromCostPerAction = (
+  spend: number,
+  costPerAction: any[] | undefined,
+  selector: (actions: any[] | undefined) => number,
+) => {
+  if (!Number.isFinite(spend) || spend <= 0) return 0;
+  const cost = selector(costPerAction);
+  if (!Number.isFinite(cost) || cost <= 0) return 0;
+  return Math.max(0, Math.round(spend / cost));
+};
+
 const extractLeadForms = (actions: any[] | undefined) =>
   extractActionSum(
     actions,
@@ -274,13 +323,13 @@ const extractSiteLeads = (actions: any[] | undefined) =>
   );
 
 const extractMessagingStarted = (actions: any[] | undefined) =>
-  extractActionSum(
+  extractPreferredActionValue(
     actions,
-    (t) =>
-      t === 'onsite_conversion.messaging_conversation_started_7d' ||
-      t === 'onsite_conversion.messaging_conversation_started_1d' ||
-      t === 'onsite_conversion.messaging_first_reply' ||
-      t.includes('messaging_conversation_started'),
+    [
+      'onsite_conversion.messaging_conversation_started_7d',
+      'onsite_conversion.messaging_conversation_started_1d',
+    ],
+    (t) => t.includes('messaging_conversation_started'),
   );
 
 const extractProfileVisits = (actions: any[] | undefined) =>
@@ -295,6 +344,23 @@ const extractProfileVisits = (actions: any[] | undefined) =>
 
 const extractFollowers = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t === 'like' || t === 'page_fan' || t === 'instagram_profile_follow' || t === 'follow');
+
+const extractLandingPageViews = (actions: any[] | undefined) =>
+  extractPreferredActionValue(
+    actions,
+    ['landing_page_view', 'omni_landing_page_view'],
+    (t) => t.includes('landing_page_view'),
+  );
+
+const extractVideoViews = (actions: any[] | undefined) =>
+  extractActionSum(actions, (t) => {
+    return t === 'video_view' || t === 'video_view_3s' || t === 'video_view_3_sec' || t === 'video_view_3s_watched';
+  });
+
+const extractThruplays = (actions: any[] | undefined) =>
+  extractActionSum(actions, (t) => {
+    return t === 'video_view_15s' || t === 'video_view_15_sec' || t === 'video_view_15s_watched' || t.startsWith('video_view_15');
+  });
 
 const buildEmptyMetaOverview = (reason: string): MetaOverview => ({
   available: false,
@@ -313,8 +379,13 @@ const buildEmptyMetaOverview = (reason: string): MetaOverview => ({
     messagesStarted: 0,
     leadForms: 0,
     siteLeads: 0,
+    landingPageViews: 0,
     profileVisits: 0,
     followers: 0,
+    videoViews: 0,
+    thruplays: 0,
+    hookRate: 0,
+    holdRate: 0,
   },
   timeseries: [],
   campaigns: [],
@@ -499,7 +570,7 @@ const fetchMetaInsights = async (
     const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
     url.searchParams.set(
       'fields',
-      'campaign_id,campaign_name,date_start,spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions',
+      'campaign_id,campaign_name,date_start,spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions,cost_per_action_type,video_thruplay_watched_actions',
     );
     url.searchParams.set('level', 'campaign');
     url.searchParams.set('time_increment', '1');
@@ -550,11 +621,21 @@ const aggregateMetaOverview = async (
       const cpm = asNumber(row?.cpm);
       const frequency = asNumber(row?.frequency);
       const actions = Array.isArray(row?.actions) ? row.actions : [];
-      const leadForms = extractLeadForms(actions);
-      const messagesStarted = extractMessagingStarted(actions);
-      const siteLeads = extractSiteLeads(actions);
-      const profileVisits = extractProfileVisits(actions);
+      const costPerActionType = Array.isArray(row?.cost_per_action_type) ? row.cost_per_action_type : [];
+      const videoThruplayActions = Array.isArray(row?.video_thruplay_watched_actions) ? row.video_thruplay_watched_actions : [];
+      const leadForms = extractLeadForms(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLeadForms);
+      const messagesStarted = extractMessagingStarted(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractMessagingStarted);
+      const siteLeads = extractSiteLeads(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractSiteLeads);
+      const landingPageViews = extractLandingPageViews(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLandingPageViews);
+      const profileVisits = extractProfileVisits(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractProfileVisits);
       const followers = extractFollowers(actions);
+      const videoViews = extractVideoViews(actions);
+      const thruplays =
+        extractThruplays(actions) ||
+        extractActionTotal(videoThruplayActions) ||
+        deriveCountFromCostPerAction(spend, costPerActionType, extractThruplays);
+      const hookRate = impressions > 0 ? videoViews / impressions : 0;
+      const holdRate = videoViews > 0 ? thruplays / videoViews : 0;
       const results = leadForms + messagesStarted + siteLeads;
 
       if (campaignId) {
@@ -574,8 +655,13 @@ const aggregateMetaOverview = async (
           messagesStarted: 0,
           leadForms: 0,
           siteLeads: 0,
+          landingPageViews: 0,
           profileVisits: 0,
           followers: 0,
+          videoViews: 0,
+          thruplays: 0,
+          hookRate: 0,
+          holdRate: 0,
         };
 
         previous.spend += spend;
@@ -587,19 +673,26 @@ const aggregateMetaOverview = async (
         previous.messagesStarted += messagesStarted;
         previous.leadForms += leadForms;
         previous.siteLeads += siteLeads;
+        previous.landingPageViews += landingPageViews;
         previous.profileVisits += profileVisits;
         previous.followers += followers;
+        previous.videoViews += videoViews;
+        previous.thruplays += thruplays;
         previous.ctr = previous.impressions > 0 ? (previous.clicks / previous.impressions) * 100 : ctr;
         previous.cpc = previous.clicks > 0 ? previous.spend / previous.clicks : cpc;
         previous.cpm = previous.impressions > 0 ? (previous.spend / previous.impressions) * 1000 : cpm;
         previous.frequency = previous.reach > 0 ? previous.impressions / previous.reach : frequency;
+        previous.hookRate = previous.impressions > 0 ? previous.videoViews / previous.impressions : 0;
+        previous.holdRate = previous.videoViews > 0 ? previous.thruplays / previous.videoViews : 0;
         campaignMap.set(campaignId, previous);
       }
 
       if (date) {
-        const previousPoint = dailyMap.get(date) ?? { date, spend: 0, results: 0 };
+        const previousPoint = dailyMap.get(date) ?? { date, spend: 0, results: 0, leads: 0, messages: 0 };
         previousPoint.spend += spend;
         previousPoint.results += results;
+        previousPoint.leads += leadForms + siteLeads;
+        previousPoint.messages += messagesStarted;
         dailyMap.set(date, previousPoint);
       }
     }
@@ -616,8 +709,11 @@ const aggregateMetaOverview = async (
         acc.messagesStarted += row.messagesStarted;
         acc.leadForms += row.leadForms;
         acc.siteLeads += row.siteLeads;
+        acc.landingPageViews += row.landingPageViews;
         acc.profileVisits += row.profileVisits;
         acc.followers += row.followers;
+        acc.videoViews += row.videoViews;
+        acc.thruplays += row.thruplays;
         return acc;
       },
       {
@@ -634,8 +730,13 @@ const aggregateMetaOverview = async (
         messagesStarted: 0,
         leadForms: 0,
         siteLeads: 0,
+        landingPageViews: 0,
         profileVisits: 0,
         followers: 0,
+        videoViews: 0,
+        thruplays: 0,
+        hookRate: 0,
+        holdRate: 0,
       },
     );
 
@@ -643,8 +744,10 @@ const aggregateMetaOverview = async (
     summary.cpc = summary.clicks > 0 ? summary.spend / summary.clicks : 0;
     summary.cpm = summary.impressions > 0 ? (summary.spend / summary.impressions) * 1000 : 0;
     summary.frequency = summary.reach > 0 ? summary.impressions / summary.reach : 0;
+    summary.hookRate = summary.impressions > 0 ? summary.videoViews / summary.impressions : 0;
+    summary.holdRate = summary.videoViews > 0 ? summary.thruplays / summary.videoViews : 0;
 
-    const timeseries = daySeries(dateFrom, dateTo).map((date) => dailyMap.get(date) ?? { date, spend: 0, results: 0 });
+    const timeseries = daySeries(dateFrom, dateTo).map((date) => dailyMap.get(date) ?? { date, spend: 0, results: 0, leads: 0, messages: 0 });
 
     return {
       available: true,
@@ -1584,6 +1687,24 @@ export const loadDashboardData = async (
   };
 };
 
+const loadLatestTrafficReport = async (supabaseAdmin: SupabaseClient, companyId: string): Promise<TrafficReportRow | null> => {
+  const { data, error } = await supabaseAdmin
+    .from('traffic_reports')
+    .select('public_id,title,created_at')
+    .eq('company_id', companyId)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (error) return null;
+  if (!data) return null;
+  return {
+    public_id: asString((data as any).public_id),
+    title: asString((data as any).title) || null,
+    created_at: asString((data as any).created_at),
+  };
+};
+
 export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: string) => {
   const link = await getPortalLinkRow(supabaseAdmin, token);
   const { data: companyTokens, error: companyTokensError } = await supabaseAdmin
@@ -1606,13 +1727,14 @@ export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: 
 
   const igToken = asString((companyTokens as any)?.instagram_access_token) || metaToken;
 
-  const [meta, instagram] = await Promise.all([
+  const [meta, instagram, latestTrafficReport] = await Promise.all([
     metaToken
       ? aggregateMetaOverview(metaToken, link.meta_ad_account_id, periodStartStr, periodEndStr, [])
       : Promise.resolve(buildEmptyMetaOverview('Meta Ads nao configurado para esta empresa.')),
     link.instagram_business_account_id && igToken
       ? buildInstagramOverview(igToken, link.instagram_business_account_id, periodStartStr, periodEndStr)
       : Promise.resolve(buildEmptyInstagramOverview('')),
+    loadLatestTrafficReport(supabaseAdmin, link.company_id),
   ]);
 
   const companyName = link.client_name || link.name || 'Cliente';
@@ -1646,6 +1768,13 @@ export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: 
       totalProfileViews: instagram.summary.totalProfileViews,
       totalFollowerGain: instagram.summary.totalFollowerGain,
     },
+    trafficReport: latestTrafficReport
+      ? {
+          publicId: latestTrafficReport.public_id,
+          title: latestTrafficReport.title,
+          createdAt: latestTrafficReport.created_at,
+        }
+      : null,
   };
 };
 
