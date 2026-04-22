@@ -112,6 +112,11 @@ export async function resolveIgToken(): Promise<string | null> {
     const minValidity = 24 * 60 * 60 * 1000; // exige pelo menos 24h restantes
     if (storedIgToken && storedIgExpiresAtMs > Date.now() + minValidity) {
       _cache = { token: storedIgToken, companyId, fetchedAt: Date.now() };
+      // Auto-renova em background se expira em menos de 7 dias
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
+      if (storedIgExpiresAtMs - Date.now() < sevenDays) {
+        exchangeIgToken(companyId, storedIgToken).catch(() => {});
+      }
       return storedIgToken;
     }
   }

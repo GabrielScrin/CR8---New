@@ -368,6 +368,13 @@ port = 54327
 # Configure one of the supported backends: `postgres`, `bigquery`.
 backend = "postgres"
 
+# Functions that handle their own JWT verification (support ES256 and ES384)
+[functions.instagram-token-exchange]
+verify_jwt = false
+
+[functions.meta-token-exchange]
+verify_jwt = false
+
 # Experimental features may be deprecated any time
 [experimental]
 # Configures Postgres storage engine to use OrioleDB (S3)
