@@ -102,6 +102,7 @@ export interface AdMetric {
   messagesStarted?: number;
   leadForms?: number;
   siteLeads?: number;
+  landingPageViews?: number;
   videoViews?: number;
   thruplays?: number;
   cpc?: number;
@@ -125,6 +126,7 @@ export type NativeResultType =
   | 'profile_visits'
   | 'lead_forms'
   | 'site_leads'
+  | 'landing_page_views'
   | 'video_views'
   | 'followers'
   | 'purchases'

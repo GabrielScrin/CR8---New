@@ -267,6 +267,7 @@ type PlatformBuckets = {
   messagesStarted: number;
   leadForms: number;
   siteLeads: number;
+  landingPageViews: number;
   businessLeads: number;
   profileVisits: number;
   followers: number;
@@ -406,8 +407,6 @@ const normalizeHigherBetter = (value: number, min: number, max: number) => {
 const normalizeLowerBetter = (value: number, min: number, max: number) => {
   return clamp01(1 - normalizeHigherBetter(value, min, max));
 };
-
-
 const svgAvatarDataUrl = (text: string, fg = '#111827', bg = '#E5E7EB') => {
   const label = (text || 'CR8').trim().slice(0, 2).toUpperCase();
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="80" height="80"><rect width="100%" height="100%" rx="12" ry="12" fill="${bg}"/><text x="50%" y="56%" text-anchor="middle" font-size="30" font-family="Inter,system-ui,Segoe UI,Roboto,Arial" fill="${fg}">${label}</text></svg>`;
@@ -465,6 +464,15 @@ const extractSiteLeadsFromActions = (actions: any[] | undefined) =>
       t === 'omni_complete_registration' ||
       t.includes('fb_pixel_lead') ||
       (t.startsWith('offsite_conversion.') && (t.includes('lead') || t.includes('contact') || t.includes('complete_registration'))),
+  );
+
+const extractLandingPageViewsFromActions = (actions: any[] | undefined) =>
+  extractActionSum(
+    actions,
+    (t) =>
+      t === 'landing_page_view' ||
+      t === 'omni_landing_page_view' ||
+      t.includes('landing_page_view'),
   );
 
 const extractPurchasesFromActions = (actions: any[] | undefined) =>
@@ -538,6 +546,22 @@ const inferNativeTypeFromContext = (input: {
   const nameHint = normalizeMetaSignal(input.nameHint);
 
   if (
+    optimizationGoal.includes('THRUPLAY') ||
+    optimizationGoal.includes('VIDEO') ||
+    objective.includes('VIDEO') ||
+    objective.includes('OUTCOME_VIDEO')
+  ) {
+    return 'video_views';
+  }
+
+  if (
+    optimizationGoal.includes('LANDING_PAGE') ||
+    promotedJson.includes('LANDING_PAGE_VIEW')
+  ) {
+    return 'landing_page_views';
+  }
+
+  if (
     destinationType.includes('WHATSAPP') ||
     destinationType.includes('MESSENGER') ||
     destinationType.includes('MESSAGING') ||
@@ -575,10 +599,8 @@ const inferNativeTypeFromContext = (input: {
     optimizationGoal.includes('CONVERSION') ||
     optimizationGoal.includes('VALUE') ||
     optimizationGoal.includes('PURCHASE') ||
-    destinationType.includes('WEBSITE') ||
-    destinationType.includes('WEB') ||
-    destinationType.includes('SHOP') ||
-    promotedJson.includes('PIXEL') ||
+    promotedJson.includes('FB_PIXEL_LEAD') ||
+    promotedJson.includes('COMPLETE_REGISTRATION') ||
     promotedJson.includes('CUSTOM_EVENT') ||
     objective.includes('OUTCOME_SALES') ||
     objective.includes('CONVERS')
@@ -596,15 +618,6 @@ const inferNativeTypeFromContext = (input: {
     objective === 'LEADS'
   ) {
     return 'lead_forms';
-  }
-
-  if (
-    optimizationGoal.includes('THRUPLAY') ||
-    optimizationGoal.includes('VIDEO') ||
-    objective.includes('VIDEO') ||
-    objective.includes('OUTCOME_VIDEO')
-  ) {
-    return 'video_views';
   }
 
   if (
@@ -635,7 +648,9 @@ const labelForNativeType = (nativeType: NativeResultType, hasThruplays = false) 
     case 'lead_forms':
       return 'Lead Forms';
     case 'site_leads':
-      return 'Conversões de site';
+      return 'Conversoes de site';
+    case 'landing_page_views':
+      return 'Visualizacoes da pagina de destino';
     case 'video_views':
       return hasThruplays ? 'ThruPlays' : 'Views 3s';
     case 'followers':
@@ -652,6 +667,7 @@ const valueForNativeType = (
   computed: {
     leadForms?: number;
     siteLeads?: number;
+    landingPageViews?: number;
     messagesStarted?: number;
     purchases?: number;
     profileVisits?: number;
@@ -674,6 +690,8 @@ const valueForNativeType = (
       return computed.leadForms ?? 0;
     case 'site_leads':
       return computed.siteLeads ?? 0;
+    case 'landing_page_views':
+      return computed.landingPageViews ?? 0;
     case 'video_views':
       return (computed.thruplays ?? 0) > 0 ? computed.thruplays ?? 0 : computed.video3s ?? 0;
     case 'followers':
@@ -688,6 +706,7 @@ const valueForNativeType = (
 const resolvePrimaryResult = (row: any, computed: {
   leadForms?: number;
   siteLeads?: number;
+  landingPageViews?: number;
   messagesStarted?: number;
   purchases?: number;
   profileVisits?: number;
@@ -708,15 +727,16 @@ const resolvePrimaryResult = (row: any, computed: {
 
 
   if ((computed.purchases ?? 0) > 0) return pick(computed.purchases, 'Compras');
+  if ((computed.thruplays ?? 0) > 0) return pick(computed.thruplays, 'ThruPlays');
+  if ((computed.landingPageViews ?? 0) > 0) return pick(computed.landingPageViews, 'Visualizacoes da pagina de destino');
   if ((computed.messagesStarted ?? 0) > 0) return pick(computed.messagesStarted, 'Mensagens iniciadas');
-  if ((computed.siteLeads ?? 0) > 0) return pick(computed.siteLeads, 'Conversões de site');
+  if ((computed.siteLeads ?? 0) > 0) return pick(computed.siteLeads, 'Conversoes de site');
   if ((computed.leadForms ?? 0) > 0) return pick(computed.leadForms, 'Lead Forms');
   if ((computed.followers ?? 0) > 0) return pick(computed.followers, 'Seguidores');
   if ((computed.profileVisits ?? 0) > 0) return pick(computed.profileVisits, 'Visitas ao perfil');
+  if ((computed.video3s ?? 0) > 0) return pick(computed.video3s, 'Views 3s');
   if ((computed.linkClicks ?? 0) > 0) return pick(computed.linkClicks, 'Cliques no link');
   if ((computed.clicks ?? 0) > 0) return pick(computed.clicks, 'Cliques');
-  if ((computed.thruplays ?? 0) > 0) return pick(computed.thruplays, 'ThruPlays');
-  if ((computed.video3s ?? 0) > 0) return pick(computed.video3s, 'Views 3s');
   return pick(undefined, 'Resultados');
 };
 
@@ -750,6 +770,8 @@ const getPlatformValueByNativeType = (platform: ReportPlatformSummary, nativeTyp
       return platform.leadForms;
     case 'site_leads':
       return platform.siteLeads;
+    case 'landing_page_views':
+      return platform.landingPageViews;
     case 'profile_visits':
       return platform.profileVisits;
     case 'followers':
@@ -772,6 +794,7 @@ const buildPlatformBuckets = (row: { actions?: any[]; video_thruplay_watched_act
   const leadForms = extractLeadFormsFromActions(row.actions) ?? 0;
   const messagesStarted = extractMessagingConversationsFromActions(row.actions) ?? 0;
   const siteLeads = extractSiteLeadsFromActions(row.actions) ?? 0;
+  const landingPageViews = extractLandingPageViewsFromActions(row.actions) ?? 0;
   const profileVisits = extractProfileVisitsFromActions(row.actions) ?? 0;
   const followers = extractFollowersFromActions(row.actions) ?? 0;
   const videoViews = extractVideo3sFromActions(row.actions) ?? 0;
@@ -782,6 +805,7 @@ const buildPlatformBuckets = (row: { actions?: any[]; video_thruplay_watched_act
     leadForms,
     messagesStarted,
     siteLeads,
+    landingPageViews,
     businessLeads: leadForms + messagesStarted + siteLeads,
     profileVisits,
     followers,
@@ -1319,6 +1343,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       const primary = resolvePrimaryResult(row, {
         leadForms: buckets.leadForms,
         siteLeads: buckets.siteLeads,
+        landingPageViews: buckets.landingPageViews,
         messagesStarted: buckets.messagesStarted,
         purchases: buckets.purchases,
         profileVisits: buckets.profileVisits,
@@ -1396,6 +1421,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         messagesStarted: buckets.messagesStarted,
         leadForms: buckets.leadForms,
         siteLeads: buckets.siteLeads,
+        landingPageViews: buckets.landingPageViews,
         videoViews: buckets.videoViews,
         thruplays: buckets.thruplays,
         cpc: typeof performanceClicks === 'number' && performanceClicks > 0 ? spend / performanceClicks : undefined,
@@ -2327,6 +2353,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         const items = [
           { key: 'thruplays', label: 'ThruPlays', current: currentPlatform.thruplays, previous: previousPlatform.thruplays, layer: 'platform' },
           { key: 'videoViews', label: 'Views 3s', current: currentPlatform.videoViews, previous: previousPlatform.videoViews, layer: 'platform' },
+          { key: 'landingPageViews', label: 'Visualizacoes da pagina de destino', current: currentPlatform.landingPageViews, previous: previousPlatform.landingPageViews, layer: 'platform' },
           { key: 'profileVisits', label: 'Visitas ao perfil', current: currentPlatform.profileVisits, previous: previousPlatform.profileVisits, layer: 'platform' },
           { key: 'followers', label: 'Seguidores', current: currentPlatform.followers, previous: previousPlatform.followers, layer: 'platform' },
           { key: 'messagesStarted', label: 'Mensagens iniciadas', current: currentPlatform.messagesStarted, previous: previousPlatform.messagesStarted, layer: 'platform' },
@@ -3852,3 +3879,5 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     </div>
   );
 };
+
+

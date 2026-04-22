@@ -42,6 +42,7 @@ interface TrafficDashboardProps {
       messagesStarted: number;
       leadForms: number;
       siteLeads: number;
+      landingPageViews: number;
       businessLeads: number;
       profileVisits: number;
       followers: number;
@@ -155,6 +156,8 @@ const getSummaryResultMeta = (
       return { value: summary.platform.leadForms, label: 'Lead Forms' };
     case 'site_leads':
       return { value: summary.platform.siteLeads, label: 'Conversoes de site' };
+    case 'landing_page_views':
+      return { value: summary.platform.landingPageViews, label: 'Visualizacoes da pagina de destino' };
     case 'profile_visits':
       return { value: summary.platform.profileVisits, label: 'Visitas ao perfil' };
     case 'followers':
