@@ -267,7 +267,7 @@ export const ClientPortalManager: React.FC<ClientPortalManagerProps> = ({ compan
 
   return (
     <div className="rounded-[28px] border border-[hsl(var(--border))] p-5" style={{ background: 'linear-gradient(180deg, hsl(220 18% 9%), hsl(220 20% 7%))' }}>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(320px,460px)] xl:items-start">
+      <div className="grid gap-4 2xl:grid-cols-[minmax(0,1fr)_minmax(320px,460px)] 2xl:items-start">
         <div className="min-w-0">
           <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[hsl(var(--muted-foreground))]">
             <ShieldCheck className="h-3.5 w-3.5" />
@@ -282,7 +282,7 @@ export const ClientPortalManager: React.FC<ClientPortalManagerProps> = ({ compan
         {portalUrl && (
           <div className="w-full min-w-0 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))]/70 p-4">
             <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Link publico</div>
-            <div className="mt-2 break-all text-sm text-[hsl(var(--foreground))]">{portalUrl}</div>
+            <div className="mt-2 break-words text-sm leading-6 text-[hsl(var(--foreground))]">{portalUrl}</div>
             <div className="mt-3 flex flex-wrap gap-2">
               <button
                 type="button"
