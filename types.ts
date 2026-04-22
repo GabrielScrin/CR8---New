@@ -21,7 +21,7 @@ export const isVendorRole = (role: Role | null | undefined) => role === 'vendedo
 export const getAllowedViews = (role: Role): Set<string> => {
   const r = normalizeRole(role);
   if (r === 'admin' || r === 'gestor') {
-    return new Set(['dashboard', 'traffic', 'crm', 'livechat', 'contacts', 'forms', 'instagram', 'whatsapp', 'ai', 'settings']);
+    return new Set(['dashboard', 'traffic', 'crm', 'livechat', 'contacts', 'forms', 'instagram', 'whatsapp', 'ai', 'settings', 'portal']);
   }
   if (r === 'vendedor') {
     return new Set(['dashboard', 'crm', 'livechat', 'contacts', 'forms', 'whatsapp', 'ai', 'settings']);

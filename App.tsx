@@ -13,6 +13,8 @@ import { QuizForms } from './components/QuizForms';
 import { PublicQuiz } from './components/PublicQuiz';
 import { PublicTrafficReport } from './components/PublicTrafficReport';
 import { PublicClientPortal } from './components/PublicClientPortal';
+import { PublicDashboard } from './components/PublicDashboard';
+import { DashboardGenerator } from './components/DashboardGenerator';
 import { WhatsApp } from './components/WhatsApp';
 import { Join } from './components/Join';
 import { Instagram } from './components/Instagram';
@@ -118,6 +120,17 @@ export default function App() {
     }
   })();
 
+  const publicDashboardToken = (() => {
+    try {
+      const path = window.location.pathname || '';
+      const parts = path.split('/').filter(Boolean);
+      if (parts.length >= 2 && parts[0] === 'd') return parts[1];
+      return null;
+    } catch {
+      return null;
+    }
+  })();
+
   const joinToken = (() => {
     try {
       const path = (window.location.pathname || '').replace(/\/+$/, '');
@@ -131,7 +144,7 @@ export default function App() {
 
   const [user, setUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState('dashboard');
-  const [loadingSession, setLoadingSession] = useState(() => !publicQuizId && !publicTrafficReportId && !publicClientPortalToken && !joinToken);
+  const [loadingSession, setLoadingSession] = useState(() => !publicQuizId && !publicTrafficReportId && !publicClientPortalToken && !publicDashboardToken && !joinToken);
 
   // Enforce view access restrictions based on role
   useEffect(() => {
@@ -145,6 +158,7 @@ export default function App() {
     if (publicQuizId) return;
     if (publicTrafficReportId) return;
     if (publicClientPortalToken) return;
+    if (publicDashboardToken) return;
     if (joinToken) return;
     if (!isSupabaseConfigured()) {
       setLoadingSession(false);
@@ -277,6 +291,7 @@ export default function App() {
   if (publicQuizId) return <PublicQuiz publicId={publicQuizId} />;
   if (publicTrafficReportId) return <PublicTrafficReport publicId={publicTrafficReportId} />;
   if (publicClientPortalToken) return <PublicClientPortal token={publicClientPortalToken} />;
+  if (publicDashboardToken) return <PublicDashboard token={publicDashboardToken} />;
 
   if (joinToken) return <Join token={joinToken} />;
 
@@ -362,6 +377,8 @@ export default function App() {
         return <WhatsApp companyId={user.companyId} role={user.role} />;
       case 'ai':
         return <AIAgent companyId={user.companyId} userId={user.id} />;
+      case 'portal':
+        return <DashboardGenerator companyId={user.companyId} />;
       case 'settings':
         return <SettingsView companyId={user.companyId} role={user.role} userId={user.id} />;
       default:

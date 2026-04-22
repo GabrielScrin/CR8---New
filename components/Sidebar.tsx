@@ -18,6 +18,7 @@ import {
   ClipboardCheck,
   Puzzle,
   UserCog,
+  MonitorSmartphone,
 } from 'lucide-react';
 import { Role, getAllowedViews, getAllowedSettingsSections, normalizeRole, roleConfig } from '../types';
 
@@ -43,6 +44,7 @@ const ALL_NAV_ITEMS: NavItem[] = [
   { id: 'instagram', label: 'Instagram',         icon: Instagram,       group: 'comunicacao' },
   { id: 'forms',     label: 'Quiz & Forms',      icon: FileText,        group: 'ferramentas' },
   { id: 'ai',        label: 'Agente IA',         icon: Bot,             group: 'ferramentas' },
+  { id: 'portal',    label: 'Portal do Cliente', icon: MonitorSmartphone, group: 'ferramentas' },
 ];
 
 const GROUP_LABELS: Record<string, string> = {

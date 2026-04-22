@@ -1391,4 +1391,211 @@ export const listCompaniesForWeeklySync = async (supabaseAdmin: SupabaseClient) 
   return ((data ?? []) as any[]).map((row) => String(row.id)).filter(Boolean);
 };
 
+// ─── Portal Links (direct ad-account dashboards) ──────────────────────────────
+
+type PortalLinkRow = {
+  id: string;
+  company_id: string;
+  public_token: string;
+  name: string;
+  client_name: string | null;
+  meta_ad_account_id: string;
+  meta_ad_account_name: string | null;
+  instagram_business_account_id: string | null;
+  instagram_username: string | null;
+  status: string;
+};
+
+const getPortalLinkRow = async (supabaseAdmin: SupabaseClient, token: string): Promise<PortalLinkRow> => {
+  const clean = asString(token);
+  if (!clean || clean.length < 16) throw new Error('token inválido');
+
+  const { data, error } = await supabaseAdmin
+    .from('portal_links')
+    .select('id,company_id,public_token,name,client_name,meta_ad_account_id,meta_ad_account_name,instagram_business_account_id,instagram_username,status')
+    .eq('public_token', clean)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error('dashboard não encontrado');
+  if ((data as any).status !== 'active') throw new Error('dashboard inativo');
+  return data as PortalLinkRow;
+};
+
+const getCompanyMetaToken = async (supabaseAdmin: SupabaseClient, companyId: string): Promise<string> => {
+  const { data, error } = await supabaseAdmin
+    .from('companies')
+    .select('meta_access_token,instagram_access_token')
+    .eq('id', companyId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error('empresa não encontrada');
+  const token = asString((data as any)?.meta_access_token);
+  if (!token) throw new Error('Token Meta não configurado para esta empresa. Reconecte o Facebook em Configurações.');
+  return token;
+};
+
+const getCompanyInstagramToken = async (supabaseAdmin: SupabaseClient, companyId: string): Promise<string> => {
+  const { data, error } = await supabaseAdmin
+    .from('companies')
+    .select('instagram_access_token')
+    .eq('id', companyId)
+    .maybeSingle();
+
+  if (error) throw error;
+  const token = asString((data as any)?.instagram_access_token);
+  if (!token) throw new Error('Token Instagram não configurado');
+  return token;
+};
+
+export const loadDashboardBootstrap = async (supabaseAdmin: SupabaseClient, token: string) => {
+  const link = await getPortalLinkRow(supabaseAdmin, token);
+  let metaAccountName = link.meta_ad_account_name || link.meta_ad_account_id;
+  let instagramProfile: InstagramOverview['profile'] | null = null;
+
+  try {
+    const metaToken = await getCompanyMetaToken(supabaseAdmin, link.company_id);
+    metaAccountName = await getMetaAccountName(metaToken, link.meta_ad_account_id);
+
+    if (link.instagram_business_account_id) {
+      const igToken = await getCompanyInstagramToken(supabaseAdmin, link.company_id).catch(() => metaToken);
+      const baseUrl = `https://graph.facebook.com/${META_GRAPH_VERSION}/${link.instagram_business_account_id}`;
+      const profileJson = await fetchJson(
+        `${baseUrl}?fields=username,name,followers_count,media_count,profile_picture_url&access_token=${igToken}`,
+      ).catch(() => null);
+      if (profileJson) {
+        instagramProfile = {
+          username: asString(profileJson?.username),
+          name: asString(profileJson?.name),
+          followersCount: asNumber(profileJson?.followers_count),
+          mediaCount: asNumber(profileJson?.media_count),
+          profilePictureUrl: asString(profileJson?.profile_picture_url),
+        };
+      }
+    }
+  } catch {
+    // return partial data even if Meta calls fail
+  }
+
+  return {
+    id: link.id,
+    name: link.name,
+    clientName: link.client_name,
+    metaAdAccountId: link.meta_ad_account_id,
+    metaAdAccountName: metaAccountName,
+    instagramBusinessAccountId: link.instagram_business_account_id,
+    instagramUsername: link.instagram_username || instagramProfile?.username || null,
+    instagramProfile,
+  };
+};
+
+export const loadDashboardData = async (
+  supabaseAdmin: SupabaseClient,
+  token: string,
+  dateFromRaw?: string,
+  dateToRaw?: string,
+  campaignIds?: string[],
+) => {
+  const link = await getPortalLinkRow(supabaseAdmin, token);
+  const metaToken = await getCompanyMetaToken(supabaseAdmin, link.company_id);
+  const window = buildDateWindow(dateFromRaw, dateToRaw);
+  const { metaCampaignIds } = splitCampaignIds(campaignIds ?? []);
+
+  const igToken = link.instagram_business_account_id
+    ? await getCompanyInstagramToken(supabaseAdmin, link.company_id).catch(() => metaToken)
+    : metaToken;
+
+  const [meta, instagram] = await Promise.all([
+    aggregateMetaOverview(metaToken, link.meta_ad_account_id, window.dateFrom, window.dateTo, metaCampaignIds),
+    link.instagram_business_account_id
+      ? buildInstagramOverview(igToken, link.instagram_business_account_id, window.dateFrom, window.dateTo)
+      : Promise.resolve(buildEmptyInstagramOverview('Instagram não configurado para este portal')),
+  ]);
+
+  // also compute previous period for delta
+  const prevDays = dateDiffDays(window.dateFrom, window.dateTo) + 1;
+  const prevEnd = new Date(`${window.dateFrom}T00:00:00.000Z`);
+  prevEnd.setUTCDate(prevEnd.getUTCDate() - 1);
+  const prevStart = new Date(prevEnd);
+  prevStart.setUTCDate(prevStart.getUTCDate() - (prevDays - 1));
+  const prevDateFrom = prevStart.toISOString().slice(0, 10);
+  const prevDateTo = prevEnd.toISOString().slice(0, 10);
+
+  const [prevMeta, prevInstagram] = await Promise.all([
+    aggregateMetaOverview(metaToken, link.meta_ad_account_id, prevDateFrom, prevDateTo, []),
+    link.instagram_business_account_id
+      ? buildInstagramOverview(igToken, link.instagram_business_account_id, prevDateFrom, prevDateTo)
+      : Promise.resolve(buildEmptyInstagramOverview('')),
+  ]);
+
+  return {
+    dateFrom: window.dateFrom,
+    dateTo: window.dateTo,
+    prevDateFrom,
+    prevDateTo,
+    meta,
+    prevMeta,
+    instagram,
+    prevInstagram,
+  };
+};
+
+export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: string) => {
+  const link = await getPortalLinkRow(supabaseAdmin, token);
+  const metaToken = await getCompanyMetaToken(supabaseAdmin, link.company_id);
+
+  const today = new Date();
+  const periodEnd = new Date(today);
+  periodEnd.setUTCDate(periodEnd.getUTCDate() - 1);
+  const periodStart = new Date(periodEnd);
+  periodStart.setUTCDate(periodStart.getUTCDate() - 6);
+  const periodStartStr = periodStart.toISOString().slice(0, 10);
+  const periodEndStr = periodEnd.toISOString().slice(0, 10);
+
+  const igToken = link.instagram_business_account_id
+    ? await getCompanyInstagramToken(supabaseAdmin, link.company_id).catch(() => metaToken)
+    : metaToken;
+
+  const [meta, instagram] = await Promise.all([
+    aggregateMetaOverview(metaToken, link.meta_ad_account_id, periodStartStr, periodEndStr, []),
+    link.instagram_business_account_id
+      ? buildInstagramOverview(igToken, link.instagram_business_account_id, periodStartStr, periodEndStr)
+      : Promise.resolve(buildEmptyInstagramOverview('')),
+  ]);
+
+  const companyName = link.client_name || link.name || 'Cliente';
+  const metrics: Json = {
+    period: { start: periodStartStr, end: periodEndStr, days: 7 },
+    meta,
+    instagram,
+  };
+
+  const narrative = await generateWeeklyNarrative({ companyName, periodStart: periodStartStr, periodEnd: periodEndStr, metrics });
+
+  return {
+    periodStart: periodStartStr,
+    periodEnd: periodEndStr,
+    summary: narrative.summary,
+    highlights: narrative.highlights,
+    risks: narrative.risks,
+    next_week: narrative.next_week,
+    meta: {
+      spend: meta.summary.spend,
+      impressions: meta.summary.impressions,
+      reach: meta.summary.reach,
+      results: meta.summary.results,
+      ctr: meta.summary.ctr,
+      cpc: meta.summary.cpc,
+      campaigns: meta.campaigns.length,
+    },
+    instagram: {
+      totalReach: instagram.summary.totalReach,
+      totalViews: instagram.summary.totalViews,
+      totalProfileViews: instagram.summary.totalProfileViews,
+      totalFollowerGain: instagram.summary.totalFollowerGain,
+    },
+  };
+};
+
 ensureSupabase();
