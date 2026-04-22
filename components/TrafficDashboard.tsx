@@ -111,7 +111,7 @@ function SpendTooltip({ active, payload, label }: any) {
         <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
           <div style={{ width: 6, height: 6, borderRadius: 2, background: p.color }} />
           <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>
-            {p.dataKey === 'metaSpend' ? fmtBRL(p.value) : `${fmtNum(p.value)} leads`}
+            {p.dataKey === 'metaSpend' ? fmtBRL(p.value) : `${fmtNum(p.value)} resultados`}
           </span>
         </div>
       ))}
@@ -181,6 +181,7 @@ export function TrafficDashboard({
 }: TrafficDashboardProps) {
   const rows   = demoMode && rawRows.length === 0   ? DEMO_ROWS   : rawRows;
   const series = demoMode && rawSeries.length === 0 ? DEMO_SERIES : rawSeries;
+  const seriesResultLabel = summary ? getSummaryResultMeta(summary).label : 'Resultados';
 
   const dateLabel = useMemo(() => {
     if (datePreset === 'today')       return 'Hoje';
@@ -214,7 +215,7 @@ export function TrafficDashboard({
     const ctr       = summary != null ? summary.media.ctr / 100 : impressions > 0 ? clicks / impressions : 0;
     const cpm       = summary?.media.cpm ?? (impressions > 0 ? (spend / impressions) * 1000 : 0);
     const cpc       = summary?.media.cpc ?? (clicks > 0 ? spend / clicks : 0);
-    const cpr       = results > 0 ? spend / results : 0;
+    const cpa       = results > 0 ? spend / results : 0;
     const frequency = summary?.media.frequency ?? (reach > 0 ? impressions / reach : 0);
 
     const withIdc = active.filter((r) => r.idc != null);
@@ -230,22 +231,27 @@ export function TrafficDashboard({
 
     // Group by campaign if available, else by row
     const hasCampNames = active.some((r) => r.campaignName);
-    const rankMap = new Map<string, { name: string; spend: number; results: number; clicks: number; impressions: number }>();
+    const rankMap = new Map<string, { name: string; spend: number; results: number; clicks: number; impressions: number; resultLabelWeights: Map<string, number> }>();
     for (const r of active) {
       const key  = String(hasCampNames ? (r.campaignId ?? r.campaignName ?? r.adId) : r.adId);
       const name = (hasCampNames ? r.campaignName ?? 'Sem campanha' : r.adName).slice(0, 30);
-      const cur  = rankMap.get(key) ?? { name, spend: 0, results: 0, clicks: 0, impressions: 0 };
+      const cur  = rankMap.get(key) ?? { name, spend: 0, results: 0, clicks: 0, impressions: 0, resultLabelWeights: new Map<string, number>() };
       cur.spend       += r.spend;
       cur.results     += r.results ?? r.leads ?? 0;
       cur.clicks      += r.inlineLinkClicks ?? r.clicks ?? 0;
       cur.impressions += r.impressions;
+      if (r.resultLabel) cur.resultLabelWeights.set(r.resultLabel, (cur.resultLabelWeights.get(r.resultLabel) ?? 0) + r.spend);
       rankMap.set(key, cur);
     }
     const ranking = [...rankMap.values()]
       .map((r) => ({
         ...r,
         ctr: r.impressions > 0 ? r.clicks / r.impressions : 0,
-        cpr: r.results > 0 ? r.spend / r.results : 0,
+        cpa: r.results > 0 ? r.spend / r.results : 0,
+        resultLabel:
+          [...r.resultLabelWeights.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
+          summaryResult?.label ??
+          'Resultados',
       }))
       .sort((a, b) => b.spend - a.spend)
       .slice(0, 6);
@@ -264,7 +270,7 @@ export function TrafficDashboard({
     const withRoas = active.filter((r) => (r.roas ?? 0) > 0);
     const avgRoas = withRoas.length ? withRoas.reduce((s, r) => s + (r.roas ?? 0), 0) / withRoas.length : null;
 
-    return { spend, impressions, reach, clicks, results, ctr, cpm, cpc, cpr, frequency, avgIdc, classCount, hasClass, ranking, resultLabel, avgHookRate, avgHoldRate, avgRoas };
+    return { spend, impressions, reach, clicks, results, ctr, cpm, cpc, cpa, frequency, avgIdc, classCount, hasClass, ranking, resultLabel, avgHookRate, avgHoldRate, avgRoas };
   }, [rows, summary]);
 
   const health = useMemo(() => {
@@ -314,7 +320,7 @@ export function TrafficDashboard({
   const kpis = [
     { label: 'Investimento', value: fmtBRL(m.spend),                                    sub: `${fmtNum(m.impressions)} impressões`,   icon: DollarSign,      color: C.blue    },
     { label: m.resultLabel,  value: fmtNum(m.results),                                  sub: `Alcance: ${fmtNum(m.reach)}`,           icon: Target,          color: C.emerald },
-    { label: 'CPR',          value: m.cpr > 0 ? fmtBRL(m.cpr) : '—',                   sub: 'Custo por resultado',                   icon: Zap,             color: C.purple  },
+    { label: 'CPA',          value: m.cpa > 0 ? fmtBRL(m.cpa) : '—',                   sub: 'Custo por aquisição',                   icon: Zap,             color: C.purple  },
     { label: 'CTR',          value: fmtPct(m.ctr),                                      sub: `${fmtNum(m.clicks)} cliques`,           icon: MousePointerClick, color: C.amber },
     { label: 'CPM',          value: fmtBRL(m.cpm),                                      sub: 'Por mil impressões',                    icon: Eye,             color: C.pink    },
     { label: 'Frequência',   value: m.frequency.toFixed(2),                             sub: `CPC: ${fmtBRL(m.cpc)}`,                icon: RefreshCw,       color: m.frequency > 3.5 ? C.red : m.frequency > 2.5 ? C.amber : C.emerald },
@@ -412,7 +418,7 @@ export function TrafficDashboard({
             </AreaChart>
           </ResponsiveContainer>
           <div style={{ display: 'flex', gap: 14, marginTop: 8 }}>
-            {[{ color: C.blue, label: 'Gasto (R$)' }, { color: C.emerald, label: 'Leads' }].map((l) => (
+            {[{ color: C.blue, label: 'Gasto (R$)' }, { color: C.emerald, label: seriesResultLabel }].map((l) => (
               <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <div style={{ width: 8, height: 8, borderRadius: 2, background: l.color }} />
                 <span style={{ fontSize: 11, color: C.muted }}>{l.label}</span>
@@ -456,19 +462,19 @@ export function TrafficDashboard({
 
           {/* Tabela de campanhas */}
           <div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 88px 70px 88px 52px', gap: 8, paddingBottom: 8, borderBottom: `1px solid ${C.border}`, marginBottom: 2 }}>
-              {['Campanha', 'Investido', 'Result.', 'CPR', 'CTR'].map((h) => (
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 88px 92px 88px 52px', gap: 8, paddingBottom: 8, borderBottom: `1px solid ${C.border}`, marginBottom: 2 }}>
+              {['Campanha', 'Investido', 'Resultado', 'CPA', 'CTR'].map((h) => (
                 <span key={h} style={{ fontSize: 10, color: C.muted, fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase' }}>{h}</span>
               ))}
             </div>
             {(() => {
-              const bestCpr = [...m.ranking].filter((c) => c.cpr > 0).sort((a, b) => a.cpr - b.cpr)[0]?.cpr ?? 0;
+              const bestCpa = [...m.ranking].filter((c) => c.cpa > 0).sort((a, b) => a.cpa - b.cpa)[0]?.cpa ?? 0;
               const maxSpend = m.ranking[0]?.spend ?? 1;
               return m.ranking.map((camp, i) => {
-                const cprColor = camp.cpr === 0 ? C.muted : camp.cpr <= bestCpr * 1.3 ? C.emerald : camp.cpr <= bestCpr * 2 ? C.amber : C.red;
+                const cpaColor = camp.cpa === 0 ? C.muted : camp.cpa <= bestCpa * 1.3 ? C.emerald : camp.cpa <= bestCpa * 2 ? C.amber : C.red;
                 const spendPct = (camp.spend / maxSpend) * 100;
                 return (
-                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 88px 70px 88px 52px', gap: 8, padding: '9px 0', borderBottom: '1px solid rgba(255,255,255,0.03)', alignItems: 'center' }}>
+                  <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr 88px 92px 88px 52px', gap: 8, padding: '9px 0', borderBottom: '1px solid rgba(255,255,255,0.03)', alignItems: 'center' }}>
                     <div>
                       <div style={{ fontSize: 12, color: C.text, fontWeight: 500, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {camp.name}
@@ -478,8 +484,11 @@ export function TrafficDashboard({
                       </div>
                     </div>
                     <span style={{ fontSize: 12, color: C.sub, fontVariantNumeric: 'tabular-nums' }}>{fmtBRL(camp.spend)}</span>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{fmtNum(camp.results)}</span>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: cprColor, fontVariantNumeric: 'tabular-nums' }}>{camp.cpr > 0 ? fmtBRL(camp.cpr) : '—'}</span>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: C.text, fontVariantNumeric: 'tabular-nums' }}>{fmtNum(camp.results)}</div>
+                      <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.2 }}>{camp.resultLabel}</div>
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: cpaColor, fontVariantNumeric: 'tabular-nums' }}>{camp.cpa > 0 ? fmtBRL(camp.cpa) : '—'}</span>
                     <span style={{ fontSize: 12, color: C.sub, fontVariantNumeric: 'tabular-nums' }}>{fmtPct(camp.ctr)}</span>
                   </div>
                 );

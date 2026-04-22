@@ -742,6 +742,27 @@ const resolveDominantNativeType = (rows: AdMetric[]): NativeResultType | null =>
   return dominant;
 };
 
+const getPlatformValueByNativeType = (platform: ReportPlatformSummary, nativeType: NativeResultType | null) => {
+  switch (nativeType) {
+    case 'messages_started':
+      return platform.messagesStarted;
+    case 'lead_forms':
+      return platform.leadForms;
+    case 'site_leads':
+      return platform.siteLeads;
+    case 'profile_visits':
+      return platform.profileVisits;
+    case 'followers':
+      return platform.followers;
+    case 'video_views':
+      return platform.thruplays > 0 ? platform.thruplays : platform.videoViews;
+    case 'purchases':
+      return platform.purchases;
+    default:
+      return platform.businessLeads;
+  }
+};
+
 const extractRoas = (purchaseRoas: any[] | undefined) => {
   if (!Array.isArray(purchaseRoas) || purchaseRoas.length === 0) return undefined;
   return purchaseRoas.reduce((sum, r) => sum + parseNumber(r.value), 0);
@@ -1497,6 +1518,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     providerToken: string,
     adAccountId: string,
     periodOverride: { start: string; end: string },
+    nativeType: NativeResultType | null = null,
   ) => {
     const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
     url.searchParams.set('level', 'account');
@@ -1513,7 +1535,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       const buckets = buildPlatformBuckets(row);
       return {
         metaSpend: parseNumber(row.spend),
-        metaLeads: buckets.businessLeads,
+        metaLeads: getPlatformValueByNativeType(buckets, nativeType),
       };
     });
   };
@@ -1822,36 +1844,37 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       timeseriesUrl.searchParams.set('limit', '50');
       timeseriesUrl.searchParams.set('access_token', providerToken);
 
-      const tsRes = await fetch(timeseriesUrl.toString());
-      const tsJson = await tsRes.json();
-      if (tsRes.ok && !tsJson?.error) {
-        const ts = Array.isArray(tsJson?.data) ? tsJson.data : [];
+      const tsResPromise = fetch(timeseriesUrl.toString()).then(async (res) => ({
+        ok: res.ok,
+        json: await res.json(),
+      }));
+
+      const [tsPayload, accountSummary, nextMapped] = await Promise.all([
+        tsResPromise,
+        fetchAccountSummary(providerToken, adAccountId, selectedDateRange ?? getRangeForPreset('last_7d')),
+        fetchTrafficRowsFromMeta(providerToken, adAccountId, adAccountName),
+      ]);
+      const dominantNativeType = resolveDominantNativeType(nextMapped);
+      setDashboardSummary({
+        media: accountSummary.media,
+        platform: accountSummary.platform,
+        dominantNativeType,
+      });
+      if (tsPayload.ok && !tsPayload.json?.error) {
+        const ts = Array.isArray(tsPayload.json?.data) ? tsPayload.json.data : [];
         setComparisonData(
           buildComparisonSeries(
             ts,
             selectedDateRange ?? getRangeForPreset('last_7d'),
             (row: any) => ({
               metaSpend: parseNumber(row.spend),
-              metaLeads:
-                (extractLeadFormsFromActions(row.actions) ?? 0) +
-                (extractMessagingConversationsFromActions(row.actions) ?? 0) +
-                (extractSiteLeadsFromActions(row.actions) ?? 0),
+              metaLeads: getPlatformValueByNativeType(buildPlatformBuckets(row), dominantNativeType),
             }),
           ),
         );
       } else {
         setComparisonData([]);
       }
-
-      const [accountSummary, nextMapped] = await Promise.all([
-        fetchAccountSummary(providerToken, adAccountId, selectedDateRange ?? getRangeForPreset('last_7d')),
-        fetchTrafficRowsFromMeta(providerToken, adAccountId, adAccountName),
-      ]);
-      setDashboardSummary({
-        media: accountSummary.media,
-        platform: accountSummary.platform,
-        dominantNativeType: resolveDominantNativeType(nextMapped),
-      });
       setRows(computeScores(nextMapped));
       if (nextMapped.length === 0) setErrorMsg('Sem dados para esse período.');
       return;
@@ -2265,13 +2288,19 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       if (!selectedAdAccountId) throw new Error('Selecione uma conta de anúncio para gerar o relatório.');
 
       const selectedAccountName = adAccounts.find((a) => a.id === selectedAdAccountId)?.name ?? null;
-      const [currentMeta, previousMeta, currentTimeseries, reportRows, topAdRows] = await Promise.all([
+      const [currentMeta, previousMeta, reportRows, topAdRows] = await Promise.all([
         fetchAccountSummary(providerToken, selectedAdAccountId, { start: periodStart, end: periodEnd }),
         fetchAccountSummary(providerToken, selectedAdAccountId, { start: prevDates.start, end: prevDates.end }),
-        fetchAccountTimeseries(providerToken, selectedAdAccountId, { start: periodStart, end: periodEnd }),
         fetchTrafficRowsFromMeta(providerToken, selectedAdAccountId, selectedAccountName, { start: periodStart, end: periodEnd }, selectedLevel).then(computeScores),
         fetchTrafficRowsFromMeta(providerToken, selectedAdAccountId, selectedAccountName, { start: periodStart, end: periodEnd }, 'ad').then(computeScores),
       ]);
+      const dominantNativeType = resolveDominantNativeType(reportRows);
+      const currentTimeseries = await fetchAccountTimeseries(
+        providerToken,
+        selectedAdAccountId,
+        { start: periodStart, end: periodEnd },
+        dominantNativeType,
+      );
       const [currentBusiness, previousBusiness] = reportHasScopedSelection
         ? await Promise.all([
             Promise.resolve({
