@@ -444,6 +444,17 @@ const extractActionTotal = (actions: any[] | undefined) => {
   return actions.reduce((sum, a) => sum + parseNumber(a?.value), 0);
 };
 
+const deriveCountFromCostPerAction = (
+  spend: number,
+  costPerAction: any[] | undefined,
+  selector: (actions: any[] | undefined) => number | undefined,
+) => {
+  if (!Number.isFinite(spend) || spend <= 0) return undefined;
+  const cost = selector(costPerAction);
+  if (!Number.isFinite(cost) || (cost ?? 0) <= 0) return undefined;
+  return Math.max(0, Math.round(spend / cost));
+};
+
 const extractLeadFormsFromActions = (actions: any[] | undefined) =>
   extractActionSum(
     actions,
@@ -790,15 +801,32 @@ const extractRoas = (purchaseRoas: any[] | undefined) => {
   return purchaseRoas.reduce((sum, r) => sum + parseNumber(r.value), 0);
 };
 
-const buildPlatformBuckets = (row: { actions?: any[]; video_thruplay_watched_actions?: any[] }): PlatformBuckets => {
-  const leadForms = extractLeadFormsFromActions(row.actions) ?? 0;
-  const messagesStarted = extractMessagingConversationsFromActions(row.actions) ?? 0;
-  const siteLeads = extractSiteLeadsFromActions(row.actions) ?? 0;
-  const landingPageViews = extractLandingPageViewsFromActions(row.actions) ?? 0;
+const buildPlatformBuckets = (row: { actions?: any[]; cost_per_action_type?: any[]; video_thruplay_watched_actions?: any[]; spend?: number | string }): PlatformBuckets => {
+  const spend = parseNumber((row as any)?.spend);
+  const leadForms =
+    extractLeadFormsFromActions(row.actions) ??
+    deriveCountFromCostPerAction(spend, row.cost_per_action_type, extractLeadFormsFromActions) ??
+    0;
+  const messagesStarted =
+    extractMessagingConversationsFromActions(row.actions) ??
+    deriveCountFromCostPerAction(spend, row.cost_per_action_type, extractMessagingConversationsFromActions) ??
+    0;
+  const siteLeads =
+    extractSiteLeadsFromActions(row.actions) ??
+    deriveCountFromCostPerAction(spend, row.cost_per_action_type, extractSiteLeadsFromActions) ??
+    0;
+  const landingPageViews =
+    extractLandingPageViewsFromActions(row.actions) ??
+    deriveCountFromCostPerAction(spend, row.cost_per_action_type, extractLandingPageViewsFromActions) ??
+    0;
   const profileVisits = extractProfileVisitsFromActions(row.actions) ?? 0;
   const followers = extractFollowersFromActions(row.actions) ?? 0;
   const videoViews = extractVideo3sFromActions(row.actions) ?? 0;
-  const thruplays = extractVideo15sFromActions(row.actions) ?? extractActionTotal(row.video_thruplay_watched_actions) ?? 0;
+  const thruplays =
+    extractVideo15sFromActions(row.actions) ??
+    extractActionTotal(row.video_thruplay_watched_actions) ??
+    deriveCountFromCostPerAction(spend, row.cost_per_action_type, extractVideo15sFromActions) ??
+    0;
   const purchases = extractPurchasesFromActions(row.actions) ?? 0;
 
   return {
@@ -1469,7 +1497,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
           : level === 'adset'
             ? 'adset_id,adset_name,campaign_id,campaign_name'
             : 'ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name',
-        'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,purchase_roas,video_thruplay_watched_actions',
+        'objective,impressions,reach,clicks,inline_link_clicks,cpm,frequency,spend,cpc,ctr,actions,cost_per_action_type,purchase_roas,video_thruplay_watched_actions',
       ].join(','),
     );
     applyTimeRange(insightsUrl, periodOverride);
@@ -1505,7 +1533,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
     url.searchParams.set(
       'fields',
-      'impressions,reach,clicks,inline_link_clicks,spend,cpc,cpm,ctr,frequency,actions,video_thruplay_watched_actions',
+      'impressions,reach,clicks,inline_link_clicks,spend,cpc,cpm,ctr,frequency,actions,cost_per_action_type,video_thruplay_watched_actions',
     );
     url.searchParams.set('level', 'account');
     const filters = buildInsightsFilters('account');
