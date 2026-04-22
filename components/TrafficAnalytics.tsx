@@ -196,32 +196,34 @@ const formatDateBr = (value: string) => {
 const buildComparisonSeries = (
   rows: any[],
   range: DateRange,
-  mapValue: (row: any) => { metaSpend: number; metaLeads: number },
+  mapValue: (row: any) => { metaSpend: number; metaLeads: number; metaMessages: number },
 ) => {
-  const byDay = new Map<string, { metaSpend: number; metaLeads: number }>();
+  const byDay = new Map<string, { metaSpend: number; metaLeads: number; metaMessages: number }>();
 
   for (const row of rows) {
     const key = String(row?.date_start ?? '').slice(0, 10);
     if (!key) continue;
-    const current = byDay.get(key) ?? { metaSpend: 0, metaLeads: 0 };
+    const current = byDay.get(key) ?? { metaSpend: 0, metaLeads: 0, metaMessages: 0 };
     const next = mapValue(row);
     byDay.set(key, {
       metaSpend: current.metaSpend + next.metaSpend,
       metaLeads: current.metaLeads + next.metaLeads,
+      metaMessages: current.metaMessages + next.metaMessages,
     });
   }
 
-  const output: Array<{ name: string; metaSpend: number; metaLeads: number }> = [];
+  const output: Array<{ name: string; metaSpend: number; metaLeads: number; metaMessages: number }> = [];
   const cursor = new Date(`${range.start}T00:00:00.000Z`);
   const endDate = new Date(`${range.end}T00:00:00.000Z`);
 
   while (cursor <= endDate) {
     const iso = isoUtcDate(cursor);
-    const point = byDay.get(iso) ?? { metaSpend: 0, metaLeads: 0 };
+    const point = byDay.get(iso) ?? { metaSpend: 0, metaLeads: 0, metaMessages: 0 };
     output.push({
       name: `${iso.slice(8, 10)}/${iso.slice(5, 7)}`,
       metaSpend: point.metaSpend,
       metaLeads: point.metaLeads,
+      metaMessages: point.metaMessages,
     });
     cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
@@ -360,13 +362,13 @@ const mockAds: AdMetric[] = [
 ];
 
 const mockComparisonData = [
-  { name: 'Seg', metaSpend: 400, metaLeads: 24 },
-  { name: 'Ter', metaSpend: 300, metaLeads: 14 },
-  { name: 'Qua', metaSpend: 200, metaLeads: 98 },
-  { name: 'Qui', metaSpend: 278, metaLeads: 39 },
-  { name: 'Sex', metaSpend: 189, metaLeads: 48 },
-  { name: 'Sab', metaSpend: 239, metaLeads: 38 },
-  { name: 'Dom', metaSpend: 349, metaLeads: 43 },
+  { name: 'Seg', metaSpend: 400, metaLeads: 24, metaMessages: 8 },
+  { name: 'Ter', metaSpend: 300, metaLeads: 14, metaMessages: 6 },
+  { name: 'Qua', metaSpend: 200, metaLeads: 18, metaMessages: 12 },
+  { name: 'Qui', metaSpend: 278, metaLeads: 39, metaMessages: 10 },
+  { name: 'Sex', metaSpend: 189, metaLeads: 28, metaMessages: 9 },
+  { name: 'Sab', metaSpend: 239, metaLeads: 18, metaMessages: 7 },
+  { name: 'Dom', metaSpend: 349, metaLeads: 23, metaMessages: 11 },
 ];
 
 const normalizeAdAccountId = (id: string) => {
@@ -820,7 +822,10 @@ const buildPlatformBuckets = (row: { actions?: any[]; cost_per_action_type?: any
     extractLandingPageViewsFromActions(row.actions) ??
     deriveCountFromCostPerAction(spend, row.cost_per_action_type, extractLandingPageViewsFromActions) ??
     0;
-  const profileVisits = extractProfileVisitsFromActions(row.actions) ?? 0;
+  const profileVisits =
+    extractProfileVisitsFromActions(row.actions) ??
+    deriveCountFromCostPerAction(spend, row.cost_per_action_type, extractProfileVisitsFromActions) ??
+    0;
   const followers = extractFollowersFromActions(row.actions) ?? 0;
   const videoViews = extractVideo3sFromActions(row.actions) ?? 0;
   const thruplays =
@@ -1573,11 +1578,10 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     providerToken: string,
     adAccountId: string,
     periodOverride: { start: string; end: string },
-    nativeType: NativeResultType | null = null,
   ) => {
     const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
     url.searchParams.set('level', 'account');
-    url.searchParams.set('fields', 'date_start,spend,impressions,actions,video_thruplay_watched_actions');
+    url.searchParams.set('fields', 'date_start,spend,impressions,actions,cost_per_action_type,video_thruplay_watched_actions');
     url.searchParams.set('time_increment', '1');
     const filters = buildInsightsFilters('account');
     if (filters.length) url.searchParams.set('filtering', JSON.stringify(filters));
@@ -1590,7 +1594,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       const buckets = buildPlatformBuckets(row);
       return {
         metaSpend: parseNumber(row.spend),
-        metaLeads: getPlatformValueByNativeType(buckets, nativeType),
+        metaLeads: buckets.leadForms + buckets.siteLeads,
+        metaMessages: buckets.messagesStarted,
       };
     });
   };
@@ -1891,21 +1896,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         }
       }
 
-      const timeseriesUrl = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
-      timeseriesUrl.searchParams.set('level', 'account');
-      timeseriesUrl.searchParams.set('fields', 'date_start,spend,impressions,actions');
-      applyTimeRange(timeseriesUrl);
-      timeseriesUrl.searchParams.set('time_increment', '1');
-      timeseriesUrl.searchParams.set('limit', '50');
-      timeseriesUrl.searchParams.set('access_token', providerToken);
-
-      const tsResPromise = fetch(timeseriesUrl.toString()).then(async (res) => ({
-        ok: res.ok,
-        json: await res.json(),
-      }));
-
-      const [tsPayload, accountSummary, nextMapped] = await Promise.all([
-        tsResPromise,
+      const [timeseries, accountSummary, nextMapped] = await Promise.all([
+        fetchAccountTimeseries(providerToken, adAccountId, selectedDateRange ?? getRangeForPreset('last_7d')),
         fetchAccountSummary(providerToken, adAccountId, selectedDateRange ?? getRangeForPreset('last_7d')),
         fetchTrafficRowsFromMeta(providerToken, adAccountId, adAccountName),
       ]);
@@ -1915,21 +1907,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         platform: accountSummary.platform,
         dominantNativeType,
       });
-      if (tsPayload.ok && !tsPayload.json?.error) {
-        const ts = Array.isArray(tsPayload.json?.data) ? tsPayload.json.data : [];
-        setComparisonData(
-          buildComparisonSeries(
-            ts,
-            selectedDateRange ?? getRangeForPreset('last_7d'),
-            (row: any) => ({
-              metaSpend: parseNumber(row.spend),
-              metaLeads: getPlatformValueByNativeType(buildPlatformBuckets(row), dominantNativeType),
-            }),
-          ),
-        );
-      } else {
-        setComparisonData([]);
-      }
+      setComparisonData(timeseries);
       setRows(computeScores(nextMapped));
       if (nextMapped.length === 0) setErrorMsg('Sem dados para esse período.');
       return;
@@ -2354,7 +2332,6 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         providerToken,
         selectedAdAccountId,
         { start: periodStart, end: periodEnd },
-        dominantNativeType,
       );
       const [currentBusiness, previousBusiness] = reportHasScopedSelection
         ? await Promise.all([

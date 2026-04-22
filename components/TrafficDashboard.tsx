@@ -25,7 +25,7 @@ import type { AdMetric, NativeResultType } from '../types';
 
 interface TrafficDashboardProps {
   rows: AdMetric[];
-  comparisonData: { name: string; metaSpend: number; metaLeads: number }[];
+  comparisonData: { name: string; metaSpend: number; metaLeads: number; metaMessages: number }[];
   summary?: {
     media: {
       invest: number;
@@ -86,13 +86,13 @@ const fmtPct = (v: number, d = 2) => `${(v * 100).toFixed(d)}%`;
 const fmtShort = (v: number) => (v >= 1000 ? `R$${(v / 1000).toFixed(1)}k` : fmtBRL(v));
 
 const DEMO_SERIES = [
-  { name: 'Seg', metaSpend: 620, metaLeads: 28 },
-  { name: 'Ter', metaSpend: 480, metaLeads: 21 },
-  { name: 'Qua', metaSpend: 790, metaLeads: 44 },
-  { name: 'Qui', metaSpend: 710, metaLeads: 39 },
-  { name: 'Sex', metaSpend: 940, metaLeads: 58 },
-  { name: 'Sáb', metaSpend: 360, metaLeads: 17 },
-  { name: 'Dom', metaSpend: 290, metaLeads: 13 },
+  { name: 'Seg', metaSpend: 620, metaLeads: 28, metaMessages: 9 },
+  { name: 'Ter', metaSpend: 480, metaLeads: 21, metaMessages: 7 },
+  { name: 'Qua', metaSpend: 790, metaLeads: 24, metaMessages: 14 },
+  { name: 'Qui', metaSpend: 710, metaLeads: 39, metaMessages: 12 },
+  { name: 'Sex', metaSpend: 940, metaLeads: 28, metaMessages: 16 },
+  { name: 'Sáb', metaSpend: 360, metaLeads: 17, metaMessages: 5 },
+  { name: 'Dom', metaSpend: 290, metaLeads: 13, metaMessages: 4 },
 ];
 
 const DEMO_ROWS: AdMetric[] = [
@@ -112,7 +112,11 @@ function SpendTooltip({ active, payload, label }: any) {
         <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
           <div style={{ width: 6, height: 6, borderRadius: 2, background: p.color }} />
           <span style={{ color: C.text, fontSize: 13, fontWeight: 600 }}>
-            {p.dataKey === 'metaSpend' ? fmtBRL(p.value) : `${fmtNum(p.value)} resultados`}
+            {p.dataKey === 'metaSpend'
+              ? fmtBRL(p.value)
+              : p.dataKey === 'metaMessages'
+                ? `${fmtNum(p.value)} mensagens`
+                : `${fmtNum(p.value)} leads`}
           </span>
         </div>
       ))}
@@ -184,8 +188,6 @@ export function TrafficDashboard({
 }: TrafficDashboardProps) {
   const rows   = demoMode && rawRows.length === 0   ? DEMO_ROWS   : rawRows;
   const series = demoMode && rawSeries.length === 0 ? DEMO_SERIES : rawSeries;
-  const seriesResultLabel = summary ? getSummaryResultMeta(summary).label : 'Resultados';
-
   const dateLabel = useMemo(() => {
     if (datePreset === 'today')       return 'Hoje';
     if (datePreset === 'yesterday')   return 'Ontem';
@@ -400,6 +402,10 @@ export function TrafficDashboard({
                   <stop offset="5%"  stopColor={C.emerald} stopOpacity={0.22} />
                   <stop offset="95%" stopColor={C.emerald} stopOpacity={0}    />
                 </linearGradient>
+                <linearGradient id="tdGm" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%"  stopColor={C.purple} stopOpacity={0.18} />
+                  <stop offset="95%" stopColor={C.purple} stopOpacity={0}    />
+                </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" vertical={false} />
               <XAxis
@@ -418,10 +424,11 @@ export function TrafficDashboard({
               <Tooltip content={<SpendTooltip />} />
               <Area type="monotone" dataKey="metaSpend" stroke={C.blue}    strokeWidth={2} fill="url(#tdGs)" dot={false} activeDot={{ r: 4, fill: C.blue    }} />
               <Area type="monotone" dataKey="metaLeads" stroke={C.emerald} strokeWidth={2} fill="url(#tdGl)" dot={false} activeDot={{ r: 4, fill: C.emerald }} />
+              <Area type="monotone" dataKey="metaMessages" stroke={C.purple} strokeWidth={2} fill="url(#tdGm)" dot={false} activeDot={{ r: 4, fill: C.purple }} />
             </AreaChart>
           </ResponsiveContainer>
           <div style={{ display: 'flex', gap: 14, marginTop: 8 }}>
-            {[{ color: C.blue, label: 'Gasto (R$)' }, { color: C.emerald, label: seriesResultLabel }].map((l) => (
+            {[{ color: C.blue, label: 'Gasto (R$)' }, { color: C.emerald, label: 'Leads' }, { color: C.purple, label: 'Mensagens' }].map((l) => (
               <div key={l.label} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                 <div style={{ width: 8, height: 8, borderRadius: 2, background: l.color }} />
                 <span style={{ fontSize: 11, color: C.muted }}>{l.label}</span>
