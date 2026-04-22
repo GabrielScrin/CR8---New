@@ -30,6 +30,21 @@ const safeThemeColor = (value: string | null | undefined) => {
   return color.startsWith('#') ? color : `#${color}`;
 };
 
+const isClientPortalSchemaMissing = (error: unknown) => {
+  const msg = String((error as any)?.message ?? '').toLowerCase();
+  return (
+    msg.includes('client_portals') ||
+    msg.includes('client_portal_companies') ||
+    msg.includes('schema cache') ||
+    msg.includes('could not find the table') ||
+    msg.includes('does not exist') ||
+    msg.includes('relation')
+  );
+};
+
+const clientPortalSchemaMessage =
+  "Migrations do portal do cliente nao foram aplicadas ainda. Rode `supabase db push`. Se persistir, no Supabase SQL Editor rode: notify pgrst, 'reload schema'; e recarregue.";
+
 export const ClientPortalManager: React.FC<ClientPortalManagerProps> = ({ companyId }) => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -65,7 +80,7 @@ export const ClientPortalManager: React.FC<ClientPortalManagerProps> = ({ compan
       const { data: authData, error: authError } = await supabase.auth.getUser();
       if (authError) throw authError;
       const userId = authData.user?.id;
-      if (!userId) throw new Error('Sessão inválida.');
+      if (!userId) throw new Error('Sessao invalida.');
 
       const [{ data: membership, error: membershipError }, { data: companyRows, error: companiesError }] = await Promise.all([
         supabase.from('company_members').select('member_role').eq('company_id', companyId).eq('user_id', userId).maybeSingle(),
@@ -92,7 +107,6 @@ export const ClientPortalManager: React.FC<ClientPortalManagerProps> = ({ compan
         .maybeSingle();
 
       if (portalError) throw portalError;
-
       if (!alive) return;
 
       if (portalRow) {
@@ -120,7 +134,11 @@ export const ClientPortalManager: React.FC<ClientPortalManagerProps> = ({ compan
     load()
       .catch((loadError: any) => {
         if (!alive) return;
-        setError(loadError?.message ?? 'Falha ao carregar as configurações do portal.');
+        setError(
+          isClientPortalSchemaMissing(loadError)
+            ? clientPortalSchemaMessage
+            : loadError?.message ?? 'Falha ao carregar as configuracoes do portal.',
+        );
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -224,7 +242,11 @@ export const ClientPortalManager: React.FC<ClientPortalManagerProps> = ({ compan
       setSelectedCompanyIds(nextCompanyIds);
       setMessage(publicToken ? 'Portal salvo com sucesso.' : 'Portal atualizado.');
     } catch (saveError: any) {
-      setError(saveError?.message ?? 'Falha ao salvar o portal.');
+      setError(
+        isClientPortalSchemaMissing(saveError)
+          ? clientPortalSchemaMessage
+          : saveError?.message ?? 'Falha ao salvar o portal.',
+      );
     } finally {
       setSaving(false);
     }
@@ -253,13 +275,13 @@ export const ClientPortalManager: React.FC<ClientPortalManagerProps> = ({ compan
           </div>
           <h3 className="mt-2 text-xl font-bold text-[hsl(var(--foreground))]">Link permanente com acesso controlado</h3>
           <p className="mt-2 max-w-2xl text-sm text-[hsl(var(--muted-foreground))]">
-            Defina quais contas o cliente pode ver no portal unificado, mantenha um link fixo e controle se o acesso está ativo ou inativo.
+            Defina quais contas o cliente pode ver no portal unificado, mantenha um link fixo e controle se o acesso esta ativo ou inativo.
           </p>
         </div>
 
         {portalUrl && (
           <div className="min-w-[300px] rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))]/70 p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Link público</div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Link publico</div>
             <div className="mt-2 break-all text-sm text-[hsl(var(--foreground))]">{portalUrl}</div>
             <div className="mt-3 flex gap-2">
               <button
@@ -309,7 +331,7 @@ export const ClientPortalManager: React.FC<ClientPortalManagerProps> = ({ compan
           </div>
 
           <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] p-4 text-sm text-[hsl(var(--muted-foreground))]">
-            <div className="font-semibold text-[hsl(var(--foreground))]">Empresa padrão</div>
+            <div className="font-semibold text-[hsl(var(--foreground))]">Empresa padrao</div>
             <div className="mt-1">
               {companies.find((row) => row.id === companyId)?.brand_name ?? companies.find((row) => row.id === companyId)?.name ?? 'Empresa atual'}
             </div>
@@ -334,7 +356,7 @@ export const ClientPortalManager: React.FC<ClientPortalManagerProps> = ({ compan
           <div className="mb-3 flex items-center justify-between">
             <div>
               <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[hsl(var(--muted-foreground))]">Contas liberadas</div>
-              <div className="mt-1 text-sm text-[hsl(var(--foreground))]">Escolha exatamente o que o cliente poderá acessar no link permanente.</div>
+              <div className="mt-1 text-sm text-[hsl(var(--foreground))]">Escolha exatamente o que o cliente podera acessar no link permanente.</div>
             </div>
             <div className="text-xs text-[hsl(var(--muted-foreground))]">{selectedCompanyIds.length} conta(s)</div>
           </div>
@@ -358,7 +380,7 @@ export const ClientPortalManager: React.FC<ClientPortalManagerProps> = ({ compan
                     />
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-semibold text-[hsl(var(--foreground))]">{company.brand_name ?? company.name}</div>
-                      <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{locked ? 'Conta padrão obrigatória' : selected ? 'Liberada no portal' : 'Bloqueada no portal'}</div>
+                      <div className="mt-1 text-xs text-[hsl(var(--muted-foreground))]">{locked ? 'Conta padrao obrigatoria' : selected ? 'Liberada no portal' : 'Bloqueada no portal'}</div>
                     </div>
                   </div>
                 </div>
