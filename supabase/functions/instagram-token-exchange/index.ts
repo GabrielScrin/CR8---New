@@ -19,7 +19,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.8';
 
 const corsHeaders: Record<string, string> = {
   'access-control-allow-origin': '*',
-  'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type',
+  'access-control-allow-headers': 'authorization, x-client-info, apikey, content-type, x-supabase-auth, x-access-token',
   'access-control-allow-methods': 'POST, OPTIONS',
 };
 

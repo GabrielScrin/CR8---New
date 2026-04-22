@@ -53,7 +53,6 @@ export async function exchangeIgToken(
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        'x-supabase-auth': `Bearer ${jwt}`,
       },
       body: JSON.stringify({
         company_id: companyId,
