@@ -478,12 +478,13 @@ const extractSiteLeadsFromActions = (actions: any[] | undefined) =>
   );
 
 const extractLandingPageViewsFromActions = (actions: any[] | undefined) =>
-  extractActionSum(
+  extractPreferredActionValue(
     actions,
-    (t) =>
-      t === 'landing_page_view' ||
-      t === 'omni_landing_page_view' ||
-      t.includes('landing_page_view'),
+    [
+      'landing_page_view',
+      'omni_landing_page_view',
+    ],
+    (t) => t.includes('landing_page_view'),
   );
 
 const extractPurchasesFromActions = (actions: any[] | undefined) =>
