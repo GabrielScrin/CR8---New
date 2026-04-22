@@ -168,59 +168,6 @@ const getSummaryResultMeta = (
   }
 };
 
-const getNativeTypeLabel = (nativeType: NativeResultType, hasThruplays = false) => {
-  switch (nativeType) {
-    case 'messages_started':
-      return 'Mensagens iniciadas';
-    case 'lead_forms':
-      return 'Lead Forms';
-    case 'site_leads':
-      return 'Conversoes de site';
-    case 'profile_visits':
-      return 'Visitas ao perfil';
-    case 'followers':
-      return 'Seguidores';
-    case 'video_views':
-      return hasThruplays ? 'ThruPlays' : 'Views 3s';
-    case 'purchases':
-      return 'Compras';
-    default:
-      return 'Resultados';
-  }
-};
-
-const getResultValueForType = (row: AdMetric, nativeType: NativeResultType) => {
-  switch (nativeType) {
-    case 'messages_started':
-      return row.messagesStarted ?? 0;
-    case 'lead_forms':
-      return row.leadForms ?? 0;
-    case 'site_leads':
-      return row.siteLeads ?? 0;
-    case 'profile_visits':
-      return row.profileVisits ?? 0;
-    case 'followers':
-      return row.followers ?? 0;
-    case 'video_views':
-      return (row.thruplays ?? 0) > 0 ? row.thruplays ?? 0 : row.videoViews ?? 0;
-    case 'purchases':
-      return row.results ?? 0;
-    default:
-      return row.results ?? row.leads ?? 0;
-  }
-};
-
-const inferRowNativeType = (row: AdMetric): NativeResultType => {
-  if (row.nativeType && row.nativeType !== 'unknown') return row.nativeType;
-  if ((row.messagesStarted ?? 0) > 0) return 'messages_started';
-  if ((row.leadForms ?? 0) > 0) return 'lead_forms';
-  if ((row.siteLeads ?? 0) > 0) return 'site_leads';
-  if ((row.profileVisits ?? 0) > 0) return 'profile_visits';
-  if ((row.followers ?? 0) > 0) return 'followers';
-  if ((row.thruplays ?? 0) > 0 || (row.videoViews ?? 0) > 0) return 'video_views';
-  return 'unknown';
-};
-
 export function TrafficDashboard({
   rows: rawRows,
   comparisonData: rawSeries,
@@ -284,69 +231,28 @@ export function TrafficDashboard({
 
     // Group by campaign if available, else by row
     const hasCampNames = active.some((r) => r.campaignName);
-    const rankMap = new Map<
-      string,
-      {
-        name: string;
-        spend: number;
-        results: number;
-        clicks: number;
-        impressions: number;
-        hasThruplays: boolean;
-        typedSpend: Map<NativeResultType, number>;
-        typedResults: Map<NativeResultType, number>;
-        resultLabelWeights: Map<string, number>;
-      }
-    >();
+    const rankMap = new Map<string, { name: string; spend: number; results: number; clicks: number; impressions: number; resultLabelWeights: Map<string, number> }>();
     for (const r of active) {
       const key  = String(hasCampNames ? (r.campaignId ?? r.campaignName ?? r.adId) : r.adId);
       const name = (hasCampNames ? r.campaignName ?? 'Sem campanha' : r.adName).slice(0, 30);
-      const cur  = rankMap.get(key) ?? {
-        name,
-        spend: 0,
-        results: 0,
-        clicks: 0,
-        impressions: 0,
-        hasThruplays: false,
-        typedSpend: new Map<NativeResultType, number>(),
-        typedResults: new Map<NativeResultType, number>(),
-        resultLabelWeights: new Map<string, number>(),
-      };
-      const rowNativeType = inferRowNativeType(r);
-      const rowResults = rowNativeType !== 'unknown' ? getResultValueForType(r, rowNativeType) : (r.results ?? r.leads ?? 0);
+      const cur  = rankMap.get(key) ?? { name, spend: 0, results: 0, clicks: 0, impressions: 0, resultLabelWeights: new Map<string, number>() };
       cur.spend       += r.spend;
-      cur.results     += rowResults;
+      cur.results     += r.results ?? r.leads ?? 0;
       cur.clicks      += r.inlineLinkClicks ?? r.clicks ?? 0;
       cur.impressions += r.impressions;
-      cur.hasThruplays = cur.hasThruplays || (r.thruplays ?? 0) > 0;
-      if (rowNativeType !== 'unknown') {
-        cur.typedSpend.set(rowNativeType, (cur.typedSpend.get(rowNativeType) ?? 0) + r.spend);
-        cur.typedResults.set(rowNativeType, (cur.typedResults.get(rowNativeType) ?? 0) + rowResults);
-      }
       if (r.resultLabel) cur.resultLabelWeights.set(r.resultLabel, (cur.resultLabelWeights.get(r.resultLabel) ?? 0) + r.spend);
       rankMap.set(key, cur);
     }
     const ranking = [...rankMap.values()]
-      .map((r) => {
-        const dominantType = [...r.typedSpend.entries()]
-          .sort((a, b) => {
-            if (b[1] !== a[1]) return b[1] - a[1];
-            return (r.typedResults.get(b[0]) ?? 0) - (r.typedResults.get(a[0]) ?? 0);
-          })[0]?.[0];
-        const resolvedResults = dominantType != null ? (r.typedResults.get(dominantType) ?? 0) : r.results;
-        return {
-          ...r,
-          results: resolvedResults,
-          ctr: r.impressions > 0 ? r.clicks / r.impressions : 0,
-          cpa: resolvedResults > 0 ? r.spend / resolvedResults : 0,
-          resultLabel:
-            dominantType != null
-              ? getNativeTypeLabel(dominantType, dominantType === 'video_views' && r.hasThruplays)
-              : [...r.resultLabelWeights.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
-                summaryResult?.label ??
-                'Resultados',
-        };
-      })
+      .map((r) => ({
+        ...r,
+        ctr: r.impressions > 0 ? r.clicks / r.impressions : 0,
+        cpa: r.results > 0 ? r.spend / r.results : 0,
+        resultLabel:
+          [...r.resultLabelWeights.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ??
+          summaryResult?.label ??
+          'Resultados',
+      }))
       .sort((a, b) => b.spend - a.spend)
       .slice(0, 6);
 
