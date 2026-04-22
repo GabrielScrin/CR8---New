@@ -869,90 +869,114 @@ const buildInstagramOverview = async (
     const until = Math.floor(new Date(`${nextDateIso(dateTo)}T00:00:00.000Z`).getTime() / 1000);
     const graphBase = `https://graph.facebook.com/${META_GRAPH_VERSION}`;
 
-    const [profileJson, reachJson, totalsJson, mediaJson] = await Promise.all([
-      fetchInstagramJson(
-        `${graphBase}/${instagramBusinessAccountId}?fields=username,name,followers_count,media_count,profile_picture_url&access_token=${instagramAccessToken}`,
-      ),
-      fetchInstagramJson(
-        `${graphBase}/${instagramBusinessAccountId}/insights?metric=reach&period=day&since=${since}&until=${until}&access_token=${instagramAccessToken}`,
-      ),
-      fetchInstagramJson(
-        `${graphBase}/${instagramBusinessAccountId}/insights?metric=views,profile_views,follows_and_unfollows,accounts_engaged&metric_type=total_value&period=day&since=${since}&until=${until}&access_token=${instagramAccessToken}`,
-      ),
-      fetchInstagramJson(
-        `${graphBase}/${instagramBusinessAccountId}/media?fields=id,caption,comments_count,like_count,media_type,media_product_type,media_url,thumbnail_url,timestamp,permalink&limit=6&access_token=${instagramAccessToken}`,
-      ),
-    ]);
+    // Phase 1: Profile — required; fail fast if this call fails
+    const profileJson = await fetchInstagramJson(
+      `${graphBase}/${instagramBusinessAccountId}?fields=username,name,followers_count,media_count,profile_picture_url&access_token=${instagramAccessToken}`,
+    );
 
-    const reachMetric = Array.isArray(reachJson?.data) ? reachJson.data.find((item: any) => item?.name === 'reach') : null;
+    // Phase 2: Account-level insights — requires instagram_manage_insights; optional
     const seriesMap = new Map<string, number>();
-    for (const point of reachMetric?.values ?? []) {
-      const iso = asString(point?.end_time).slice(0, 10);
-      if (!iso) continue;
-      seriesMap.set(iso, (seriesMap.get(iso) ?? 0) + asNumber(point?.value));
+    let totalViews = 0;
+    let totalProfileViews = 0;
+    let totalFollowerGain = 0;
+    let totalAccountsEngaged = 0;
+
+    try {
+      const [reachJson, totalsJson] = await Promise.all([
+        fetchInstagramJson(
+          `${graphBase}/${instagramBusinessAccountId}/insights?metric=reach&period=day&since=${since}&until=${until}&access_token=${instagramAccessToken}`,
+        ),
+        fetchInstagramJson(
+          `${graphBase}/${instagramBusinessAccountId}/insights?metric=views,profile_views,follows_and_unfollows,accounts_engaged&metric_type=total_value&period=day&since=${since}&until=${until}&access_token=${instagramAccessToken}`,
+        ),
+      ]);
+
+      const reachMetric = Array.isArray(reachJson?.data) ? reachJson.data.find((item: any) => item?.name === 'reach') : null;
+      for (const point of reachMetric?.values ?? []) {
+        const iso = asString(point?.end_time).slice(0, 10);
+        if (!iso) continue;
+        seriesMap.set(iso, (seriesMap.get(iso) ?? 0) + asNumber(point?.value));
+      }
+
+      const totalValueMetric = (name: string) =>
+        asNumber(
+          Array.isArray(totalsJson?.data)
+            ? totalsJson.data.find((item: any) => item?.name === name)?.total_value?.value ??
+                totalsJson.data.find((item: any) => item?.name === name)?.values?.[0]?.value
+            : 0,
+        );
+
+      totalViews = totalValueMetric('views');
+      totalProfileViews = totalValueMetric('profile_views');
+      totalFollowerGain = totalValueMetric('follows_and_unfollows');
+      totalAccountsEngaged = totalValueMetric('accounts_engaged');
+    } catch {
+      // Insights permission not granted — profile + media still available
     }
 
-    const totalValueMetric = (name: string) =>
-      asNumber(
-        Array.isArray(totalsJson?.data)
-          ? totalsJson.data.find((item: any) => item?.name === name)?.total_value?.value ??
-              totalsJson.data.find((item: any) => item?.name === name)?.values?.[0]?.value
-          : 0,
+    // Phase 3: Media listing — optional
+    let media: InstagramOverview['media'] = [];
+    try {
+      const mediaJson = await fetchInstagramJson(
+        `${graphBase}/${instagramBusinessAccountId}/media?fields=id,caption,comments_count,like_count,media_type,media_product_type,media_url,thumbnail_url,timestamp,permalink&limit=9&access_token=${instagramAccessToken}`,
       );
 
-    const media = await Promise.all(
-      ((Array.isArray(mediaJson?.data) ? mediaJson.data : []) as any[]).map(async (item: any) => {
-        const mediaId = asString(item?.id);
-        const metrics = ['reach'];
-        const productType = asString(item?.media_product_type).toUpperCase();
-        const mediaType = asString(item?.media_type).toUpperCase();
-        if (productType !== 'STORY') metrics.push('saved');
-        if (productType === 'FEED' || productType === 'REEL' || productType === 'REELS') metrics.push('shares');
-        if (mediaType === 'VIDEO') metrics.push('video_views');
+      media = await Promise.all(
+        ((Array.isArray(mediaJson?.data) ? mediaJson.data : []) as any[]).map(async (item: any) => {
+          const mediaId = asString(item?.id);
+          const metrics = ['reach'];
+          const productType = asString(item?.media_product_type).toUpperCase();
+          const mediaType = asString(item?.media_type).toUpperCase();
+          if (productType !== 'STORY') metrics.push('saved');
+          if (productType === 'FEED' || productType === 'REEL' || productType === 'REELS') metrics.push('shares');
+          if (mediaType === 'VIDEO') metrics.push('video_views');
 
-        let insights: any = { data: [] };
-        if (mediaId) {
-          try {
-            insights = await fetchInstagramJson(
-              `${graphBase}/${mediaId}/insights?metric=${metrics.join(',')}&access_token=${instagramAccessToken}`,
-            );
-          } catch {
-            insights = { data: [] };
+          let insights: any = { data: [] };
+          if (mediaId) {
+            try {
+              insights = await fetchInstagramJson(
+                `${graphBase}/${mediaId}/insights?metric=${metrics.join(',')}&access_token=${instagramAccessToken}`,
+              );
+            } catch {
+              insights = { data: [] };
+            }
           }
-        }
 
-        const insightValue = (metricName: string) => {
-          const match = Array.isArray(insights?.data) ? insights.data.find((entry: any) => entry?.name === metricName) : null;
-          return match?.total_value?.value ?? match?.values?.[0]?.value ?? null;
-        };
+          const insightValue = (metricName: string) => {
+            const match = Array.isArray(insights?.data) ? insights.data.find((entry: any) => entry?.name === metricName) : null;
+            return match?.total_value?.value ?? match?.values?.[0]?.value ?? null;
+          };
 
-        const commentsCount = typeof item?.comments_count === 'number' ? item.comments_count : null;
-        const likeCount = typeof item?.like_count === 'number' ? item.like_count : null;
-        const saved = insightValue('saved');
-        const shares = insightValue('shares');
-        const totalInteractions = [commentsCount, likeCount, saved, shares]
-          .filter((value): value is number => typeof value === 'number')
-          .reduce((sum, value) => sum + value, 0);
+          const commentsCount = typeof item?.comments_count === 'number' ? item.comments_count : null;
+          const likeCount = typeof item?.like_count === 'number' ? item.like_count : null;
+          const saved = insightValue('saved');
+          const shares = insightValue('shares');
+          const totalInteractions = [commentsCount, likeCount, saved, shares]
+            .filter((value): value is number => typeof value === 'number')
+            .reduce((sum, value) => sum + value, 0);
 
-        return {
-          id: mediaId,
-          caption: asString(item?.caption),
-          mediaType,
-          mediaProductType: productType || 'FEED',
-          mediaUrl: asString(item?.media_url),
-          thumbnailUrl: asString(item?.thumbnail_url) || asString(item?.media_url),
-          timestamp: asString(item?.timestamp),
-          permalink: asString(item?.permalink),
-          reach: insightValue('reach'),
-          saved,
-          shares,
-          videoViews: insightValue('video_views'),
-          commentsCount,
-          likeCount,
-          totalInteractions,
-        };
-      }),
-    );
+          return {
+            id: mediaId,
+            caption: asString(item?.caption),
+            mediaType,
+            mediaProductType: productType || 'FEED',
+            mediaUrl: asString(item?.media_url),
+            thumbnailUrl: asString(item?.thumbnail_url) || asString(item?.media_url),
+            timestamp: asString(item?.timestamp),
+            permalink: asString(item?.permalink),
+            reach: insightValue('reach'),
+            saved,
+            shares,
+            videoViews: insightValue('video_views'),
+            commentsCount,
+            likeCount,
+            totalInteractions,
+          };
+        }),
+      );
+    } catch {
+      // Media unavailable — continue with profile + insights
+    }
 
     return {
       available: true,
@@ -965,10 +989,10 @@ const buildInstagramOverview = async (
       },
       summary: {
         totalReach: Array.from(seriesMap.values()).reduce((sum, value) => sum + value, 0),
-        totalViews: totalValueMetric('views'),
-        totalProfileViews: totalValueMetric('profile_views'),
-        totalFollowerGain: totalValueMetric('follows_and_unfollows'),
-        totalAccountsEngaged: totalValueMetric('accounts_engaged'),
+        totalViews,
+        totalProfileViews,
+        totalFollowerGain,
+        totalAccountsEngaged,
       },
       series: daySeries(dateFrom, dateTo).map((date) => ({
         date: `${date.slice(8, 10)}/${date.slice(5, 7)}`,

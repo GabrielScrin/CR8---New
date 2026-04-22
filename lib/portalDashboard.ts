@@ -43,6 +43,8 @@ export type Campaign = {
   id: string; name: string; spend: number; impressions: number; reach: number;
   clicks: number; linkClicks: number; ctr: number; cpc: number; cpm: number;
   frequency: number; results: number;
+  leadForms: number; messagesStarted: number; siteLeads: number;
+  profileVisits: number; followers: number;
 };
 
 export type InstagramMedia = {
