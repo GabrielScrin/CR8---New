@@ -1,6 +1,6 @@
 create table if not exists public.client_portals (
   id uuid primary key default gen_random_uuid(),
-  public_token text not null unique default encode(gen_random_bytes(24), 'hex'),
+  public_token text not null unique default replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''),
   name text not null,
   default_company_id uuid not null references public.companies (id) on delete cascade,
   status text not null default 'active' check (status in ('active', 'inactive')),
