@@ -3578,7 +3578,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
               <div className="grid grid-cols-1 gap-4">
                 <div className="min-w-0 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-4">
                   <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[hsl(var(--muted-foreground))]">
-                    Preset
+                    Seleção
                   </div>
                   <div className="mt-2 break-words text-lg font-semibold leading-tight text-[hsl(var(--foreground))]">
                     {getDatePresetLabel(draftDatePreset)}
