@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Bar, BarChart, CartesianGrid, Legend, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { ArrowDown, ArrowUp, Download, ExternalLink, FileBarChart2, Filter, Link2, RefreshCw, Send, Sparkles, X } from 'lucide-react';
+import { TrafficDashboard } from './TrafficDashboard';
 import { AdMetric, NativeResultContext, NativeResultType } from '../types';
 import { loadLocalAiSettings } from '../lib/aiLocal';
 import { resolveMetaToken } from '../lib/metaToken';
@@ -2558,37 +2558,17 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
       </div>
       </div>
 
-      <div className="rounded-2xl p-5 border border-[hsl(var(--border))]" style={{ background: 'hsl(220 18% 7%)' }}>
-        <h3 className="text-sm font-bold text-[hsl(var(--foreground))] mb-4 flex items-center gap-2">
-          <span className="w-1 h-4 rounded-full bg-indigo-400 inline-block" />
-          Sinais de Lead vs Gasto (
-          {datePreset === 'last_7d'
-            ? 'últimos 7 dias'
-            : datePreset === 'last_30d'
-              ? 'últimos 30 dias'
-              : datePreset === 'this_month'
-                ? 'este mês'
-                : datePreset === 'last_month'
-                  ? 'mês passado'
-                  : dateSince && dateUntil
-                    ? `${dateSince} → ${dateUntil}`
-                    : 'período'}
-          ){demoMode ? ' (demo)' : ''}
-        </h3>
-        <div className="h-64 w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={demoMode ? mockComparisonData : comparisonData} margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
-              <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-              <YAxis axisLine={false} tickLine={false} tick={{ fill: 'hsl(var(--muted-foreground))' }} />
-              <Tooltip cursor={{ fill: 'hsl(var(--secondary))' }} />
-              <Legend wrapperStyle={{ paddingTop: '20px' }} />
-              <Bar dataKey="metaSpend" name="Gasto (R$)" fill="#6366F1" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="metaLeads" name="Leads" fill="#10B981" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      <TrafficDashboard
+        rows={rows}
+        comparisonData={comparisonData}
+        selectedAdAccountId={selectedAdAccountId}
+        adAccountName={adAccounts.find((a) => a.id === selectedAdAccountId)?.name ?? ''}
+        datePreset={datePreset}
+        dateSince={dateSince}
+        dateUntil={dateUntil}
+        loading={loading}
+        demoMode={demoMode}
+      />
 
       <div className="rounded-2xl border border-[hsl(var(--border))] overflow-hidden" style={{ background: 'hsl(220 18% 7%)' }}>
         <div className="px-6 pt-4 border-b border-[hsl(var(--border))] flex items-center justify-between gap-4 flex-wrap">
