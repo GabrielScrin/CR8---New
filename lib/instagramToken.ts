@@ -76,6 +76,10 @@ export async function exchangeIgToken(
  */
 export async function resolveIgToken(): Promise<string | null> {
   const companyId = _activeCompanyId;
+  let storedIgToken: string | null = null;
+  let storedIgExpiresAtMs = 0;
+  let storedMetaToken: string | null = null;
+  let storedMetaExpiresAtMs = 0;
 
   // Cache válido?
   if (
@@ -90,35 +94,39 @@ export async function resolveIgToken(): Promise<string | null> {
   if (companyId) {
     const { data, error } = await supabase
       .from('companies')
-      .select('instagram_access_token, instagram_token_expires_at')
+      .select('instagram_access_token, instagram_token_expires_at, meta_access_token, meta_token_expires_at')
       .eq('id', companyId)
       .maybeSingle();
 
     const missingColumns =
       error &&
       (String(error.message ?? '').includes('instagram_access_token') ||
-        String(error.message ?? '').includes('instagram_token_expires_at'));
+        String(error.message ?? '').includes('instagram_token_expires_at') ||
+        String(error.message ?? '').includes('meta_access_token') ||
+        String(error.message ?? '').includes('meta_token_expires_at'));
 
     if (error && !missingColumns) {
       throw error;
     }
 
-    const stored = (data as any)?.instagram_access_token as string | null;
-    const expiresAtRaw = (data as any)?.instagram_token_expires_at as string | null;
+    storedIgToken = (data as any)?.instagram_access_token as string | null;
+    const igExpiresAtRaw = (data as any)?.instagram_token_expires_at as string | null;
+    storedIgExpiresAtMs = igExpiresAtRaw ? new Date(igExpiresAtRaw).getTime() : 0;
 
-    if (stored) {
-      if (!expiresAtRaw) {
-        _cache = { token: stored, companyId, fetchedAt: Date.now() };
-        return stored;
-      }
+    storedMetaToken = (data as any)?.meta_access_token as string | null;
+    const metaExpiresAtRaw = (data as any)?.meta_token_expires_at as string | null;
+    storedMetaExpiresAtMs = metaExpiresAtRaw ? new Date(metaExpiresAtRaw).getTime() : 0;
 
-      const expiresAt = new Date(expiresAtRaw).getTime();
-      const minValidity = 24 * 60 * 60 * 1000; // exige pelo menos 24h restantes
+    const minValidity = 24 * 60 * 60 * 1000; // exige pelo menos 24h restantes
+    const usableStoredIgToken =
+      storedIgToken && storedIgExpiresAtMs > Date.now() + minValidity ? storedIgToken : null;
+    const usableStoredMetaToken =
+      storedMetaToken && storedMetaExpiresAtMs > Date.now() + minValidity ? storedMetaToken : null;
 
-      if (expiresAt > Date.now() + minValidity) {
-        _cache = { token: stored, companyId, fetchedAt: Date.now() };
-        return stored;
-      }
+    if (usableStoredIgToken || usableStoredMetaToken) {
+      const resolvedStoredToken = usableStoredIgToken ?? usableStoredMetaToken;
+      _cache = { token: resolvedStoredToken!, companyId, fetchedAt: Date.now() };
+      return resolvedStoredToken!;
     }
   }
 
@@ -130,9 +138,19 @@ export async function resolveIgToken(): Promise<string | null> {
     _cache = { token: sessionToken, companyId, fetchedAt: Date.now() };
     // Dispara exchange em background para salvar o token de longa duração
     exchangeIgToken(companyId, sessionToken).catch(() => {});
+    return sessionToken;
   }
 
-  return sessionToken;
+  const usableStoredMetaToken =
+    storedMetaToken && storedMetaExpiresAtMs > Date.now() ? storedMetaToken : null;
+
+  if (usableStoredMetaToken) {
+    _cache = { token: usableStoredMetaToken, companyId, fetchedAt: Date.now() };
+    return usableStoredMetaToken;
+  }
+
+  // Tokens legados de página (sem expires_at) não são usados no /media.
+  return null;
 }
 
 // ── fetchGraphJson com retry 429 ─────────────────────────────────────────────

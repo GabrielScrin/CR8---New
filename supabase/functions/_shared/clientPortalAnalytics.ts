@@ -1192,7 +1192,7 @@ export const loadPortalOverview = async (
   const { data: companyRow, error: companyError } = await supabaseAdmin
     .from('companies')
     .select(
-      'id,name,brand_name,brand_logo_url,brand_primary_color,meta_ad_account_id,meta_access_token,google_ads_customer_id,google_ads_login_customer_id,google_ads_currency_code,instagram_business_account_id,instagram_username,instagram_access_token',
+      'id,name,brand_name,brand_logo_url,brand_primary_color,meta_ad_account_id,meta_access_token,meta_token_expires_at,google_ads_customer_id,google_ads_login_customer_id,google_ads_currency_code,instagram_business_account_id,instagram_username,instagram_access_token,instagram_token_expires_at',
     )
     .eq('id', company.id)
     .maybeSingle();
@@ -1207,7 +1207,7 @@ export const loadPortalOverview = async (
     asString((companyRow as any)?.google_ads_login_customer_id).replace(/\D/g, '') || GOOGLE_ADS_LOGIN_CUSTOMER_ID || null;
   const googleAdsCurrencyCode = asString((companyRow as any)?.google_ads_currency_code) || null;
   const instagramBusinessAccountId = asString((companyRow as any)?.instagram_business_account_id);
-  const instagramAccessToken = asString((companyRow as any)?.instagram_access_token);
+  const instagramAccessToken = resolveInstagramApiToken(companyRow);
 
   const [meta, googleAds, instagram, business] = await Promise.all([
     metaAdAccountId && metaAccessToken
@@ -1401,7 +1401,7 @@ export const buildWeeklyReportPayload = async (
   const { data: companyRow, error } = await supabaseAdmin
     .from('companies')
     .select(
-      'id,name,brand_name,meta_ad_account_id,meta_access_token,google_ads_customer_id,google_ads_login_customer_id,google_ads_currency_code,instagram_business_account_id,instagram_access_token',
+      'id,name,brand_name,meta_ad_account_id,meta_access_token,meta_token_expires_at,google_ads_customer_id,google_ads_login_customer_id,google_ads_currency_code,instagram_business_account_id,instagram_access_token,instagram_token_expires_at',
     )
     .eq('id', companyId)
     .maybeSingle();
@@ -1430,9 +1430,9 @@ export const buildWeeklyReportPayload = async (
       )
     : buildEmptyGoogleOverview('google ads not configured');
 
-  const instagram = asString((companyRow as any)?.instagram_business_account_id) && asString((companyRow as any)?.instagram_access_token)
+  const instagram = asString((companyRow as any)?.instagram_business_account_id) && resolveInstagramApiToken(companyRow)
     ? await buildInstagramOverview(
-        asString((companyRow as any)?.instagram_access_token),
+        resolveInstagramApiToken(companyRow)!,
         asString((companyRow as any)?.instagram_business_account_id),
         periodStart,
         periodEnd,
@@ -1561,7 +1561,7 @@ const getPortalLinkRow = async (supabaseAdmin: SupabaseClient, token: string): P
 const getCompanyMetaToken = async (supabaseAdmin: SupabaseClient, companyId: string): Promise<string> => {
   const { data, error } = await supabaseAdmin
     .from('companies')
-    .select('meta_access_token,instagram_access_token')
+    .select('meta_access_token,meta_token_expires_at,instagram_access_token,instagram_token_expires_at')
     .eq('id', companyId)
     .maybeSingle();
 
@@ -1572,15 +1572,30 @@ const getCompanyMetaToken = async (supabaseAdmin: SupabaseClient, companyId: str
   return token;
 };
 
+const resolveInstagramApiToken = (row: any): string | null => {
+  const now = Date.now();
+  const instagramToken = asString(row?.instagram_access_token);
+  const instagramExpiresAtRaw = asString(row?.instagram_token_expires_at);
+  const instagramExpiresAtMs = instagramExpiresAtRaw ? new Date(instagramExpiresAtRaw).getTime() : 0;
+  const metaToken = asString(row?.meta_access_token);
+  const metaExpiresAtRaw = asString(row?.meta_token_expires_at);
+  const metaExpiresAtMs = metaExpiresAtRaw ? new Date(metaExpiresAtRaw).getTime() : 0;
+
+  if (instagramToken && instagramExpiresAtMs > now) return instagramToken;
+  if (metaToken && metaExpiresAtMs > now) return metaToken;
+  if (metaToken) return metaToken;
+  return null;
+};
+
 const getCompanyInstagramToken = async (supabaseAdmin: SupabaseClient, companyId: string): Promise<string> => {
   const { data, error } = await supabaseAdmin
     .from('companies')
-    .select('instagram_access_token')
+    .select('instagram_access_token,instagram_token_expires_at,meta_access_token,meta_token_expires_at')
     .eq('id', companyId)
     .maybeSingle();
 
   if (error) throw error;
-  const token = asString((data as any)?.instagram_access_token);
+  const token = resolveInstagramApiToken(data);
   if (!token) throw new Error('Token Instagram não configurado');
   return token;
 };
@@ -1591,14 +1606,14 @@ export const loadDashboardBootstrap = async (supabaseAdmin: SupabaseClient, toke
   let instagramProfile: InstagramOverview['profile'] | null = null;
   const { data: companyTokens, error: companyTokensError } = await supabaseAdmin
     .from('companies')
-    .select('meta_access_token,instagram_access_token')
+    .select('meta_access_token,meta_token_expires_at,instagram_access_token,instagram_token_expires_at')
     .eq('id', link.company_id)
     .maybeSingle();
 
   if (companyTokensError) throw companyTokensError;
 
   const metaToken = asString((companyTokens as any)?.meta_access_token);
-  const instagramToken = asString((companyTokens as any)?.instagram_access_token) || metaToken;
+  const instagramToken = resolveInstagramApiToken(companyTokens);
 
   if (metaToken) {
     try {
@@ -1648,14 +1663,14 @@ export const loadDashboardData = async (
   const { metaCampaignIds } = splitCampaignIds(campaignIds ?? []);
   const { data: companyTokens, error: companyTokensError } = await supabaseAdmin
     .from('companies')
-    .select('meta_access_token,instagram_access_token')
+    .select('meta_access_token,meta_token_expires_at,instagram_access_token,instagram_token_expires_at')
     .eq('id', link.company_id)
     .maybeSingle();
 
   if (companyTokensError) throw companyTokensError;
 
   const metaToken = asString((companyTokens as any)?.meta_access_token);
-  const igToken = asString((companyTokens as any)?.instagram_access_token) || metaToken;
+  const igToken = resolveInstagramApiToken(companyTokens);
 
   const [meta, instagram] = await Promise.all([
     metaToken
@@ -1770,7 +1785,7 @@ export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: 
   const link = await getPortalLinkRow(supabaseAdmin, token);
   const { data: companyTokens, error: companyTokensError } = await supabaseAdmin
     .from('companies')
-    .select('meta_access_token,instagram_access_token')
+    .select('meta_access_token,meta_token_expires_at,instagram_access_token,instagram_token_expires_at')
     .eq('id', link.company_id)
     .maybeSingle();
 
@@ -1786,7 +1801,7 @@ export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: 
   const periodStartStr = periodStart.toISOString().slice(0, 10);
   const periodEndStr = periodEnd.toISOString().slice(0, 10);
 
-  const igToken = asString((companyTokens as any)?.instagram_access_token) || metaToken;
+  const igToken = resolveInstagramApiToken(companyTokens);
 
   const [meta, instagram, latestTrafficReport] = await Promise.all([
     metaToken

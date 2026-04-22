@@ -112,7 +112,9 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
           meta_page_id: page.id,
           instagram_business_account_id: page.igUserId,
           instagram_username: page.igUsername,
-          instagram_access_token: page.pageAccessToken ?? null,
+          // The page access token returned by /me/accounts is not reliable for
+          // Instagram Graph media reads. Persist the long-lived user token instead.
+          instagram_access_token: null,
           instagram_token_expires_at: null,
         })
         .eq('id', companyId);
@@ -133,7 +135,7 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
       clearIgTokenCache();
 
       const providerToken = await getProviderToken();
-      if (!page.pageAccessToken && providerToken) {
+      if (providerToken) {
         await exchangeIgToken(companyId, providerToken);
       }
     } catch (err: any) {
