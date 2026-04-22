@@ -183,7 +183,14 @@ const DATE_PRESET_OPTIONS: DatePreset[] = [
 
 const formatDateRangeLabel = (range: DateRange | null) => {
   if (!range) return 'Selecione o periodo';
-  return `${range.start} ate ${range.end}`;
+  return `${formatDateBr(range.start)} ate ${formatDateBr(range.end)}`;
+};
+
+const formatDateBr = (value: string) => {
+  const normalized = String(value ?? '').trim();
+  const parts = normalized.split('-');
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return normalized;
 };
 
 const buildComparisonSeries = (
@@ -3538,13 +3545,13 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
 
       {/* Report Generation Modal */}
       <Dialog open={dateDialogOpen} onOpenChange={setDateDialogOpen}>
-        <DialogContent className="max-w-4xl border-[hsl(var(--border))] bg-[hsl(var(--card))] p-0 text-[hsl(var(--foreground))]">
+        <DialogContent className="flex max-h-[85vh] w-[min(92vw,860px)] max-w-none flex-col overflow-hidden border-[hsl(var(--border))] bg-[hsl(var(--card))] p-0 text-[hsl(var(--foreground))]">
           <DialogHeader className="border-b border-[hsl(var(--border))] px-6 py-5">
             <DialogTitle className="text-base font-semibold">Selecionar periodo</DialogTitle>
           </DialogHeader>
 
-          <div className="grid gap-0 md:grid-cols-[220px_minmax(0,1fr)]">
-            <div className="border-r border-[hsl(var(--border))] p-4">
+          <div className="grid min-h-0 flex-1 gap-0 md:grid-cols-[220px_minmax(0,1fr)]">
+            <div className="overflow-y-auto border-b border-[hsl(var(--border))] p-4 md:border-b-0 md:border-r">
               <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-[hsl(var(--muted-foreground))]">
                 Usados recentemente
               </div>
@@ -3567,21 +3574,21 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
               </div>
             </div>
 
-            <div className="p-5">
-              <div className="grid gap-4 lg:grid-cols-2">
-                <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-4">
+            <div className="min-h-0 overflow-y-auto p-5">
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="min-w-0 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-4">
                   <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[hsl(var(--muted-foreground))]">
                     Preset
                   </div>
-                  <div className="mt-2 text-lg font-semibold text-[hsl(var(--foreground))]">
+                  <div className="mt-2 break-words text-lg font-semibold leading-tight text-[hsl(var(--foreground))]">
                     {getDatePresetLabel(draftDatePreset)}
                   </div>
-                  <div className="mt-2 text-sm text-[hsl(var(--muted-foreground))]">
+                  <div className="mt-2 break-words text-sm leading-6 text-[hsl(var(--muted-foreground))]">
                     {formatDateRangeLabel(normalizeDateRange(draftDateSince, draftDateUntil))}
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-4">
+                <div className="min-w-0 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] p-4">
                   <div className="text-xs font-semibold uppercase tracking-[0.08em] text-[hsl(var(--muted-foreground))]">
                     Intervalo
                   </div>
@@ -3597,7 +3604,7 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                           setDraftDateSince(e.target.value);
                           setDraftDateUntil((prev) => (!prev || prev < e.target.value ? e.target.value : prev));
                         }}
-                        className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-3 py-2 text-sm text-[hsl(var(--foreground))] outline-none"
+                        className="w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-3 py-2 text-sm text-[hsl(var(--foreground))] outline-none"
                       />
                     </label>
                     <label className="grid gap-1.5 text-xs text-[hsl(var(--muted-foreground))]">
@@ -3611,15 +3618,11 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                           setDraftDateUntil(e.target.value);
                           setDraftDateSince((prev) => (!prev || prev > e.target.value ? e.target.value : prev));
                         }}
-                        className="rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-3 py-2 text-sm text-[hsl(var(--foreground))] outline-none"
+                        className="w-full rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] px-3 py-2 text-sm text-[hsl(var(--foreground))] outline-none"
                       />
                     </label>
                   </div>
                 </div>
-              </div>
-
-              <div className="mt-4 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-4 py-3 text-xs text-[hsl(var(--muted-foreground))]">
-                Sem comparacao. O filtro aplica somente ao periodo principal da analise, como no Meta Ads.
               </div>
             </div>
           </div>
