@@ -2450,6 +2450,8 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         schemaVersion: 2,
         clientName: reportClientName.trim() || 'Cliente',
         agencyName: reportAgencyName.trim() || 'CR8',
+        adAccountId: selectedAdAccountId || null,
+        adAccountName: selectedAccountName || null,
         level: selectedLevel,
         scope: reportHasScopedSelection ? 'selection' : 'account',
         scopeLabel: reportScopeLabel,

@@ -203,6 +203,7 @@ type TrafficReportRow = {
   public_id: string;
   title: string | null;
   created_at: string;
+  report_data?: any;
 };
 
 let cachedGoogleAccessToken: { token: string; expiresAtMs: number } | null = null;
@@ -1695,22 +1696,74 @@ export const loadDashboardData = async (
   };
 };
 
-const loadLatestTrafficReport = async (supabaseAdmin: SupabaseClient, companyId: string): Promise<TrafficReportRow | null> => {
+const normalizeLoose = (value: string | null | undefined) =>
+  asString(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .trim();
+
+const scoreTrafficReportMatch = (
+  report: TrafficReportRow,
+  link: {
+    meta_ad_account_id: string;
+    meta_ad_account_name: string | null;
+    client_name: string | null;
+    name: string;
+  },
+) => {
+  const reportData = report.report_data ?? {};
+  const reportClientName = normalizeLoose(reportData?.clientName);
+  const reportAccountId = normalizeLoose(reportData?.adAccountId);
+  const reportAccountName = normalizeLoose(reportData?.adAccountName);
+  const reportScopeLabel = normalizeLoose(reportData?.scopeLabel);
+  const linkAccountId = normalizeLoose(link.meta_ad_account_id);
+  const linkAccountName = normalizeLoose(link.meta_ad_account_name || link.meta_ad_account_id);
+  const linkClientName = normalizeLoose(link.client_name || link.name);
+
+  let score = 0;
+
+  if (reportAccountId && reportAccountId === linkAccountId) score += 100;
+  if (reportAccountName && reportAccountName === linkAccountName) score += 80;
+  if (reportClientName && reportClientName === linkClientName) score += 60;
+  if (reportScopeLabel && (reportScopeLabel.includes(linkAccountId) || reportScopeLabel.includes(linkAccountName))) score += 40;
+  if (!reportAccountId && !reportAccountName && !reportClientName && reportScopeLabel) score += 5;
+
+  return score;
+};
+
+const loadLatestTrafficReport = async (
+  supabaseAdmin: SupabaseClient,
+  link: {
+    company_id: string;
+    meta_ad_account_id: string;
+    meta_ad_account_name: string | null;
+    client_name: string | null;
+    name: string;
+  },
+): Promise<TrafficReportRow | null> => {
   const { data, error } = await supabaseAdmin
     .from('traffic_reports')
-    .select('public_id,title,created_at')
-    .eq('company_id', companyId)
+    .select('public_id,title,created_at,report_data')
+    .eq('company_id', link.company_id)
     .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(25);
 
   if (error) return null;
-  if (!data) return null;
-  return {
-    public_id: asString((data as any).public_id),
-    title: asString((data as any).title) || null,
-    created_at: asString((data as any).created_at),
-  };
+  const rows = ((data ?? []) as any[]).map((item) => ({
+    public_id: asString(item?.public_id),
+    title: asString(item?.title) || null,
+    created_at: asString(item?.created_at),
+    report_data: item?.report_data ?? {},
+  }));
+  if (!rows.length) return null;
+
+  const scored = rows
+    .map((row) => ({ row, score: scoreTrafficReportMatch(row, link) }))
+    .sort((a, b) => b.score - a.score || b.row.created_at.localeCompare(a.row.created_at));
+
+  return scored[0]?.score > 0 ? scored[0].row : null;
 };
 
 export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: string) => {
@@ -1742,7 +1795,7 @@ export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: 
     link.instagram_business_account_id && igToken
       ? buildInstagramOverview(igToken, link.instagram_business_account_id, periodStartStr, periodEndStr)
       : Promise.resolve(buildEmptyInstagramOverview('')),
-    loadLatestTrafficReport(supabaseAdmin, link.company_id),
+    loadLatestTrafficReport(supabaseAdmin, link),
   ]);
 
   const companyName = link.client_name || link.name || 'Cliente';
