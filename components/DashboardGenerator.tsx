@@ -90,7 +90,7 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
     setLoadingAccounts(true);
 
     try {
-      const token = await resolveMetaToken(companyId);
+      const token = await resolveMetaToken(companyId ?? null);
       if (!token) throw new Error('Faça login com Facebook para conectar suas contas.');
       setMetaToken(token);
 
@@ -136,6 +136,34 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
     setError(null);
     try {
       const { data: authData } = await supabase.auth.getUser();
+
+      // Ensure the Meta token is persisted so the portal edge function can fetch data.
+      // resolveMetaToken fires exchangeMetaToken in background, but it may not have
+      // completed yet. Saving here guarantees the token is available immediately.
+      if (metaToken) {
+        const { data: tokenRow } = await supabase
+          .from('companies')
+          .select('meta_access_token, meta_token_expires_at')
+          .eq('id', companyId)
+          .maybeSingle();
+        const storedExpiry = tokenRow?.meta_token_expires_at
+          ? new Date(tokenRow.meta_token_expires_at).getTime()
+          : 0;
+        const hasValidToken =
+          tokenRow?.meta_access_token && storedExpiry > Date.now() + 60_000;
+        if (!hasValidToken) {
+          // Fallback: save current token (session token valid ~1 h).
+          // meta-token-exchange will upgrade to long-lived on next resolveMetaToken call.
+          await supabase
+            .from('companies')
+            .update({
+              meta_access_token: metaToken,
+              meta_token_expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+            })
+            .eq('id', companyId);
+        }
+      }
+
       const { data, error: err } = await supabase
         .from('portal_links')
         .insert({
