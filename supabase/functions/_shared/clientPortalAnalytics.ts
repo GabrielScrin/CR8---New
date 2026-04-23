@@ -1579,10 +1579,13 @@ const resolveInstagramApiToken = (row: any): { token: string; expiresAtMs: numbe
   const instagramExpiresAtRaw = asString(row?.instagram_token_expires_at);
   const instagramExpiresAtMs = instagramExpiresAtRaw ? new Date(instagramExpiresAtRaw).getTime() : 0;
 
-  // Usa somente o instagram_access_token dedicado.
-  // Não usa meta_access_token como fallback porque ele pertence ao usuário que conectou
-  // o Meta Ads — que pode ser diferente do dono da conta Instagram → erro (403)/(#10).
+  // Prioriza o token dedicado com validade conhecida.
   if (instagramToken && instagramExpiresAtMs > now) return { token: instagramToken, expiresAtMs: instagramExpiresAtMs };
+
+  // Fallback legado: algumas empresas ainda têm token salvo sem expires_at.
+  // Não é ideal para /media, mas evita derrubar toda a visão geral do portal.
+  if (instagramToken) return { token: instagramToken, expiresAtMs: 0 };
+
   return null;
 };
 
@@ -1593,6 +1596,7 @@ const refreshInstagramTokenIfNeeded = async (
   expiresAtMs: number,
 ): Promise<void> => {
   const sevenDays = 7 * 24 * 60 * 60 * 1000;
+  if (!expiresAtMs) return;
   if (expiresAtMs - Date.now() > sevenDays) return;
   if (!META_APP_ID || !META_APP_SECRET) return;
 

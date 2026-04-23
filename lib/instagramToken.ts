@@ -134,6 +134,13 @@ export async function resolveIgToken(): Promise<string | null> {
     return sessionToken;
   }
 
+  // Fallback legado: permite usar tokens antigos sem expires_at para não
+  // derrubar a visão geral enquanto a conta não é reconectada.
+  if (storedIgToken) {
+    _cache = { token: storedIgToken, companyId, fetchedAt: Date.now() };
+    return storedIgToken;
+  }
+
   return null;
 }
 
