@@ -22,7 +22,16 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
 }) => {
   const [showModal, setShowModal] = useState(false);
   const [selected, setSelected] = useState<IgPage | null>(null);
-  const { pages, loading, error, missingScopes, fetchPages, saveAccount, saving } = useInstagramConnect();
+  const {
+    pages,
+    loading,
+    error,
+    needsReconnect,
+    reconnectReason,
+    fetchPages,
+    saveAccount,
+    saving,
+  } = useInstagramConnect();
   const reconnectScopes = mergeScopes(
     DEFAULT_FACEBOOK_SCOPES,
     INSTAGRAM_BUSINESS_MANAGER_EXTRA_SCOPES,
@@ -40,6 +49,7 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
       options: {
         scopes: reconnectScopes,
         redirectTo: window.location.origin,
+        queryParams: { auth_type: 'rerequest' },
       },
     });
   };
@@ -180,10 +190,12 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
                         <p className="text-sm text-red-300">{error}</p>
                       </div>
 
-                      {missingScopes && (
+                      {needsReconnect && (
                         <div className="mt-3 border-t border-red-500/20 pt-3">
                           <p className="mb-2 text-xs text-red-300">
-                            Reconecte o Facebook autorizando estes escopos:
+                            {reconnectReason === 'missing_token'
+                              ? 'Reconecte o Facebook para renovar a autorizacao do app com estes escopos:'
+                              : 'Reconecte o Facebook autorizando estes escopos:'}
                           </p>
                           <code className="block break-all rounded bg-black/20 p-2 text-xs text-red-200">
                             {INSTAGRAM_REQUIRED_SCOPES.join(',')}
@@ -240,22 +252,14 @@ export const InstagramConnectBanner: React.FC<InstagramConnectBannerProps> = ({
                             }}
                           >
                             <div className="flex items-center gap-3">
-                              {page.igProfilePicture ? (
-                                <img
-                                  src={page.igProfilePicture}
-                                  alt={page.igUsername}
-                                  className="h-10 w-10 flex-shrink-0 rounded-full object-cover"
-                                />
-                              ) : (
-                                <div
-                                  className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full"
-                                  style={{
-                                    background: 'linear-gradient(135deg, #f09433 0%, #dc2743 50%, #bc1888 100%)',
-                                  }}
-                                >
-                                  <Instagram className="h-5 w-5 text-white" />
-                                </div>
-                              )}
+                              <div
+                                className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full"
+                                style={{
+                                  background: 'linear-gradient(135deg, #f09433 0%, #dc2743 50%, #bc1888 100%)',
+                                }}
+                              >
+                                <Instagram className="h-5 w-5 text-white" />
+                              </div>
 
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm font-semibold text-[hsl(var(--foreground))]">

@@ -21,7 +21,8 @@ interface UseInstagramConnectReturn {
   pages: IgPage[];
   loading: boolean;
   error: string | null;
-  missingScopes: boolean;
+  needsReconnect: boolean;
+  reconnectReason: 'missing_token' | 'missing_scopes' | null;
   fetchPages: () => Promise<void>;
   saveAccount: (page: IgPage, companyId: string) => Promise<void>;
   saving: boolean;
@@ -37,26 +38,33 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [missingScopes, setMissingScopes] = useState(false);
+  const [needsReconnect, setNeedsReconnect] = useState(false);
+  const [reconnectReason, setReconnectReason] = useState<'missing_token' | 'missing_scopes' | null>(null);
 
   const fetchPages = useCallback(async () => {
     setLoading(true);
     setError(null);
-    setMissingScopes(false);
+    setNeedsReconnect(false);
+    setReconnectReason(null);
     setPages([]);
 
     try {
       const token = await getProviderToken();
 
       if (!token) {
-        setError('Voce precisa estar logado com Facebook para conectar o Instagram. Faca logout e entre novamente com Facebook.');
+        setNeedsReconnect(true);
+        setReconnectReason('missing_token');
+        setError(
+          'Sua sessao atual no CR8 nao possui autorizacao ativa do Facebook para o modulo do Instagram. Reconecte com Facebook para continuar.',
+        );
         return;
       }
 
       // Busca as Facebook Pages do usuario com a conta Instagram vinculada.
       const res = await fetch(
         `${GRAPH_BASE}/me/accounts` +
-        `?fields=id,name,access_token,instagram_business_account{id,username,profile_picture_url}` +
+        // Evita depender de profile_picture_url, que costuma expirar e gerar 404/ORB no navegador.
+        `?fields=id,name,access_token,instagram_business_account{id,username}` +
         `&access_token=${token}`,
       );
 
@@ -64,7 +72,8 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
 
       if (json.error) {
         if (json.error.code === 10 || json.error.code === 200 || json.error.type === 'OAuthException') {
-          setMissingScopes(true);
+          setNeedsReconnect(true);
+          setReconnectReason('missing_scopes');
           setError('Permissoes insuficientes. Reconecte sua conta Facebook com os escopos do Instagram.');
           return;
         }
@@ -81,7 +90,6 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
           name: page.name,
           igUserId: page.instagram_business_account.id,
           igUsername: page.instagram_business_account.username ?? '',
-          igProfilePicture: page.instagram_business_account.profile_picture_url,
           pageAccessToken: page.access_token ?? undefined,
         }));
 
@@ -146,5 +154,5 @@ export function useInstagramConnect(): UseInstagramConnectReturn {
     }
   }, []);
 
-  return { pages, loading, error, missingScopes, fetchPages, saveAccount, saving };
+  return { pages, loading, error, needsReconnect, reconnectReason, fetchPages, saveAccount, saving };
 }
