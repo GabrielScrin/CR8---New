@@ -79,6 +79,19 @@ function endTimeToIso(endTime: string): string {
   return endTime.substring(0, 10);
 }
 
+function isoDayRange(unixSince: number, unixUntil: number): string[] {
+  const days: string[] = [];
+  const cursor = new Date(unixSince * 1000);
+  const end = new Date(unixUntil * 1000);
+
+  while (cursor < end) {
+    days.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  return days;
+}
+
 function extractValue(raw: any): number {
   if (typeof raw === 'number') return raw;
   if (typeof raw === 'object' && raw !== null) {
@@ -132,6 +145,39 @@ function extractMetricSeries(dataArr: any[], metricName: string): Record<string,
     acc[iso] = extractValue(point?.value);
     return acc;
   }, {});
+}
+
+async function fetchDailyTotalValueSeries(
+  igUserId: string,
+  token: string,
+  metricName: string,
+  since: number,
+  until: number,
+): Promise<Record<string, number>> {
+  const dates = isoDayRange(since, until);
+  const result: Record<string, number> = {};
+
+  await Promise.all(
+    dates.map(async (iso) => {
+      const start = Math.floor(new Date(`${iso}T00:00:00.000Z`).getTime() / 1000);
+      const end = start + 86400;
+
+      try {
+        const json = await fetchGraphJson(
+          `${GRAPH_BASE}/${igUserId}/insights` +
+          `?metric=${metricName}` +
+          `&metric_type=total_value&period=day` +
+          `&since=${start}&until=${end}` +
+          `&access_token=${token}`,
+        );
+        result[iso] = extractMetricTotal(json.data ?? [], metricName);
+      } catch {
+        result[iso] = 0;
+      }
+    }),
+  );
+
+  return result;
 }
 
 function parseDemographics(dataArr: any[]): {
@@ -233,7 +279,7 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
       const { since, until } = periodToDates(period);
       const base = `&access_token=${token}`;
 
-      const [profileJson, reachJson, totalsJson, followerCountJson, demoCityJson, demoAgeJson] =
+      const [profileJson, reachJson, totalsJson, followerCountJson, viewsSeries, engagedSeries, demoCityJson, demoAgeJson] =
         await Promise.all([
           fetchGraphJson(
             `${GRAPH_BASE}/${igUserId}` +
@@ -259,6 +305,8 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
             `&period=day&since=${since}&until=${until}` +
             base,
           ).catch(() => ({ data: [] })),
+          fetchDailyTotalValueSeries(igUserId, token, 'views', since, until),
+          fetchDailyTotalValueSeries(igUserId, token, 'accounts_engaged', since, until),
           fetchGraphJson(
             `${GRAPH_BASE}/${igUserId}/insights` +
             `?metric=follower_demographics&metric_type=total_value&period=lifetime&breakdown=city` +
@@ -291,17 +339,16 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
         dateIso: iso,
         dayOfWeek: dayOfWeek(iso),
         reach: metricsMap.reach[iso] ?? 0,
-        // The newer Meta format returns these metrics only as total_value for the period.
-        views: 0,
+        views: viewsSeries[iso] ?? 0,
         followerDelta: followerSeries[iso] ?? 0,
-        accountsEngaged: 0,
+        accountsEngaged: engagedSeries[iso] ?? 0,
       }));
 
       const totalReach = series.reduce((sum, point) => sum + point.reach, 0);
-      const totalViews = extractMetricTotal(totalsJson.data ?? [], 'views');
+      const totalViews = Object.values(viewsSeries).reduce((sum, value) => sum + value, 0);
       const totalProfileViews = extractMetricTotal(totalsJson.data ?? [], 'profile_views');
       const totalFollowerGain = Object.values(followerSeries).reduce((sum, value) => sum + value, 0);
-      const totalAccountsEngaged = extractMetricTotal(totalsJson.data ?? [], 'accounts_engaged');
+      const totalAccountsEngaged = Object.values(engagedSeries).reduce((sum, value) => sum + value, 0);
 
       const { cities, ageGroups, gender } = parseDemographics([
         ...((demoCityJson.data ?? []) as any[]),
