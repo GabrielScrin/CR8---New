@@ -16,6 +16,7 @@ export interface IgMedia {
   timestamp: string; // ISO 8601
   permalink: string;
   reach: number | null;
+  impressions: number | null;
   saved: number | null;
   shares: number | null;
   videoViews: number | null;
@@ -39,14 +40,15 @@ async function fetchMediaInsights(
   token: string,
   mediaProductType: string,
   isVideo: boolean,
-): Promise<Pick<IgMedia, 'reach' | 'saved' | 'shares' | 'videoViews'>> {
-  const empty = { reach: null, saved: null, shares: null, videoViews: null };
+): Promise<Pick<IgMedia, 'reach' | 'impressions' | 'saved' | 'shares' | 'videoViews'>> {
+  const empty = { reach: null, impressions: null, saved: null, shares: null, videoViews: null };
 
   try {
     const normalizedProductType = String(mediaProductType || '').toUpperCase();
     const result = { ...empty };
     const metrics = ['reach'];
 
+    if (normalizedProductType === 'FEED') metrics.push('impressions');
     if (normalizedProductType !== 'STORY') metrics.push('saved');
     if (normalizedProductType === 'FEED' || normalizedProductType === 'REEL' || normalizedProductType === 'REELS') metrics.push('shares');
     if (isVideo) metrics.push(normalizedProductType === 'REELS' ? 'views' : 'video_views');
@@ -61,6 +63,7 @@ async function fetchMediaInsights(
           const value = extractInsightValue(item);
 
           if (item.name === 'reach') result.reach = value;
+          if (item.name === 'impressions') result.impressions = value;
           if (item.name === 'saved') result.saved = value;
           if (item.name === 'shares') result.shares = value;
           if (item.name === 'video_views' || item.name === 'views') result.videoViews = value;
@@ -123,6 +126,7 @@ export function useInstagramMedia(igUserId: string | null) {
             timestamp: item.timestamp ?? '',
             permalink: item.permalink ?? '',
             reach: insights.reach,
+            impressions: insights.impressions,
             saved: insights.saved,
             shares: insights.shares,
             videoViews: insights.videoViews,

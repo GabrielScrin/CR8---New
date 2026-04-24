@@ -18,7 +18,7 @@ interface ChartPoint {
   label: string;
   color: string;
   totalReach: number;
-  totalViews: number;
+  totalConsumption: number;
   totalInteractions: number;
   count: number;
 }
@@ -27,25 +27,31 @@ function getConsumptionLabel(type: string): string {
   return type === 'IMAGE' || type === 'CAROUSEL_ALBUM' ? 'impressoes' : 'visualiz.';
 }
 
+function getConsumptionValue(media: IgMedia): number {
+  const type = effectiveType(media);
+  if (type === 'IMAGE' || type === 'CAROUSEL_ALBUM') return media.impressions ?? 0;
+  return media.videoViews ?? 0;
+}
+
 function buildChartData(media: IgMedia[]): ChartPoint[] {
-  const groups: Record<string, { reach: number; views: number; interactions: number; count: number }> = {};
+  const groups: Record<string, { reach: number; consumption: number; interactions: number; count: number }> = {};
 
   for (const m of media) {
     const t = effectiveType(m);
-    if (!groups[t]) groups[t] = { reach: 0, views: 0, interactions: 0, count: 0 };
+    if (!groups[t]) groups[t] = { reach: 0, consumption: 0, interactions: 0, count: 0 };
     groups[t].reach += m.reach ?? 0;
-    groups[t].views += m.videoViews ?? 0;
+    groups[t].consumption += getConsumptionValue(m);
     groups[t].interactions += m.totalInteractions ?? 0;
     groups[t].count += 1;
   }
 
   return Object.entries(groups)
-    .map(([type, { reach, views, interactions, count }]) => ({
+    .map(([type, { reach, consumption, interactions, count }]) => ({
       type,
       label: TYPE_META[type]?.label ?? type,
       color: TYPE_META[type]?.color ?? '#888',
       totalReach: reach,
-      totalViews: views,
+      totalConsumption: consumption,
       totalInteractions: interactions,
       count,
     }))
@@ -87,8 +93,8 @@ export const InstagramMediaTypeChart: React.FC<InstagramMediaTypeChartProps> = (
       </div>
 
       <div className="flex flex-col gap-3">
-        {data.map(({ type, label, color, totalReach, totalViews, totalInteractions, count }) => {
-          const maxVal = Math.max(...data.map((d) => Math.max(d.totalReach, d.totalViews)), 1);
+        {data.map(({ type, label, color, totalReach, totalConsumption, totalInteractions, count }) => {
+          const maxVal = Math.max(...data.map((d) => Math.max(d.totalReach, d.totalConsumption)), 1);
           const consumptionLabel = getConsumptionLabel(type);
 
           return (
@@ -104,7 +110,7 @@ export const InstagramMediaTypeChart: React.FC<InstagramMediaTypeChartProps> = (
                     <span className="font-semibold text-[hsl(var(--foreground))]">{fmtY(totalReach)}</span> alcance
                   </span>
                   <span className="text-[hsl(var(--muted-foreground))]">
-                    <span className="font-semibold text-[hsl(var(--foreground))]">{fmtY(totalViews)}</span> {consumptionLabel}
+                    <span className="font-semibold text-[hsl(var(--foreground))]">{fmtY(totalConsumption)}</span> {consumptionLabel}
                   </span>
                   <span className="text-[hsl(var(--muted-foreground))]">
                     <span className="font-semibold text-[hsl(var(--foreground))]">{fmtY(totalInteractions)}</span> inter.
@@ -115,7 +121,7 @@ export const InstagramMediaTypeChart: React.FC<InstagramMediaTypeChartProps> = (
               <div className="relative h-2 overflow-hidden rounded-full bg-[hsl(var(--secondary))]">
                 <div
                   className="absolute inset-y-0 left-0 rounded-full"
-                  style={{ width: `${(totalViews / maxVal) * 100}%`, background: `${color}40` }}
+                  style={{ width: `${(totalConsumption / maxVal) * 100}%`, background: `${color}40` }}
                 />
                 <div
                   className="absolute inset-y-0 left-0 rounded-full"

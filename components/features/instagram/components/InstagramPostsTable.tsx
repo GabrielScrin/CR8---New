@@ -30,6 +30,12 @@ const fmt = (n: number | null): string => {
   return n.toLocaleString('pt-BR');
 };
 
+function displayImpressions(m: IgMedia): number | null {
+  const type = effectiveType(m);
+  if (type === 'IMAGE' || type === 'CAROUSEL_ALBUM') return m.impressions;
+  return m.videoViews;
+}
+
 const TYPE_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string; bg: string }> = {
   IMAGE: { label: 'Imagem', icon: Image, color: 'hsl(220 100% 65%)', bg: 'hsl(220 100% 65% / 0.12)' },
   VIDEO: { label: 'Video', icon: Film, color: '#a855f7', bg: '#a855f720' },
@@ -53,7 +59,7 @@ const TypeBadge: React.FC<{ type: string }> = ({ type }) => {
 };
 
 type FilterType = 'ALL' | IgMediaType | 'REEL';
-type SortKey = 'timestamp' | 'reach' | 'commentsCount' | 'shares' | 'totalInteractions' | 'saved';
+type SortKey = 'timestamp' | 'reach' | 'impressions' | 'commentsCount' | 'shares' | 'totalInteractions' | 'saved';
 
 interface SortState {
   key: SortKey;
@@ -100,7 +106,7 @@ const ShimmerRow: React.FC = () => (
     <td className="px-3 py-2.5">
       <div className="h-5 w-16 rounded-full animate-shimmer" />
     </td>
-    {[...Array(5)].map((_, i) => (
+    {[...Array(6)].map((_, i) => (
       <td key={i} className="px-3 py-2.5 text-right">
         <div className="h-3.5 w-10 rounded animate-shimmer ml-auto" />
       </td>
@@ -162,6 +168,9 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
       if (sort.key === 'timestamp') {
         va = new Date(a.timestamp).getTime();
         vb = new Date(b.timestamp).getTime();
+      } else if (sort.key === 'impressions') {
+        va = displayImpressions(a) ?? -1;
+        vb = displayImpressions(b) ?? -1;
       } else {
         va = a[sort.key] ?? -1;
         vb = b[sort.key] ?? -1;
@@ -231,6 +240,7 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
             <col className="w-24" />
             <col className="w-24" />
             <col className="w-24" />
+            <col className="w-24" />
             <col className="w-28" />
             <col className="w-20" />
             <col className="w-10" />
@@ -245,6 +255,9 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
               </th>
               <th className="px-3 py-2 text-right">
                 <SortHeader label="Alcance" sortKey="reach" sort={sort} onSort={handleSort} />
+              </th>
+              <th className="px-3 py-2 text-right">
+                <SortHeader label="Impress." sortKey="impressions" sort={sort} onSort={handleSort} />
               </th>
               <th className="px-3 py-2 text-right">
                 <SortHeader label="Coment." sortKey="commentsCount" sort={sort} onSort={handleSort} />
@@ -307,6 +320,10 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
                       </td>
 
                       <td className="px-3 py-2.5 text-right text-xs text-[hsl(var(--foreground))] tabular-nums">
+                        {fmt(displayImpressions(m))}
+                      </td>
+
+                      <td className="px-3 py-2.5 text-right text-xs text-[hsl(var(--foreground))] tabular-nums">
                         {fmt(m.commentsCount)}
                       </td>
 
@@ -338,7 +355,7 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
 
             {!loading && filtered.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-3 py-10 text-center text-xs text-[hsl(var(--muted-foreground))]">
+                <td colSpan={11} className="px-3 py-10 text-center text-xs text-[hsl(var(--muted-foreground))]">
                   Nenhum post encontrado para o filtro selecionado.
                 </td>
               </tr>
