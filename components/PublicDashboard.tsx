@@ -344,6 +344,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const [loadingData, setLoadingData] = useState(false);
   const [loadingWeekly, setLoadingWeekly] = useState(false);
   const [loadingCampaignAds, setLoadingCampaignAds] = useState(false);
+  const [campaignAdsError, setCampaignAdsError] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
 
@@ -465,6 +466,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const closeCampaignAds = useCallback(() => {
     setSelectedCampaign(null);
     setCampaignAds([]);
+    setCampaignAdsError(null);
   }, []);
 
   const selectedDateRangeLabel = useMemo(
@@ -515,6 +517,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
 
     let alive = true;
     setLoadingCampaignAds(true);
+    setCampaignAdsError(null);
 
     fetchDashboardCampaignAds({
       token,
@@ -531,7 +534,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
       })
       .catch((error) => {
         if (!alive) return;
-        setErrorMsg(error?.message ?? 'Erro ao carregar anuncios da campanha.');
+        setCampaignAdsError(error?.message ?? 'Erro ao carregar anuncios da campanha.');
       })
       .finally(() => {
         if (alive) setLoadingCampaignAds(false);
@@ -846,6 +849,10 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                   <div className="flex items-center justify-center gap-2 px-5 py-10 text-sm text-white/40">
                     <Loader2 className="h-4 w-4 animate-spin" /> Carregando anuncios da campanha...
                   </div>
+                ) : campaignAdsError ? (
+                  <div className="px-5 py-10 text-center text-sm text-red-400/70">
+                    {campaignAdsError}
+                  </div>
                 ) : sortedCampaignAds.length === 0 ? (
                   <div className="px-5 py-10 text-center text-sm text-white/30">
                     Nenhum anuncio encontrado para essa campanha no periodo.
@@ -860,7 +867,17 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
 
                     return (
                       <div key={ad.id} className="px-5 py-4 transition-colors hover:bg-white/[0.02]">
-                        <div className="mb-2.5 flex items-start justify-between gap-4">
+                        <div className="mb-2.5 flex items-start gap-3">
+                          {ad.thumbnailUrl ? (
+                            <img
+                              src={ad.thumbnailUrl}
+                              alt={ad.name}
+                              className="h-14 w-14 shrink-0 rounded-lg object-cover bg-white/[0.05]"
+                            />
+                          ) : (
+                            <div className="h-14 w-14 shrink-0 rounded-lg bg-white/[0.05]" />
+                          )}
+                          <div className="flex min-w-0 flex-1 items-start justify-between gap-4">
                           <div className="min-w-0 flex-1">
                             <div className="truncate text-sm font-semibold text-white/90">{ad.name}</div>
                           </div>
@@ -891,6 +908,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                               <div className="text-[10px] uppercase tracking-wider text-white/30">Hold</div>
                               <div className="font-bold text-white/80">{adHold}</div>
                             </div>
+                          </div>
                           </div>
                         </div>
                         <div className="h-1 overflow-hidden rounded-full bg-white/[0.04]">

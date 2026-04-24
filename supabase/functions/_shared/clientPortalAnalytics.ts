@@ -18,6 +18,8 @@ const GOOGLE_ADS_LOGIN_CUSTOMER_ID = (Deno.env.get('GOOGLE_ADS_LOGIN_CUSTOMER_ID
 const GOOGLE_ADS_API_VERSION = Deno.env.get('GOOGLE_ADS_API_VERSION') ?? '20';
 const OPENAI_API_KEY = Deno.env.get('OPENAI_API_KEY') ?? '';
 const OPENAI_MODEL = Deno.env.get('OPENAI_MODEL') ?? 'gpt-4.1-mini';
+const META_APP_ID = Deno.env.get('META_APP_ID') ?? '';
+const META_APP_SECRET = Deno.env.get('META_APP_SECRET') ?? '';
 
 type Json = Record<string, unknown>;
 
@@ -75,6 +77,7 @@ type MetaCampaignRow = {
 type MetaAdRow = {
   id: string;
   name: string;
+  thumbnailUrl: string;
   campaignId: string;
   campaignName: string;
   spend: number;
@@ -655,6 +658,41 @@ const fetchMetaAdInsights = async (
   }
 
   return rows;
+};
+
+const fetchMetaAdThumbnails = async (
+  metaAccessToken: string,
+  adAccountId: string,
+  campaignId: string,
+): Promise<Map<string, string>> => {
+  const thumbnailMap = new Map<string, string>();
+  try {
+    let nextUrl: string | null = null;
+    const makeFirstUrl = () => {
+      const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/ads`);
+      url.searchParams.set('fields', 'id,creative{thumbnail_url,image_url}');
+      url.searchParams.set(
+        'filtering',
+        JSON.stringify([{ field: 'campaign.id', operator: 'EQUAL', value: campaignId }]),
+      );
+      url.searchParams.set('limit', '200');
+      url.searchParams.set('access_token', metaAccessToken);
+      return url.toString();
+    };
+    for (let page = 0; page < 5; page += 1) {
+      const json = await fetchJson(nextUrl ?? makeFirstUrl());
+      for (const ad of Array.isArray(json?.data) ? json.data : []) {
+        const adId = asString(ad?.id);
+        const thumbnailUrl = asString(ad?.creative?.thumbnail_url) || asString(ad?.creative?.image_url);
+        if (adId && thumbnailUrl) thumbnailMap.set(adId, thumbnailUrl);
+      }
+      nextUrl = typeof json?.paging?.next === 'string' ? json.paging.next : null;
+      if (!nextUrl) break;
+    }
+  } catch {
+    // thumbnails são não-críticos
+  }
+  return thumbnailMap;
 };
 
 const aggregateMetaOverview = async (
@@ -1883,6 +1921,7 @@ export const loadDashboardCampaignAds = async (
     const previous = adMap.get(adId) ?? {
       id: adId,
       name: adName,
+      thumbnailUrl: '',
       campaignId: currentCampaignId,
       campaignName: currentCampaignName,
       spend: 0,
@@ -1931,10 +1970,16 @@ export const loadDashboardCampaignAds = async (
     campaignName = currentCampaignName;
   }
 
+  const thumbnailMap = await fetchMetaAdThumbnails(metaToken, link.meta_ad_account_id, campaignId).catch(
+    () => new Map<string, string>(),
+  );
+
   return {
     campaignId,
     campaignName: campaignName || campaignId,
-    rows: Array.from(adMap.values()).sort((a, b) => b.spend - a.spend),
+    rows: Array.from(adMap.values())
+      .map((ad) => ({ ...ad, thumbnailUrl: thumbnailMap.get(ad.id) ?? '' }))
+      .sort((a, b) => b.spend - a.spend),
   };
 };
 

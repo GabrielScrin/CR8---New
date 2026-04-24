@@ -53,6 +53,7 @@ export type Campaign = {
 export type AdBreakdownRow = {
   id: string;
   name: string;
+  thumbnailUrl: string;
   campaignId: string;
   campaignName: string;
   spend: number;
