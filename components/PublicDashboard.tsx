@@ -21,7 +21,6 @@ import {
   Instagram,
   LayoutDashboard,
   Loader2,
-  Minus,
   RefreshCw,
   TrendingUp,
 } from 'lucide-react';
@@ -35,11 +34,26 @@ import {
   fetchDashboardWeekly,
 } from '../lib/portalDashboard';
 import { PublicTrafficReport } from './PublicTrafficReport';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 
 type Tab = 'campanhas' | 'instagram' | 'relatorio';
 type ViewMode = 'performance' | 'distribuicao';
 type SortKey = 'spend' | 'leads' | 'msgs' | 'ctr' | 'cpc';
 type InstagramView = 'overview' | 'content';
+type DatePreset =
+  | 'today'
+  | 'yesterday'
+  | 'today_yesterday'
+  | 'last_7d'
+  | 'last_14d'
+  | 'last_28d'
+  | 'last_30d'
+  | 'this_week'
+  | 'last_week'
+  | 'this_month'
+  | 'last_month'
+  | 'custom';
+type DateRange = { start: string; end: string };
 
 const brl = (value: number) =>
   new Intl.NumberFormat('pt-BR', {
@@ -53,6 +67,113 @@ const num = (value: number) =>
 
 const pct = (value: number, digits = 1) => `${(value ?? 0).toFixed(digits)}%`;
 const isoLabel = (value: string) => `${value.slice(8, 10)}/${value.slice(5, 7)}`;
+const isoUtcDate = (value: Date) => value.toISOString().slice(0, 10);
+const formatDateBr = (value: string) => {
+  const normalized = String(value ?? '').trim();
+  const parts = normalized.split('-');
+  if (parts.length === 3) return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  return normalized;
+};
+
+const getTodayUtc = () => {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+};
+
+const shiftUtcDate = (value: Date, days: number) => {
+  const next = new Date(value);
+  next.setUTCDate(next.getUTCDate() + days);
+  return next;
+};
+
+const getStartOfWeekUtc = (value: Date) => {
+  const weekday = value.getUTCDay();
+  const offset = weekday === 0 ? -6 : 1 - weekday;
+  return shiftUtcDate(value, offset);
+};
+
+const getRangeForPreset = (preset: Exclude<DatePreset, 'custom'>): DateRange => {
+  const today = getTodayUtc();
+  const year = today.getUTCFullYear();
+  const month = today.getUTCMonth();
+
+  if (preset === 'today') return { start: isoUtcDate(today), end: isoUtcDate(today) };
+  if (preset === 'yesterday') {
+    const yesterday = shiftUtcDate(today, -1);
+    return { start: isoUtcDate(yesterday), end: isoUtcDate(yesterday) };
+  }
+  if (preset === 'today_yesterday') return { start: isoUtcDate(shiftUtcDate(today, -1)), end: isoUtcDate(today) };
+  if (preset === 'last_7d') return { start: isoUtcDate(shiftUtcDate(today, -6)), end: isoUtcDate(today) };
+  if (preset === 'last_14d') return { start: isoUtcDate(shiftUtcDate(today, -13)), end: isoUtcDate(today) };
+  if (preset === 'last_28d') return { start: isoUtcDate(shiftUtcDate(today, -27)), end: isoUtcDate(today) };
+  if (preset === 'last_30d') return { start: isoUtcDate(shiftUtcDate(today, -29)), end: isoUtcDate(today) };
+  if (preset === 'this_week') return { start: isoUtcDate(getStartOfWeekUtc(today)), end: isoUtcDate(today) };
+  if (preset === 'last_week') {
+    const thisWeekStart = getStartOfWeekUtc(today);
+    return { start: isoUtcDate(shiftUtcDate(thisWeekStart, -7)), end: isoUtcDate(shiftUtcDate(thisWeekStart, -1)) };
+  }
+  if (preset === 'this_month') return { start: isoUtcDate(new Date(Date.UTC(year, month, 1))), end: isoUtcDate(today) };
+  return {
+    start: isoUtcDate(new Date(Date.UTC(year, month - 1, 1))),
+    end: isoUtcDate(new Date(Date.UTC(year, month, 0))),
+  };
+};
+
+const normalizeDateRange = (start?: string, end?: string): DateRange | null => {
+  if (!start || !end) return null;
+  return start <= end ? { start, end } : { start: end, end: start };
+};
+
+const getDatePresetLabel = (preset: DatePreset) => {
+  switch (preset) {
+    case 'today':
+      return 'Hoje';
+    case 'yesterday':
+      return 'Ontem';
+    case 'today_yesterday':
+      return 'Hoje e ontem';
+    case 'last_7d':
+      return 'Ultimos 7 dias';
+    case 'last_14d':
+      return 'Ultimos 14 dias';
+    case 'last_28d':
+      return 'Ultimos 28 dias';
+    case 'last_30d':
+      return 'Ultimos 30 dias';
+    case 'this_week':
+      return 'Esta semana';
+    case 'last_week':
+      return 'Semana passada';
+    case 'this_month':
+      return 'Este mes';
+    case 'last_month':
+      return 'Mes passado';
+    case 'custom':
+      return 'Personalizado';
+    default:
+      return 'Periodo';
+  }
+};
+
+const DATE_PRESET_OPTIONS: DatePreset[] = [
+  'today',
+  'yesterday',
+  'today_yesterday',
+  'last_7d',
+  'last_14d',
+  'last_28d',
+  'last_30d',
+  'this_week',
+  'last_week',
+  'this_month',
+  'last_month',
+  'custom',
+];
+
+const formatDateRangeLabel = (range: DateRange | null) => {
+  if (!range) return 'Selecione o periodo';
+  return `${formatDateBr(range.start)} ate ${formatDateBr(range.end)}`;
+};
 
 const delta = (current: number, previous: number): number | null => {
   if (!current || !previous) return null;
@@ -199,8 +320,13 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const [tab, setTab] = useState<Tab>('campanhas');
   const [viewMode, setViewMode] = useState<ViewMode>('performance');
   const [instagramView, setInstagramView] = useState<InstagramView>('overview');
+  const [datePreset, setDatePreset] = useState<DatePreset>('last_30d');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [dateDialogOpen, setDateDialogOpen] = useState(false);
+  const [draftDatePreset, setDraftDatePreset] = useState<DatePreset>('last_30d');
+  const [draftDateFrom, setDraftDateFrom] = useState('');
+  const [draftDateTo, setDraftDateTo] = useState('');
   const [campaignIds, setCampaignIds] = useState<string[]>([]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('spend');
@@ -226,11 +352,13 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
     fetchDashboardBootstrap(token)
       .then((payload) => {
         setBootstrap(payload);
-        const end = new Date();
-        const start = new Date(end);
-        start.setDate(start.getDate() - 29);
-        setDateFrom(start.toISOString().slice(0, 10));
-        setDateTo(end.toISOString().slice(0, 10));
+        const defaultRange = getRangeForPreset('last_30d');
+        setDatePreset('last_30d');
+        setDateFrom(defaultRange.start);
+        setDateTo(defaultRange.end);
+        setDraftDatePreset('last_30d');
+        setDraftDateFrom(defaultRange.start);
+        setDraftDateTo(defaultRange.end);
       })
       .catch((error) => setErrorMsg(error?.message ?? 'Dashboard indisponível.'))
       .finally(() => setLoadingBoot(false));
@@ -275,6 +403,21 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const ig = data?.instagram;
   const prevIg = data?.prevInstagram;
   const metrics = useCampaignMetrics(meta?.summary, prevMeta?.summary);
+  const canUseOrganicProfileVisitFallback = campaignIds.length === 0;
+  const paidProfileVisitsCurrent = metrics?.profileVisits ?? 0;
+  const paidProfileVisitsPrevious = metrics?.prevProfileVisits ?? 0;
+  const organicProfileVisitsCurrent = ig?.summary.totalProfileViews ?? 0;
+  const organicProfileVisitsPrevious = prevIg?.summary.totalProfileViews ?? 0;
+  const usingOrganicProfileVisitFallback =
+    canUseOrganicProfileVisitFallback && paidProfileVisitsCurrent <= 0 && organicProfileVisitsCurrent > 0;
+  const visibleProfileVisitsCurrent = usingOrganicProfileVisitFallback ? organicProfileVisitsCurrent : paidProfileVisitsCurrent;
+  const visibleProfileVisitsPrevious = usingOrganicProfileVisitFallback ? organicProfileVisitsPrevious : paidProfileVisitsPrevious;
+  const profileVisitsHint = usingOrganicProfileVisitFallback
+    ? 'Fonte atual: Instagram'
+    : 'Fonte atual: Meta Ads';
+  const resultsBreakdown = metrics
+    ? `Msgs ${num(metrics.messagesStarted)} · Forms ${num(metrics.leadForms)} · Site ${num(metrics.siteLeads)}`
+    : 'Msgs 0 · Forms 0 · Site 0';
   const igProfile = ig?.profile ?? bootstrap?.instagramProfile;
   const clientLabel = bootstrap?.clientName || bootstrap?.metaAdAccountName || 'Dashboard';
 
@@ -297,6 +440,49 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
 
   const toggleCampaign = (id: string) =>
     setCampaignIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+
+  const selectedDateRangeLabel = useMemo(
+    () => formatDateRangeLabel(normalizeDateRange(dateFrom, dateTo)),
+    [dateFrom, dateTo],
+  );
+
+  const openDateDialog = () => {
+    setDraftDatePreset(datePreset);
+    setDraftDateFrom(dateFrom);
+    setDraftDateTo(dateTo);
+    setDateDialogOpen(true);
+  };
+
+  const onChangeDraftDatePreset = (nextPreset: DatePreset) => {
+    setDraftDatePreset(nextPreset);
+
+    if (nextPreset === 'custom') {
+      const fallbackRange =
+        normalizeDateRange(draftDateFrom, draftDateTo) ??
+        normalizeDateRange(dateFrom, dateTo) ??
+        getRangeForPreset('last_30d');
+      setDraftDateFrom(fallbackRange.start);
+      setDraftDateTo(fallbackRange.end);
+      return;
+    }
+
+    const nextRange = getRangeForPreset(nextPreset);
+    setDraftDateFrom(nextRange.start);
+    setDraftDateTo(nextRange.end);
+  };
+
+  const applyDateFilter = () => {
+    const normalized =
+      normalizeDateRange(draftDateFrom, draftDateTo) ??
+      (draftDatePreset === 'custom' ? null : getRangeForPreset(draftDatePreset));
+
+    if (!normalized) return;
+
+    setDatePreset(draftDatePreset);
+    setDateFrom(normalized.start);
+    setDateTo(normalized.end);
+    setDateDialogOpen(false);
+  };
 
   if (loadingBoot) {
     return (
@@ -351,7 +537,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
               </div>
             </div>
 
-            {(metrics?.hasConversions || (metrics?.profileVisits ?? 0) > 0 || (metrics?.followers ?? 0) > 0) ? (
+            {(metrics?.hasConversions || visibleProfileVisitsCurrent > 0 || (metrics?.followers ?? 0) > 0) ? (
               <div>
                 <SectionLabel>Resultados por tipo</SectionLabel>
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -381,12 +567,22 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                       sub={metrics?.messagesStarted ? `Custo/msg ${brl((metrics?.spend ?? 0) / metrics.messagesStarted)}` : undefined}
                     />
                   ) : null}
-                  {(metrics?.profileVisits ?? 0) > 0 ? (
-                    <KpiCard label="Visitas ao Perfil" value={num(metrics?.profileVisits ?? 0)} accent="#f59e0b" />
+                  {visibleProfileVisitsCurrent > 0 ? (
+                    <KpiCard
+                      label="Visitas ao Perfil"
+                      value={num(visibleProfileVisitsCurrent)}
+                      delta={delta(visibleProfileVisitsCurrent, visibleProfileVisitsPrevious)}
+                      accent="#f59e0b"
+                      sub={profileVisitsHint}
+                    />
                   ) : null}
                   {(metrics?.followers ?? 0) > 0 ? (
                     <KpiCard label="Novos Seguidores" value={num(metrics?.followers ?? 0)} accent="#f43f5e" />
                   ) : null}
+                </div>
+                <div className="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-xs leading-5 text-white/55">
+                  <strong className="font-semibold text-white/75">Resultados</strong> considera somente <span className="text-white/80">Mensagens iniciadas + Lead Forms + Leads no site</span>. Visitas ao perfil e seguidores aparecem separados e nao entram nesse total.
+                  {usingOrganicProfileVisitFallback ? ' Como a Meta Ads nao retornou profile_visit neste periodo, a visualizacao de perfil esta usando o total do Instagram.' : ''}
                 </div>
               </div>
             ) : null}
@@ -400,8 +596,20 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                 <KpiCard label="Connect Rate" value={pct(metrics?.connectRate ?? 0)} accent="#10b981" />
                 <KpiCard label="CPM Médio" value={brl(metrics?.cpm ?? 0)} delta={delta(metrics?.cpm ?? 0, metrics?.prevCpm ?? 0)} accent="#a855f7" invertDelta />
                 <KpiCard label="CPC Médio" value={brl(metrics?.cpc ?? 0)} accent="#f59e0b" invertDelta />
-                <KpiCard label="Visitas ao Perfil" value={num(metrics?.profileVisits ?? 0)} delta={delta(metrics?.profileVisits ?? 0, metrics?.prevProfileVisits ?? 0)} accent="#f43f5e" />
-                <KpiCard label="Resultados" value={num(metrics?.results ?? 0)} accent="#38bdf8" />
+                <KpiCard
+                  label="Visitas ao Perfil"
+                  value={num(visibleProfileVisitsCurrent)}
+                  delta={delta(visibleProfileVisitsCurrent, visibleProfileVisitsPrevious)}
+                  accent="#f43f5e"
+                  sub={profileVisitsHint}
+                />
+                <KpiCard
+                  label="Resultados"
+                  value={num(metrics?.results ?? 0)}
+                  accent="#38bdf8"
+                  sub={resultsBreakdown}
+                  hint="Nao inclui visitas ao perfil"
+                />
               </div>
             </div>
           </>
@@ -422,7 +630,13 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <KpiCard label="Cliques no Link" value={num(metrics?.linkClicks ?? 0)} delta={delta(metrics?.linkClicks ?? 0, metrics?.prevLinkClicks ?? 0)} accent="#3b82f6" />
                 <KpiCard label="Vis. Pág. Destino" value={num(metrics?.landingPageViews ?? 0)} delta={delta(metrics?.landingPageViews ?? 0, metrics?.prevLandingPageViews ?? 0)} accent="#10b981" />
-                <KpiCard label="Visitas ao Perfil" value={num(metrics?.profileVisits ?? 0)} delta={delta(metrics?.profileVisits ?? 0, metrics?.prevProfileVisits ?? 0)} accent="#f43f5e" />
+                <KpiCard
+                  label="Visitas ao Perfil"
+                  value={num(visibleProfileVisitsCurrent)}
+                  delta={delta(visibleProfileVisitsCurrent, visibleProfileVisitsPrevious)}
+                  accent="#f43f5e"
+                  sub={profileVisitsHint}
+                />
                 <KpiCard label="CTR Médio" value={pct(metrics?.ctr ?? 0)} delta={delta(metrics?.ctr ?? 0, metrics?.prevCtr ?? 0)} accent="#06b6d4" />
               </div>
             </div>
@@ -443,7 +657,13 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                 <KpiCard label="CPM Médio" value={brl(metrics?.cpm ?? 0)} delta={delta(metrics?.cpm ?? 0, metrics?.prevCpm ?? 0)} accent="#f59e0b" invertDelta />
                 <KpiCard label="CPC Médio" value={brl(metrics?.cpc ?? 0)} accent="#f43f5e" invertDelta />
                 <KpiCard label="Connect Rate" value={pct(metrics?.connectRate ?? 0)} accent="#10b981" />
-                <KpiCard label="Resultados" value={num(metrics?.results ?? 0)} accent="#06b6d4" />
+                <KpiCard
+                  label="Resultados"
+                  value={num(metrics?.results ?? 0)}
+                  accent="#06b6d4"
+                  sub={resultsBreakdown}
+                  hint="Nao inclui visitas ao perfil"
+                />
               </div>
             </div>
           </>
@@ -861,12 +1081,17 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
             </nav>
 
             <div className="flex shrink-0 items-center gap-2">
-              <label className="hidden items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-xs sm:flex">
+              <button
+                type="button"
+                onClick={openDateDialog}
+                className="hidden items-center gap-2 rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-left text-xs text-white/75 transition-colors hover:bg-white/[0.05] sm:flex"
+              >
                 <CalendarRange className="h-3.5 w-3.5 text-white/40" />
-                <input type="date" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} className="w-28 bg-transparent text-white/80 outline-none" />
-                <Minus className="h-3 w-3 text-white/25" />
-                <input type="date" value={dateTo} onChange={(event) => setDateTo(event.target.value)} className="w-28 bg-transparent text-white/80 outline-none" />
-              </label>
+                <span className="flex flex-col">
+                  <span className="font-semibold text-white/85">{getDatePresetLabel(datePreset)}</span>
+                  <span className="text-[10px] text-white/40">{selectedDateRangeLabel}</span>
+                </span>
+              </button>
 
               <div ref={filterRef} className="relative">
                 <button
@@ -937,6 +1162,13 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                 {item.label}
               </button>
             ))}
+            <button
+              type="button"
+              onClick={openDateDialog}
+              className="ml-auto whitespace-nowrap rounded-lg border border-white/[0.07] bg-white/[0.03] px-3 py-1.5 text-xs font-semibold text-white/65"
+            >
+              {getDatePresetLabel(datePreset)}
+            </button>
           </div>
         </div>
       </header>
@@ -952,6 +1184,108 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
         {tab === 'instagram' ? <InstagramTab /> : null}
         {tab === 'relatorio' ? <RelatorioTab /> : null}
       </main>
+
+      <Dialog open={dateDialogOpen} onOpenChange={setDateDialogOpen}>
+        <DialogContent className="flex max-h-[85vh] w-[860px] max-w-[92vw] flex-col overflow-hidden border-white/[0.08] bg-[#11131b] p-0 text-white sm:max-w-[92vw]">
+          <DialogHeader className="border-b border-white/[0.08] px-6 py-5">
+            <DialogTitle className="text-base font-semibold">Selecionar periodo</DialogTitle>
+          </DialogHeader>
+
+          <div className="grid min-h-0 flex-1 gap-0 overflow-x-hidden md:grid-cols-[220px_minmax(0,1fr)]">
+            <div className="overflow-y-auto border-b border-white/[0.08] p-4 md:border-b-0 md:border-r md:border-white/[0.08]">
+              <div className="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-white/40">
+                Usados recentemente
+              </div>
+              <div className="space-y-1.5">
+                {DATE_PRESET_OPTIONS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => onChangeDraftDatePreset(option)}
+                    className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-all ${
+                      draftDatePreset === option
+                        ? 'border border-indigo-500/20 bg-indigo-500/10 text-indigo-300'
+                        : 'border border-transparent text-white/85 hover:bg-white/[0.04]'
+                    }`}
+                  >
+                    <span>{getDatePresetLabel(option)}</span>
+                    {draftDatePreset === option ? <span className="text-[10px] font-semibold uppercase tracking-[0.08em]">ativo</span> : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="min-h-0 overflow-x-hidden overflow-y-auto p-5">
+              <div className="grid grid-cols-1 gap-4">
+                <div className="min-w-0 rounded-2xl border border-white/[0.08] bg-[#0c1017] p-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.08em] text-white/40">
+                    Selecao
+                  </div>
+                  <div className="mt-2 break-words text-lg font-semibold leading-tight text-white">
+                    {getDatePresetLabel(draftDatePreset)}
+                  </div>
+                  <div className="mt-2 break-words text-sm leading-6 text-white/50">
+                    {formatDateRangeLabel(normalizeDateRange(draftDateFrom, draftDateTo))}
+                  </div>
+                </div>
+
+                <div className="min-w-0 rounded-2xl border border-white/[0.08] bg-[#0c1017] p-4">
+                  <div className="text-xs font-semibold uppercase tracking-[0.08em] text-white/40">
+                    Intervalo
+                  </div>
+                  <div className="mt-3 grid gap-3">
+                    <label className="grid gap-1.5 text-xs text-white/50">
+                      Data inicial
+                      <input
+                        type="date"
+                        value={draftDateFrom}
+                        max={draftDateTo || undefined}
+                        onChange={(event) => {
+                          setDraftDatePreset('custom');
+                          setDraftDateFrom(event.target.value);
+                          setDraftDateTo((prev) => (!prev || prev < event.target.value ? event.target.value : prev));
+                        }}
+                        className="w-full rounded-xl border border-white/[0.08] bg-[#1a1f29] px-3 py-2 text-sm text-white outline-none"
+                      />
+                    </label>
+                    <label className="grid gap-1.5 text-xs text-white/50">
+                      Data final
+                      <input
+                        type="date"
+                        value={draftDateTo}
+                        min={draftDateFrom || undefined}
+                        onChange={(event) => {
+                          setDraftDatePreset('custom');
+                          setDraftDateTo(event.target.value);
+                          setDraftDateFrom((prev) => (!prev || prev > event.target.value ? event.target.value : prev));
+                        }}
+                        className="w-full rounded-xl border border-white/[0.08] bg-[#1a1f29] px-3 py-2 text-sm text-white outline-none"
+                      />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="border-t border-white/[0.08] px-6 py-4">
+            <button
+              type="button"
+              onClick={() => setDateDialogOpen(false)}
+              className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-sm text-white/80"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={applyDateFilter}
+              className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+            >
+              Aplicar
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <footer className="mt-8 border-t border-white/[0.04] py-4">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6">
