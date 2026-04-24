@@ -4,6 +4,7 @@ import {
   createSupabaseAdmin,
   jsonResponse,
   loadDashboardBootstrap,
+  loadDashboardCampaignAds,
   loadDashboardData,
   loadDashboardWeekly,
 } from '../_shared/clientPortalAnalytics.ts';
@@ -41,7 +42,18 @@ serve(async (req) => {
       return jsonResponse(200, { ok: true, ...data });
     }
 
-    return jsonResponse(400, { ok: false, error: 'section inválida' });
+    if (section === 'campaign_ads') {
+      const data = await loadDashboardCampaignAds(
+        supabaseAdmin,
+        token,
+        typeof body?.date_from === 'string' ? body.date_from : undefined,
+        typeof body?.date_to === 'string' ? body.date_to : undefined,
+        typeof body?.campaign_id === 'string' ? body.campaign_id : '',
+      );
+      return jsonResponse(200, { ok: true, ...data });
+    }
+
+    return jsonResponse(400, { ok: false, error: 'section invalida' });
   } catch (err: any) {
     return jsonResponse(400, { ok: false, error: err?.message ?? 'erro interno' });
   }

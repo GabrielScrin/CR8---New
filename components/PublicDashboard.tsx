@@ -9,10 +9,12 @@ import {
   YAxis,
 } from 'recharts';
 import {
+  ArrowLeft,
   ArrowDownRight,
   ArrowUpRight,
   BarChart2,
   CalendarRange,
+  ChevronRight,
   ChevronDown,
   ExternalLink,
   FileText,
@@ -26,9 +28,11 @@ import {
 } from 'lucide-react';
 import {
   DashboardBootstrap,
+  AdBreakdownRow,
   DashboardData,
   DashboardWeekly,
   MetaSummary,
+  fetchDashboardCampaignAds,
   fetchDashboardBootstrap,
   fetchDashboardData,
   fetchDashboardWeekly,
@@ -37,8 +41,10 @@ import { PublicTrafficReport } from './PublicTrafficReport';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
 
 type Tab = 'campanhas' | 'instagram' | 'relatorio';
+type CampaignPlatform = 'meta' | 'google';
 type ViewMode = 'performance' | 'distribuicao';
-type SortKey = 'spend' | 'leads' | 'msgs' | 'ctr' | 'cpc';
+type CampaignSortKey = 'spend' | 'leads' | 'msgs' | 'ctr' | 'cpc';
+type AdSortKey = 'spend' | 'leads' | 'msgs' | 'ctr' | 'hook' | 'hold';
 type InstagramView = 'overview' | 'content';
 type DatePreset =
   | 'today'
@@ -318,6 +324,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [weekly, setWeekly] = useState<DashboardWeekly | null>(null);
   const [tab, setTab] = useState<Tab>('campanhas');
+  const [campaignPlatform, setCampaignPlatform] = useState<CampaignPlatform>('meta');
   const [viewMode, setViewMode] = useState<ViewMode>('performance');
   const [instagramView, setInstagramView] = useState<InstagramView>('overview');
   const [datePreset, setDatePreset] = useState<DatePreset>('last_30d');
@@ -329,10 +336,14 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const [draftDateTo, setDraftDateTo] = useState('');
   const [campaignIds, setCampaignIds] = useState<string[]>([]);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [sortKey, setSortKey] = useState<SortKey>('spend');
+  const [campaignSortKey, setCampaignSortKey] = useState<CampaignSortKey>('spend');
+  const [adSortKey, setAdSortKey] = useState<AdSortKey>('spend');
+  const [selectedCampaign, setSelectedCampaign] = useState<{ id: string; name: string } | null>(null);
+  const [campaignAds, setCampaignAds] = useState<AdBreakdownRow[]>([]);
   const [loadingBoot, setLoadingBoot] = useState(true);
   const [loadingData, setLoadingData] = useState(false);
   const [loadingWeekly, setLoadingWeekly] = useState(false);
+  const [loadingCampaignAds, setLoadingCampaignAds] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
 
@@ -417,15 +428,27 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const campaigns = useMemo(() => {
     const list = meta?.campaigns ?? [];
     return [...list].sort((a, b) => {
-      if (sortKey === 'leads') return (b.leadForms + b.siteLeads) - (a.leadForms + a.siteLeads);
-      if (sortKey === 'msgs') return b.messagesStarted - a.messagesStarted;
-      if (sortKey === 'ctr') return b.ctr - a.ctr;
-      if (sortKey === 'cpc') return a.cpc - b.cpc;
+      if (campaignSortKey === 'leads') return (b.leadForms + b.siteLeads) - (a.leadForms + a.siteLeads);
+      if (campaignSortKey === 'msgs') return b.messagesStarted - a.messagesStarted;
+      if (campaignSortKey === 'ctr') return b.ctr - a.ctr;
+      if (campaignSortKey === 'cpc') return a.cpc - b.cpc;
       return b.spend - a.spend;
     });
-  }, [meta?.campaigns, sortKey]);
+  }, [campaignSortKey, meta?.campaigns]);
+
+  const sortedCampaignAds = useMemo(() => {
+    return [...campaignAds].sort((a, b) => {
+      if (adSortKey === 'leads') return (b.leadForms + b.siteLeads) - (a.leadForms + a.siteLeads);
+      if (adSortKey === 'msgs') return b.messagesStarted - a.messagesStarted;
+      if (adSortKey === 'ctr') return b.ctr - a.ctr;
+      if (adSortKey === 'hook') return b.hookRate - a.hookRate;
+      if (adSortKey === 'hold') return b.holdRate - a.holdRate;
+      return b.spend - a.spend;
+    });
+  }, [adSortKey, campaignAds]);
 
   const maxSpend = useMemo(() => Math.max(...campaigns.map((item) => item.spend), 1), [campaigns]);
+  const maxAdSpend = useMemo(() => Math.max(...sortedCampaignAds.map((item) => item.spend), 1), [sortedCampaignAds]);
   const campaignOptions = useMemo(
     () => (meta?.campaigns ?? []).map((item) => ({ id: `meta:${item.id}`, label: item.name })),
     [meta?.campaigns],
@@ -433,6 +456,16 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
 
   const toggleCampaign = (id: string) =>
     setCampaignIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
+
+  const openCampaignAds = useCallback((campaignId: string, campaignName: string) => {
+    setSelectedCampaign({ id: campaignId, name: campaignName });
+    setAdSortKey('spend');
+  }, []);
+
+  const closeCampaignAds = useCallback(() => {
+    setSelectedCampaign(null);
+    setCampaignAds([]);
+  }, []);
 
   const selectedDateRangeLabel = useMemo(
     () => formatDateRangeLabel(normalizeDateRange(dateFrom, dateTo)),
@@ -476,6 +509,38 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
     setDateTo(normalized.end);
     setDateDialogOpen(false);
   };
+
+  useEffect(() => {
+    if (!selectedCampaign?.id || !dateFrom || !dateTo) return;
+
+    let alive = true;
+    setLoadingCampaignAds(true);
+
+    fetchDashboardCampaignAds({
+      token,
+      dateFrom,
+      dateTo,
+      campaignId: selectedCampaign.id,
+    })
+      .then((payload) => {
+        if (!alive) return;
+        setCampaignAds(payload.rows ?? []);
+        if (payload.campaignName) {
+          setSelectedCampaign((current) => (current ? { ...current, name: payload.campaignName } : current));
+        }
+      })
+      .catch((error) => {
+        if (!alive) return;
+        setErrorMsg(error?.message ?? 'Erro ao carregar anuncios da campanha.');
+      })
+      .finally(() => {
+        if (alive) setLoadingCampaignAds(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [dateFrom, dateTo, selectedCampaign?.id, token]);
 
   if (loadingBoot) {
     return (
@@ -685,135 +750,283 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
           </div>
         </div>
 
-        <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02]">
-          <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
-            <div>
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Meta Ads</div>
-              <div className="mt-0.5 text-base font-black text-white">Campanhas do período</div>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-3 text-[10px]">
-              <span className="hidden uppercase tracking-wider text-white/30 sm:block">Ordenar</span>
-              {(['spend', 'leads', 'msgs', 'ctr'] as SortKey[]).map((item) => {
-                const labels: Record<SortKey, string> = { spend: 'Invest.', leads: 'Leads', msgs: 'Msgs', ctr: 'CTR', cpc: 'CPC' };
-                return (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => setSortKey(item)}
-                    className={`font-bold uppercase tracking-[0.15em] transition-colors ${
-                      sortKey === item ? 'text-indigo-400' : 'text-white/30 hover:text-white/60'
-                    }`}
-                  >
-                    {labels[item]}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="divide-y divide-white/[0.04]">
-            {campaigns.length === 0 ? (
-              <div className="px-5 py-10 text-center text-sm text-white/30">
-                {loadingData ? 'Carregando campanhas...' : 'Nenhuma campanha no período.'}
-              </div>
-            ) : (
-              campaigns.map((campaign) => {
-                const campaignLeads = campaign.leadForms + campaign.siteLeads;
-                const cpl = campaignLeads > 0 ? campaign.spend / campaignLeads : 0;
-                const costPerMessage = campaign.messagesStarted > 0 ? campaign.spend / campaign.messagesStarted : 0;
-                const connectRate = campaign.linkClicks > 0 ? (campaign.landingPageViews / campaign.linkClicks) * 100 : 0;
-
-                return (
-                  <div key={campaign.id} className="px-5 py-4 transition-colors hover:bg-white/[0.02]">
-                    <div className="mb-2.5 flex items-start justify-between gap-4">
-                      <div className="min-w-0 flex-1">
-                        <div className="truncate text-sm font-semibold text-white/90">{campaign.name}</div>
-                      </div>
-                      <div className="flex shrink-0 flex-wrap items-center justify-end gap-4 text-xs">
-                        <div className="text-right">
-                          <div className="text-[10px] uppercase tracking-wider text-white/30">Invest.</div>
-                          <div className="font-bold text-white">{brl(campaign.spend)}</div>
-                        </div>
-
-                        {isPerf ? (
-                          <>
-                            {campaignLeads > 0 ? (
-                              <div className="text-right">
-                                <div className="text-[10px] uppercase tracking-wider text-white/30">Leads</div>
-                                <div className="font-bold text-emerald-400">{num(campaignLeads)}</div>
-                                {cpl > 0 ? <div className="text-[10px] text-white/40">CPL {brl(cpl)}</div> : null}
-                              </div>
-                            ) : null}
-                            {campaign.messagesStarted > 0 ? (
-                              <div className="text-right">
-                                <div className="text-[10px] uppercase tracking-wider text-white/30">Msgs</div>
-                                <div className="font-bold text-sky-400">{num(campaign.messagesStarted)}</div>
-                                {costPerMessage > 0 ? <div className="text-[10px] text-white/40">{brl(costPerMessage)}/msg</div> : null}
-                              </div>
-                            ) : null}
-                            {campaignLeads === 0 && campaign.messagesStarted === 0 ? (
-                              <div className="text-right">
-                                <div className="text-[10px] uppercase tracking-wider text-white/30">Alcance</div>
-                                <div className="font-bold text-white/80">{num(campaign.reach)}</div>
-                              </div>
-                            ) : null}
-                            <div className="text-right">
-                              <div className="text-[10px] uppercase tracking-wider text-white/30">CTR</div>
-                              <div className="font-bold text-white/80">{pct(campaign.ctr)}</div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-[10px] uppercase tracking-wider text-white/30">CPM</div>
-                              <div className="font-bold text-white/80">{brl(campaign.cpm)}</div>
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <div className="text-right">
-                              <div className="text-[10px] uppercase tracking-wider text-white/30">Cliques</div>
-                              <div className="font-bold text-white/90">{num(campaign.linkClicks)}</div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-[10px] uppercase tracking-wider text-white/30">LPV</div>
-                              <div className="font-bold text-emerald-400">{num(campaign.landingPageViews)}</div>
-                              {connectRate > 0 ? <div className="text-[10px] text-white/40">{pct(connectRate)}</div> : null}
-                            </div>
-                            <div className="text-right">
-                              <div className="text-[10px] uppercase tracking-wider text-white/30">Perfil</div>
-                              <div className="font-bold text-fuchsia-400">{num(campaign.profileVisits)}</div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-[10px] uppercase tracking-wider text-white/30">Vídeo</div>
-                              <div className="font-bold text-violet-300">{num(campaign.videoViews)}</div>
-                              {campaign.thruplays > 0 ? <div className="text-[10px] text-white/40">TP {num(campaign.thruplays)}</div> : null}
-                            </div>
-                            <div className="text-right">
-                              <div className="text-[10px] uppercase tracking-wider text-white/30">CTR</div>
-                              <div className="font-bold text-white/80">{pct(campaign.ctr)}</div>
-                            </div>
-                            <div className="text-right">
-                              <div className="text-[10px] uppercase tracking-wider text-white/30">Hook / Hold</div>
-                              <div className="font-bold text-white/80">
-                                {campaign.videoViews > 0 || campaign.thruplays > 0
-                                  ? `${pct(campaign.hookRate * 100)} / ${pct(campaign.holdRate * 100)}`
-                                  : '—'}
-                              </div>
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    <div className="h-1 overflow-hidden rounded-full bg-white/[0.04]">
-                      <div
-                        className="h-full rounded-full bg-indigo-500/70 transition-all duration-500"
-                        style={{ width: `${Math.round((campaign.spend / maxSpend) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })
-            )}
+        <div className="flex items-center justify-between gap-4">
+          <div className="inline-flex overflow-hidden rounded-xl border border-white/[0.07] text-xs">
+            {([
+              { id: 'meta', label: 'Meta' },
+              { id: 'google', label: 'Google' },
+            ] as const).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => {
+                  setCampaignPlatform(item.id);
+                  if (item.id !== 'meta') closeCampaignAds();
+                }}
+                className={`px-4 py-2 font-semibold transition-all ${
+                  campaignPlatform === item.id ? 'bg-indigo-600 text-white' : 'bg-transparent text-white/40 hover:text-white/70'
+                }`}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
         </div>
+
+        {campaignPlatform === 'meta' ? (
+          <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02]">
+            <div className="flex flex-col gap-4 border-b border-white/[0.06] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Meta Ads</div>
+                <div className="mt-0.5 flex items-center gap-2 text-base font-black text-white">
+                  {selectedCampaign ? (
+                    <button
+                      type="button"
+                      onClick={closeCampaignAds}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03] text-white/70 transition-colors hover:text-white"
+                      aria-label="Voltar para campanhas"
+                    >
+                      <ArrowLeft className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                  <div className="min-w-0">
+                    <div>{selectedCampaign ? 'Anuncios da campanha' : 'Campanhas do periodo'}</div>
+                    {selectedCampaign ? (
+                      <div className="truncate text-xs font-medium text-white/45">{selectedCampaign.name}</div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-3 text-[10px]">
+                <span className="hidden uppercase tracking-wider text-white/30 sm:block">Ordenar</span>
+                {selectedCampaign
+                  ? ([
+                      { id: 'spend', label: 'Invest.' },
+                      { id: 'leads', label: 'Leads' },
+                      { id: 'msgs', label: 'Msgs' },
+                      { id: 'ctr', label: 'CTR' },
+                      { id: 'hook', label: 'Hook' },
+                      { id: 'hold', label: 'Hold' },
+                    ] as const).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setAdSortKey(item.id)}
+                        className={`font-bold uppercase tracking-[0.15em] transition-colors ${
+                          adSortKey === item.id ? 'text-indigo-400' : 'text-white/30 hover:text-white/60'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))
+                  : ([
+                      { id: 'spend', label: 'Invest.' },
+                      { id: 'leads', label: 'Leads' },
+                      { id: 'msgs', label: 'Msgs' },
+                      { id: 'ctr', label: 'CTR' },
+                    ] as const).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setCampaignSortKey(item.id)}
+                        className={`font-bold uppercase tracking-[0.15em] transition-colors ${
+                          campaignSortKey === item.id ? 'text-indigo-400' : 'text-white/30 hover:text-white/60'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+              </div>
+            </div>
+
+            <div className="divide-y divide-white/[0.04]">
+              {selectedCampaign ? (
+                loadingCampaignAds ? (
+                  <div className="flex items-center justify-center gap-2 px-5 py-10 text-sm text-white/40">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Carregando anuncios da campanha...
+                  </div>
+                ) : sortedCampaignAds.length === 0 ? (
+                  <div className="px-5 py-10 text-center text-sm text-white/30">
+                    Nenhum anuncio encontrado para essa campanha no periodo.
+                  </div>
+                ) : (
+                  sortedCampaignAds.map((ad) => {
+                    const adLeads = ad.leadForms + ad.siteLeads;
+                    const cpl = adLeads > 0 ? ad.spend / adLeads : 0;
+                    const costPerMessage = ad.messagesStarted > 0 ? ad.spend / ad.messagesStarted : 0;
+                    const adHook = ad.videoViews > 0 ? pct(ad.hookRate * 100) : '—';
+                    const adHold = ad.thruplays > 0 ? pct(ad.holdRate * 100) : '—';
+
+                    return (
+                      <div key={ad.id} className="px-5 py-4 transition-colors hover:bg-white/[0.02]">
+                        <div className="mb-2.5 flex items-start justify-between gap-4">
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm font-semibold text-white/90">{ad.name}</div>
+                          </div>
+                          <div className="flex shrink-0 flex-wrap items-center justify-end gap-4 text-xs">
+                            <div className="text-right">
+                              <div className="text-[10px] uppercase tracking-wider text-white/30">Invest.</div>
+                              <div className="font-bold text-white">{brl(ad.spend)}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[10px] uppercase tracking-wider text-white/30">Leads</div>
+                              <div className="font-bold text-emerald-400">{num(adLeads)}</div>
+                              {cpl > 0 ? <div className="text-[10px] text-white/40">CPL {brl(cpl)}</div> : null}
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[10px] uppercase tracking-wider text-white/30">Msgs</div>
+                              <div className="font-bold text-sky-400">{num(ad.messagesStarted)}</div>
+                              {costPerMessage > 0 ? <div className="text-[10px] text-white/40">{brl(costPerMessage)}/msg</div> : null}
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[10px] uppercase tracking-wider text-white/30">CTR</div>
+                              <div className="font-bold text-white/80">{pct(ad.ctr)}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[10px] uppercase tracking-wider text-white/30">Hook</div>
+                              <div className="font-bold text-white/80">{adHook}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[10px] uppercase tracking-wider text-white/30">Hold</div>
+                              <div className="font-bold text-white/80">{adHold}</div>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="h-1 overflow-hidden rounded-full bg-white/[0.04]">
+                          <div
+                            className="h-full rounded-full bg-indigo-500/70 transition-all duration-500"
+                            style={{ width: `${Math.round((ad.spend / maxAdSpend) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })
+                )
+              ) : campaigns.length === 0 ? (
+                <div className="px-5 py-10 text-center text-sm text-white/30">
+                  {loadingData ? 'Carregando campanhas...' : 'Nenhuma campanha no periodo.'}
+                </div>
+              ) : (
+                campaigns.map((campaign) => {
+                  const campaignLeads = campaign.leadForms + campaign.siteLeads;
+                  const cpl = campaignLeads > 0 ? campaign.spend / campaignLeads : 0;
+                  const costPerMessage = campaign.messagesStarted > 0 ? campaign.spend / campaign.messagesStarted : 0;
+                  const connectRate = campaign.linkClicks > 0 ? (campaign.landingPageViews / campaign.linkClicks) * 100 : 0;
+
+                  return (
+                    <div key={campaign.id} className="px-5 py-4 transition-colors hover:bg-white/[0.02]">
+                      <div className="mb-2.5 flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0 flex-1">
+                              <div className="truncate text-sm font-semibold text-white/90">{campaign.name}</div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => openCampaignAds(campaign.id, campaign.name)}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/[0.08] bg-white/[0.03] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-white/65 transition-colors hover:text-white"
+                            >
+                              Anuncios
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap items-center justify-end gap-4 text-xs">
+                          <div className="text-right">
+                            <div className="text-[10px] uppercase tracking-wider text-white/30">Invest.</div>
+                            <div className="font-bold text-white">{brl(campaign.spend)}</div>
+                          </div>
+
+                          {isPerf ? (
+                            <>
+                              {campaignLeads > 0 ? (
+                                <div className="text-right">
+                                  <div className="text-[10px] uppercase tracking-wider text-white/30">Leads</div>
+                                  <div className="font-bold text-emerald-400">{num(campaignLeads)}</div>
+                                  {cpl > 0 ? <div className="text-[10px] text-white/40">CPL {brl(cpl)}</div> : null}
+                                </div>
+                              ) : null}
+                              {campaign.messagesStarted > 0 ? (
+                                <div className="text-right">
+                                  <div className="text-[10px] uppercase tracking-wider text-white/30">Msgs</div>
+                                  <div className="font-bold text-sky-400">{num(campaign.messagesStarted)}</div>
+                                  {costPerMessage > 0 ? <div className="text-[10px] text-white/40">{brl(costPerMessage)}/msg</div> : null}
+                                </div>
+                              ) : null}
+                              {campaignLeads === 0 && campaign.messagesStarted === 0 ? (
+                                <div className="text-right">
+                                  <div className="text-[10px] uppercase tracking-wider text-white/30">Alcance</div>
+                                  <div className="font-bold text-white/80">{num(campaign.reach)}</div>
+                                </div>
+                              ) : null}
+                              <div className="text-right">
+                                <div className="text-[10px] uppercase tracking-wider text-white/30">CTR</div>
+                                <div className="font-bold text-white/80">{pct(campaign.ctr)}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-[10px] uppercase tracking-wider text-white/30">CPM</div>
+                                <div className="font-bold text-white/80">{brl(campaign.cpm)}</div>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <div className="text-right">
+                                <div className="text-[10px] uppercase tracking-wider text-white/30">Cliques</div>
+                                <div className="font-bold text-white/90">{num(campaign.linkClicks)}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-[10px] uppercase tracking-wider text-white/30">LPV</div>
+                                <div className="font-bold text-emerald-400">{num(campaign.landingPageViews)}</div>
+                                {connectRate > 0 ? <div className="text-[10px] text-white/40">{pct(connectRate)}</div> : null}
+                              </div>
+                              <div className="text-right">
+                                <div className="text-[10px] uppercase tracking-wider text-white/30">Perfil</div>
+                                <div className="font-bold text-fuchsia-400">{num(campaign.profileVisits)}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-[10px] uppercase tracking-wider text-white/30">Video</div>
+                                <div className="font-bold text-violet-300">{num(campaign.videoViews)}</div>
+                                {campaign.thruplays > 0 ? <div className="text-[10px] text-white/40">TP {num(campaign.thruplays)}</div> : null}
+                              </div>
+                              <div className="text-right">
+                                <div className="text-[10px] uppercase tracking-wider text-white/30">CTR</div>
+                                <div className="font-bold text-white/80">{pct(campaign.ctr)}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-[10px] uppercase tracking-wider text-white/30">Hook / Hold</div>
+                                <div className="font-bold text-white/80">
+                                  {campaign.videoViews > 0 || campaign.thruplays > 0
+                                    ? `${pct(campaign.hookRate * 100)} / ${pct(campaign.holdRate * 100)}`
+                                    : '—'}
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="h-1 overflow-hidden rounded-full bg-white/[0.04]">
+                        <div
+                          className="h-full rounded-full bg-indigo-500/70 transition-all duration-500"
+                          style={{ width: `${Math.round((campaign.spend / maxSpend) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-10 text-center">
+            <div className="mx-auto max-w-md rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] px-6 py-8">
+              <div className="text-sm font-semibold text-white/85">Google Ads</div>
+              <div className="mt-2 text-sm leading-6 text-white/45">
+                Esta aba fica reservada para a implementacao do painel Google com campanhas e anuncios.
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   };

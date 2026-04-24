@@ -50,6 +50,33 @@ export type Campaign = {
   hookRate: number; holdRate: number;
 };
 
+export type AdBreakdownRow = {
+  id: string;
+  name: string;
+  campaignId: string;
+  campaignName: string;
+  spend: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  linkClicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  frequency: number;
+  results: number;
+  leadForms: number;
+  messagesStarted: number;
+  siteLeads: number;
+  landingPageViews: number;
+  profileVisits: number;
+  followers: number;
+  videoViews: number;
+  thruplays: number;
+  hookRate: number;
+  holdRate: number;
+};
+
 export type InstagramMedia = {
   id: string; caption: string; mediaType: string; mediaProductType: string;
   mediaUrl: string; thumbnailUrl: string; timestamp: string; permalink: string;
@@ -92,6 +119,12 @@ export type DashboardWeekly = {
   trafficReport: { publicId: string; title: string | null; createdAt: string } | null;
 };
 
+export type DashboardCampaignAds = {
+  campaignId: string;
+  campaignName: string;
+  rows: AdBreakdownRow[];
+};
+
 export const fetchDashboardBootstrap = (token: string) =>
   post<DashboardBootstrap & { ok: true }>({ section: 'bootstrap', token });
 
@@ -106,3 +139,17 @@ export const fetchDashboardData = (params: {
 
 export const fetchDashboardWeekly = (token: string) =>
   post<DashboardWeekly & { ok: true }>({ section: 'weekly', token });
+
+export const fetchDashboardCampaignAds = (params: {
+  token: string;
+  dateFrom: string;
+  dateTo: string;
+  campaignId: string;
+}) =>
+  post<DashboardCampaignAds & { ok: true }>({
+    section: 'campaign_ads',
+    token: params.token,
+    date_from: params.dateFrom,
+    date_to: params.dateTo,
+    campaign_id: params.campaignId,
+  });

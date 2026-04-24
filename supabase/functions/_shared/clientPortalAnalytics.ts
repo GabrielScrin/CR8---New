@@ -72,6 +72,33 @@ type MetaCampaignRow = {
   holdRate: number;
 };
 
+type MetaAdRow = {
+  id: string;
+  name: string;
+  campaignId: string;
+  campaignName: string;
+  spend: number;
+  impressions: number;
+  reach: number;
+  clicks: number;
+  linkClicks: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  frequency: number;
+  results: number;
+  messagesStarted: number;
+  leadForms: number;
+  siteLeads: number;
+  landingPageViews: number;
+  profileVisits: number;
+  followers: number;
+  videoViews: number;
+  thruplays: number;
+  hookRate: number;
+  holdRate: number;
+};
+
 type GoogleCampaignRow = {
   id: string;
   name: string;
@@ -585,6 +612,41 @@ const fetchMetaInsights = async (
   };
 
   for (let page = 0; page < 8; page += 1) {
+    const json = await fetchJson(nextUrl ?? makeFirstUrl());
+    const pageRows = Array.isArray(json?.data) ? json.data : [];
+    rows.push(...pageRows);
+    nextUrl = typeof json?.paging?.next === 'string' ? json.paging.next : null;
+    if (!nextUrl) break;
+  }
+
+  return rows;
+};
+
+const fetchMetaAdInsights = async (
+  metaAccessToken: string,
+  adAccountId: string,
+  dateFrom: string,
+  dateTo: string,
+  campaignId: string,
+) => {
+  const rows: any[] = [];
+  let nextUrl: string | null = null;
+
+  const makeFirstUrl = () => {
+    const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
+    url.searchParams.set(
+      'fields',
+      'campaign_id,campaign_name,ad_id,ad_name,spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions,cost_per_action_type,video_thruplay_watched_actions',
+    );
+    url.searchParams.set('level', 'ad');
+    url.searchParams.set('time_range', JSON.stringify({ since: dateFrom, until: dateTo }));
+    url.searchParams.set('limit', '200');
+    url.searchParams.set('access_token', metaAccessToken);
+    url.searchParams.set('filtering', JSON.stringify([{ field: 'campaign.id', operator: 'IN', value: [campaignId] }]));
+    return url.toString();
+  };
+
+  for (let page = 0; page < 10; page += 1) {
     const json = await fetchJson(nextUrl ?? makeFirstUrl());
     const pageRows = Array.isArray(json?.data) ? json.data : [];
     rows.push(...pageRows);
@@ -1756,6 +1818,123 @@ export const loadDashboardData = async (
     prevMeta,
     instagram,
     prevInstagram,
+  };
+};
+
+export const loadDashboardCampaignAds = async (
+  supabaseAdmin: SupabaseClient,
+  token: string,
+  dateFromRaw?: string,
+  dateToRaw?: string,
+  campaignIdRaw?: string,
+) => {
+  const link = await getPortalLinkRow(supabaseAdmin, token);
+  const window = buildDateWindow(dateFromRaw, dateToRaw);
+  const campaignId = asString(campaignIdRaw);
+  if (!campaignId) throw new Error('campaign_id ausente');
+
+  const { data: companyTokens, error: companyTokensError } = await supabaseAdmin
+    .from('companies')
+    .select('meta_access_token')
+    .eq('id', link.company_id)
+    .maybeSingle();
+
+  if (companyTokensError) throw companyTokensError;
+
+  const metaToken = asString((companyTokens as any)?.meta_access_token);
+  if (!metaToken) throw new Error('Meta Ads nao configurado para esta empresa.');
+
+  const rows = await fetchMetaAdInsights(metaToken, link.meta_ad_account_id, window.dateFrom, window.dateTo, campaignId);
+  const adMap = new Map<string, MetaAdRow>();
+  let campaignName = '';
+
+  for (const row of rows) {
+    const adId = asString(row?.ad_id);
+    if (!adId) continue;
+
+    const adName = asString(row?.ad_name) || adId;
+    const currentCampaignId = asString(row?.campaign_id) || campaignId;
+    const currentCampaignName = asString(row?.campaign_name) || currentCampaignId || 'Campanha';
+    const spend = asNumber(row?.spend);
+    const impressions = asNumber(row?.impressions);
+    const reach = asNumber(row?.reach);
+    const clicks = asNumber(row?.clicks);
+    const linkClicks = asNumber(row?.inline_link_clicks);
+    const ctr = asNumber(row?.ctr);
+    const cpc = asNumber(row?.cpc);
+    const cpm = asNumber(row?.cpm);
+    const frequency = asNumber(row?.frequency);
+    const actions = Array.isArray(row?.actions) ? row.actions : [];
+    const costPerActionType = Array.isArray(row?.cost_per_action_type) ? row.cost_per_action_type : [];
+    const videoThruplayActions = Array.isArray(row?.video_thruplay_watched_actions) ? row.video_thruplay_watched_actions : [];
+    const leadForms = extractLeadForms(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLeadForms);
+    const messagesStarted = extractMessagingStarted(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractMessagingStarted);
+    const siteLeads = extractSiteLeads(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractSiteLeads);
+    const landingPageViews = extractLandingPageViews(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLandingPageViews);
+    const profileVisits = extractProfileVisits(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractProfileVisits);
+    const followers = extractFollowers(actions);
+    const videoViews = extractVideoViews(actions);
+    const thruplays =
+      extractThruplays(actions) ||
+      extractActionTotal(videoThruplayActions) ||
+      deriveCountFromCostPerAction(spend, costPerActionType, extractThruplays);
+    const results = leadForms + messagesStarted + siteLeads;
+
+    const previous = adMap.get(adId) ?? {
+      id: adId,
+      name: adName,
+      campaignId: currentCampaignId,
+      campaignName: currentCampaignName,
+      spend: 0,
+      impressions: 0,
+      reach: 0,
+      clicks: 0,
+      linkClicks: 0,
+      ctr: 0,
+      cpc: 0,
+      cpm: 0,
+      frequency: 0,
+      results: 0,
+      messagesStarted: 0,
+      leadForms: 0,
+      siteLeads: 0,
+      landingPageViews: 0,
+      profileVisits: 0,
+      followers: 0,
+      videoViews: 0,
+      thruplays: 0,
+      hookRate: 0,
+      holdRate: 0,
+    };
+
+    previous.spend += spend;
+    previous.impressions += impressions;
+    previous.reach += reach;
+    previous.clicks += clicks;
+    previous.linkClicks += linkClicks;
+    previous.results += results;
+    previous.messagesStarted += messagesStarted;
+    previous.leadForms += leadForms;
+    previous.siteLeads += siteLeads;
+    previous.landingPageViews += landingPageViews;
+    previous.profileVisits += profileVisits;
+    previous.followers += followers;
+    previous.videoViews += videoViews;
+    previous.thruplays += thruplays;
+    previous.ctr = previous.impressions > 0 ? (previous.clicks / previous.impressions) * 100 : ctr;
+    previous.cpc = previous.clicks > 0 ? previous.spend / previous.clicks : cpc;
+    previous.cpm = previous.impressions > 0 ? (previous.spend / previous.impressions) * 1000 : cpm;
+    previous.frequency = previous.reach > 0 ? previous.impressions / previous.reach : frequency;
+    previous.hookRate = previous.impressions > 0 ? previous.videoViews / previous.impressions : 0;
+    previous.holdRate = previous.videoViews > 0 ? previous.thruplays / previous.videoViews : 0;
+    adMap.set(adId, previous);
+    campaignName = currentCampaignName;
+  }
+
+  return {
+    campaignId,
+    campaignName: campaignName || campaignId,
+    rows: Array.from(adMap.values()).sort((a, b) => b.spend - a.spend),
   };
 };
 
