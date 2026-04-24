@@ -24,7 +24,7 @@ interface ChartPoint {
 }
 
 function getConsumptionLabel(type: string): string {
-  return type === 'IMAGE' || type === 'CAROUSEL_ALBUM' ? 'impressoes' : 'visualiz.';
+  return type === 'IMAGE' || type === 'CAROUSEL_ALBUM' ? 'views' : 'visualiz.';
 }
 
 function getConsumptionValue(media: IgMedia): number {

@@ -257,7 +257,7 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
                 <SortHeader label="Alcance" sortKey="reach" sort={sort} onSort={handleSort} />
               </th>
               <th className="px-3 py-2 text-right">
-                <SortHeader label="Impress." sortKey="impressions" sort={sort} onSort={handleSort} />
+                <SortHeader label="Views" sortKey="impressions" sort={sort} onSort={handleSort} />
               </th>
               <th className="px-3 py-2 text-right">
                 <SortHeader label="Coment." sortKey="commentsCount" sort={sort} onSort={handleSort} />

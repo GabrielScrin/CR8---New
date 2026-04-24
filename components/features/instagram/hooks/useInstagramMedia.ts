@@ -48,7 +48,7 @@ async function fetchMediaInsights(
     const result = { ...empty };
     const metrics = ['reach'];
 
-    if (normalizedProductType === 'FEED') metrics.push('impressions');
+    if (normalizedProductType === 'FEED') metrics.push('views');
     if (normalizedProductType !== 'STORY') metrics.push('saved');
     if (normalizedProductType === 'FEED' || normalizedProductType === 'REEL' || normalizedProductType === 'REELS') metrics.push('shares');
     if (isVideo) metrics.push(normalizedProductType === 'REELS' ? 'views' : 'video_views');
@@ -63,7 +63,7 @@ async function fetchMediaInsights(
           const value = extractInsightValue(item);
 
           if (item.name === 'reach') result.reach = value;
-          if (item.name === 'impressions') result.impressions = value;
+          if (item.name === 'views') result.impressions = value;
           if (item.name === 'saved') result.saved = value;
           if (item.name === 'shares') result.shares = value;
           if (item.name === 'video_views' || item.name === 'views') result.videoViews = value;
