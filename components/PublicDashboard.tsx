@@ -1034,6 +1034,9 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                 })
               )}
             </div>
+            <div className="mt-4 rounded-2xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-xs leading-5 text-white/50">
+              <span className="font-semibold text-white/70">Legenda:</span> `Invest.` = investimento. `Leads` = formulários + leads no site. `CPL` = custo por lead. `Msgs` = mensagens iniciadas. `CTR` = taxa de cliques. `CPM` = custo por mil impressões. `LPV` = visualizações da página de destino. `Perfil` = visitas ao perfil. `TP` = ThruPlay. `Hook` = taxa de retenção inicial do vídeo. `Hold` = taxa de retenção até o ThruPlay.
+            </div>
           </div>
         ) : (
           <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-10 text-center">
