@@ -363,15 +363,18 @@ const extractMessagingStarted = (actions: any[] | undefined) =>
     (t) => t.includes('messaging_conversation_started'),
   );
 
-const extractProfileVisits = (actions: any[] | undefined) =>
-  extractActionSum(
-    actions,
-    (t) =>
-      t === 'instagram_profile_visit' ||
-      t === 'profile_visit' ||
-      t.includes('instagram_profile') ||
-      t.includes('profile_visit'),
+const isProfileVisitActionType = (actionType: string) => {
+  if (!actionType) return false;
+  if (actionType.includes('follow') || actionType === 'like' || actionType === 'page_fan') return false;
+  return (
+    actionType === 'instagram_profile_visit' ||
+    actionType === 'profile_visit' ||
+    (actionType.includes('profile') && actionType.includes('visit'))
   );
+};
+
+const extractProfileVisits = (actions: any[] | undefined) =>
+  extractActionSum(actions, isProfileVisitActionType);
 
 const extractFollowers = (actions: any[] | undefined) =>
   extractActionSum(actions, (t) => t === 'like' || t === 'page_fan' || t === 'instagram_profile_follow' || t === 'follow');
@@ -1840,7 +1843,7 @@ export const loadDashboardData = async (
 
   const [prevMeta, prevInstagram] = await Promise.all([
     metaToken
-      ? aggregateMetaOverview(metaToken, link.meta_ad_account_id, prevDateFrom, prevDateTo, [])
+      ? aggregateMetaOverview(metaToken, link.meta_ad_account_id, prevDateFrom, prevDateTo, metaCampaignIds)
       : Promise.resolve(buildEmptyMetaOverview('Meta Ads nao configurado para esta empresa.')),
     link.instagram_business_account_id && igToken
       ? buildInstagramOverview(igToken, link.instagram_business_account_id, prevDateFrom, prevDateTo)

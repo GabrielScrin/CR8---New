@@ -502,16 +502,19 @@ const extractMessagingConversationsFromActions = (actions: any[] | undefined) =>
     (t) => t.includes('messaging_conversation_started'),
   );
 
+const isProfileVisitActionType = (actionType: string) => {
+  if (!actionType) return false;
+  if (actionType.includes('follow') || actionType === 'like' || actionType === 'page_fan') return false;
+  return (
+    actionType === 'instagram_profile_visit' ||
+    actionType === 'profile_visit' ||
+    (actionType.includes('profile') && actionType.includes('visit'))
+  );
+};
+
 // Visitas ao perfil reais do Instagram; nao incluir page engagement / view content genericos.
 const extractProfileVisitsFromActions = (actions: any[] | undefined) =>
-  extractActionSum(
-    actions,
-    (t) =>
-      t === 'instagram_profile_visit' ||
-      t === 'profile_visit' ||
-      t.includes('instagram_profile') ||
-      t.includes('profile_visit'),
-  );
+  extractActionSum(actions, isProfileVisitActionType);
 
 // Seguidores/likes ganhos (Meta page likes e Instagram follows via anuncios)
 const extractFollowersFromActions = (actions: any[] | undefined) =>
