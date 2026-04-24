@@ -44,33 +44,30 @@ async function fetchMediaInsights(
 
   try {
     const normalizedProductType = String(mediaProductType || '').toUpperCase();
+    const result = { ...empty };
     const metrics = ['reach'];
 
-    if (normalizedProductType !== 'STORY') {
-      metrics.push('saved');
-    }
+    if (normalizedProductType !== 'STORY') metrics.push('saved');
+    if (normalizedProductType === 'FEED' || normalizedProductType === 'REEL' || normalizedProductType === 'REELS') metrics.push('shares');
+    if (isVideo) metrics.push(normalizedProductType === 'REELS' ? 'views' : 'video_views');
 
-    if (normalizedProductType === 'FEED' || normalizedProductType === 'REEL' || normalizedProductType === 'REELS') {
-      metrics.push('shares');
-    }
+    for (const metric of metrics) {
+      try {
+        const json = await fetchGraphJson(
+          `${GRAPH_BASE}/${mediaId}/insights?metric=${metric}&access_token=${token}`,
+        );
 
-    if (isVideo) {
-      metrics.push('video_views');
-    }
+        for (const item of json.data ?? []) {
+          const value = extractInsightValue(item);
 
-    const json = await fetchGraphJson(
-      `${GRAPH_BASE}/${mediaId}/insights?metric=${metrics.join(',')}&access_token=${token}`,
-    );
-
-    const result = { ...empty };
-
-    for (const item of json.data ?? []) {
-      const value = extractInsightValue(item);
-
-      if (item.name === 'reach') result.reach = value;
-      if (item.name === 'saved') result.saved = value;
-      if (item.name === 'shares') result.shares = value;
-      if (item.name === 'video_views') result.videoViews = value;
+          if (item.name === 'reach') result.reach = value;
+          if (item.name === 'saved') result.saved = value;
+          if (item.name === 'shares') result.shares = value;
+          if (item.name === 'video_views' || item.name === 'views') result.videoViews = value;
+        }
+      } catch {
+        // Alguns tipos de mídia não suportam todas as métricas. Mantemos as demais.
+      }
     }
 
     return result;

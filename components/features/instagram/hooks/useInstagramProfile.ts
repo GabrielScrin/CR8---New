@@ -122,6 +122,18 @@ function extractMetricTotal(dataArr: any[], metricName: string): number {
   return 0;
 }
 
+function extractMetricSeries(dataArr: any[], metricName: string): Record<string, number> {
+  const metric = (dataArr ?? []).find((item: any) => item?.name === metricName);
+  if (!metric || !Array.isArray(metric.values)) return {};
+
+  return metric.values.reduce((acc: Record<string, number>, point: any) => {
+    const iso = endTimeToIso(String(point?.end_time ?? ''));
+    if (!iso) return acc;
+    acc[iso] = extractValue(point?.value);
+    return acc;
+  }, {});
+}
+
 function parseDemographics(dataArr: any[]): {
   cities: IgAudienceCity[];
   ageGroups: IgAudienceAge[];
@@ -221,7 +233,7 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
       const { since, until } = periodToDates(period);
       const base = `&access_token=${token}`;
 
-      const [profileJson, reachJson, totalsJson, demoCityJson, demoAgeJson] =
+      const [profileJson, reachJson, totalsJson, followerCountJson, demoCityJson, demoAgeJson] =
         await Promise.all([
           fetchGraphJson(
             `${GRAPH_BASE}/${igUserId}` +
@@ -241,6 +253,12 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
             `&since=${since}&until=${until}` +
             base,
           ),
+          fetchGraphJson(
+            `${GRAPH_BASE}/${igUserId}/insights` +
+            `?metric=follower_count` +
+            `&period=day&since=${since}&until=${until}` +
+            base,
+          ).catch(() => ({ data: [] })),
           fetchGraphJson(
             `${GRAPH_BASE}/${igUserId}/insights` +
             `?metric=follower_demographics&metric_type=total_value&period=lifetime&breakdown=city` +
@@ -265,6 +283,7 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
       };
 
       const metricsMap = parseTimeSeries(reachJson.data ?? [], ['reach']);
+      const followerSeries = extractMetricSeries(followerCountJson.data ?? [], 'follower_count');
       const allDates = Object.keys(metricsMap.reach).sort();
 
       const series: IgDailyPoint[] = allDates.map((iso) => ({
@@ -274,14 +293,14 @@ export function useInstagramProfile(igUserId: string | null, period: IgPeriod) {
         reach: metricsMap.reach[iso] ?? 0,
         // The newer Meta format returns these metrics only as total_value for the period.
         views: 0,
-        followerDelta: 0,
+        followerDelta: followerSeries[iso] ?? 0,
         accountsEngaged: 0,
       }));
 
       const totalReach = series.reduce((sum, point) => sum + point.reach, 0);
       const totalViews = extractMetricTotal(totalsJson.data ?? [], 'views');
       const totalProfileViews = extractMetricTotal(totalsJson.data ?? [], 'profile_views');
-      const totalFollowerGain = extractMetricTotal(totalsJson.data ?? [], 'follows_and_unfollows');
+      const totalFollowerGain = Object.values(followerSeries).reduce((sum, value) => sum + value, 0);
       const totalAccountsEngaged = extractMetricTotal(totalsJson.data ?? [], 'accounts_engaged');
 
       const { cities, ageGroups, gender } = parseDemographics([
