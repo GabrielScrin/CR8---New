@@ -23,6 +23,10 @@ interface ChartPoint {
   count: number;
 }
 
+function getConsumptionLabel(type: string): string {
+  return type === 'IMAGE' || type === 'CAROUSEL_ALBUM' ? 'impressoes' : 'visualiz.';
+}
+
 function buildChartData(media: IgMedia[]): ChartPoint[] {
   const groups: Record<string, { reach: number; views: number; interactions: number; count: number }> = {};
 
@@ -79,12 +83,13 @@ export const InstagramMediaTypeChart: React.FC<InstagramMediaTypeChartProps> = (
       <div className="mb-4">
         <div className="mr-2 inline-block h-5 w-0.5 align-middle rounded-full bg-gradient-to-b from-amber-500 to-orange-400" />
         <span className="text-[15px] font-bold text-[hsl(var(--foreground))]">Desempenho por tipo</span>
-        <span className="ml-2 text-xs text-[hsl(var(--muted-foreground))]">(totais de alcance e visualizacoes)</span>
+        <span className="ml-2 text-xs text-[hsl(var(--muted-foreground))]">(totais de alcance e consumo)</span>
       </div>
 
       <div className="flex flex-col gap-3">
         {data.map(({ type, label, color, totalReach, totalViews, totalInteractions, count }) => {
           const maxVal = Math.max(...data.map((d) => Math.max(d.totalReach, d.totalViews)), 1);
+          const consumptionLabel = getConsumptionLabel(type);
 
           return (
             <div key={type}>
@@ -99,7 +104,7 @@ export const InstagramMediaTypeChart: React.FC<InstagramMediaTypeChartProps> = (
                     <span className="font-semibold text-[hsl(var(--foreground))]">{fmtY(totalReach)}</span> alcance
                   </span>
                   <span className="text-[hsl(var(--muted-foreground))]">
-                    <span className="font-semibold text-[hsl(var(--foreground))]">{fmtY(totalViews)}</span> visualiz.
+                    <span className="font-semibold text-[hsl(var(--foreground))]">{fmtY(totalViews)}</span> {consumptionLabel}
                   </span>
                   <span className="text-[hsl(var(--muted-foreground))]">
                     <span className="font-semibold text-[hsl(var(--foreground))]">{fmtY(totalInteractions)}</span> inter.

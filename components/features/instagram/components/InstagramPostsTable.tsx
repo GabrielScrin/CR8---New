@@ -73,7 +73,7 @@ const SortHeader: React.FC<SortHeaderProps> = ({ label, sortKey, sort, onSort })
   return (
     <button
       onClick={() => onSort(sortKey)}
-      className="flex items-center gap-0.5 text-xs font-semibold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
+      className="flex w-full items-center justify-end gap-0.5 text-xs font-semibold text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--foreground))] transition-colors"
     >
       {label}
       {active ? (
@@ -223,9 +223,21 @@ export const InstagramPostsTable: React.FC<InstagramPostsTableProps> = ({
 
       <div className="px-6 pb-6 overflow-x-auto">
         <table className="w-full min-w-[820px] border-collapse">
+          <colgroup>
+            <col className="w-14" />
+            <col />
+            <col className="w-28" />
+            <col className="w-24" />
+            <col className="w-24" />
+            <col className="w-24" />
+            <col className="w-24" />
+            <col className="w-28" />
+            <col className="w-20" />
+            <col className="w-10" />
+          </colgroup>
           <thead>
             <tr className="border-b border-[hsl(var(--border))]">
-              <th className="px-3 py-2 text-left w-14" />
+              <th className="px-3 py-2 text-left" />
               <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--muted-foreground))]">Legenda</th>
               <th className="px-3 py-2 text-left text-xs font-semibold text-[hsl(var(--muted-foreground))]">Tipo</th>
               <th className="px-3 py-2 text-right">
