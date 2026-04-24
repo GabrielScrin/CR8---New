@@ -415,11 +415,16 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const ig = data?.instagram;
   const prevIg = data?.prevInstagram;
   const metrics = useCampaignMetrics(meta?.summary, prevMeta?.summary);
+  const canUseOrganicProfileVisitFallback = campaignIds.length === 0;
   const paidProfileVisitsCurrent = metrics?.profileVisits ?? 0;
   const paidProfileVisitsPrevious = metrics?.prevProfileVisits ?? 0;
-  const visibleProfileVisitsCurrent = paidProfileVisitsCurrent;
-  const visibleProfileVisitsPrevious = paidProfileVisitsPrevious;
-  const profileVisitsHint = 'Fonte atual: Meta Ads';
+  const organicProfileVisitsCurrent = ig?.summary.totalProfileViews ?? 0;
+  const organicProfileVisitsPrevious = prevIg?.summary.totalProfileViews ?? 0;
+  const usingOrganicProfileVisitFallback =
+    canUseOrganicProfileVisitFallback && paidProfileVisitsCurrent <= 0 && organicProfileVisitsCurrent > 0;
+  const visibleProfileVisitsCurrent = usingOrganicProfileVisitFallback ? organicProfileVisitsCurrent : paidProfileVisitsCurrent;
+  const visibleProfileVisitsPrevious = usingOrganicProfileVisitFallback ? organicProfileVisitsPrevious : paidProfileVisitsPrevious;
+  const profileVisitsHint = usingOrganicProfileVisitFallback ? 'Fonte atual: Instagram' : 'Fonte atual: Meta Ads';
   const resultsBreakdown = metrics
     ? `Msgs ${num(metrics.messagesStarted)} · Forms ${num(metrics.leadForms)} · Site ${num(metrics.siteLeads)}`
     : 'Msgs 0 · Forms 0 · Site 0';
@@ -643,6 +648,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                 </div>
                 <div className="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-xs leading-5 text-white/55">
                   <strong className="font-semibold text-white/75">Resultados</strong> considera somente <span className="text-white/80">Mensagens iniciadas + Lead Forms + Leads no site</span>. Visitas ao perfil e seguidores aparecem separados e nao entram nesse total.
+                  {usingOrganicProfileVisitFallback ? ' Como a Meta Ads nao retornou profile_visit neste periodo, a visualizacao de perfil esta usando o total do Instagram.' : ''}
                 </div>
               </div>
             ) : null}
