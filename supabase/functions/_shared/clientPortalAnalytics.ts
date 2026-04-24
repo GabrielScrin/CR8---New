@@ -604,7 +604,7 @@ const fetchMetaInsights = async (
     const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
     url.searchParams.set(
       'fields',
-      'campaign_id,campaign_name,date_start,spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions,cost_per_action_type,video_thruplay_watched_actions',
+      'campaign_id,campaign_name,date_start,spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions,results,cost_per_result,cost_per_action_type,instagram_profile_visits,video_thruplay_watched_actions',
     );
     url.searchParams.set('level', 'campaign');
     url.searchParams.set('time_increment', '1');
@@ -642,7 +642,7 @@ const fetchMetaAdInsights = async (
     const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
     url.searchParams.set(
       'fields',
-      'campaign_id,campaign_name,ad_id,ad_name,spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions,cost_per_action_type,video_thruplay_watched_actions',
+      'campaign_id,campaign_name,ad_id,ad_name,spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions,results,cost_per_result,cost_per_action_type,instagram_profile_visits,video_thruplay_watched_actions',
     );
     url.searchParams.set('level', 'ad');
     url.searchParams.set('time_range', JSON.stringify({ since: dateFrom, until: dateTo }));
@@ -663,42 +663,17 @@ const fetchMetaAdInsights = async (
   return rows;
 };
 
-const fetchMetaProfileVisitCampaignIds = async (
-  metaAccessToken: string,
-  adAccountId: string,
-  campaignIds: string[],
-): Promise<Set<string>> => {
-  const ids = campaignIds.map((id) => asString(id)).filter(Boolean);
-  if (ids.length === 0) return new Set<string>();
+const extractResultIndicator = (results: any[] | undefined) => {
+  if (!Array.isArray(results) || results.length === 0) return '';
+  return asString(results[0]?.indicator).toLowerCase();
+};
 
-  const flagged = new Set<string>();
-  let nextUrl: string | null = null;
-
-  const makeFirstUrl = () => {
-    const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/adsets`);
-    url.searchParams.set('fields', 'id,campaign_id,destination_type,optimization_goal');
-    url.searchParams.set('limit', '200');
-    url.searchParams.set('access_token', metaAccessToken);
-    url.searchParams.set('filtering', JSON.stringify([{ field: 'campaign.id', operator: 'IN', value: ids }]));
-    return url.toString();
-  };
-
-  for (let page = 0; page < 10; page += 1) {
-    const json = await fetchJson(nextUrl ?? makeFirstUrl());
-    for (const row of Array.isArray(json?.data) ? json.data : []) {
-      const campaignId = asString(row?.campaign_id);
-      if (!campaignId) continue;
-      const destinationType = asString(row?.destination_type).toUpperCase();
-      const optimizationGoal = asString(row?.optimization_goal).toUpperCase();
-      if (destinationType === 'INSTAGRAM_PROFILE' || optimizationGoal === 'PROFILE_VISIT') {
-        flagged.add(campaignId);
-      }
-    }
-    nextUrl = typeof json?.paging?.next === 'string' ? json.paging.next : null;
-    if (!nextUrl) break;
-  }
-
-  return flagged;
+const extractResultValue = (results: any[] | undefined) => {
+  if (!Array.isArray(results) || results.length === 0) return 0;
+  const first = results[0];
+  const values = Array.isArray(first?.values) ? first.values : [];
+  if (values.length > 0) return asNumber(values[0]?.value);
+  return asNumber(first?.value);
 };
 
 const fetchMetaAdThumbnails = async (
@@ -746,11 +721,6 @@ const aggregateMetaOverview = async (
   try {
     const rows = await fetchMetaInsights(metaAccessToken, adAccountId, dateFrom, dateTo, campaignIds);
     const accountName = await getMetaAccountName(metaAccessToken, adAccountId);
-    const profileVisitCampaignIds = await fetchMetaProfileVisitCampaignIds(
-      metaAccessToken,
-      adAccountId,
-      Array.from(new Set(rows.map((row) => asString(row?.campaign_id)).filter(Boolean))),
-    ).catch(() => new Set<string>());
     const campaignMap = new Map<string, MetaCampaignRow>();
     const dailyMap = new Map<string, DailyPoint>();
 
@@ -767,8 +737,10 @@ const aggregateMetaOverview = async (
       const cpc = asNumber(row?.cpc);
       const cpm = asNumber(row?.cpm);
       const frequency = asNumber(row?.frequency);
-      const isProfileVisitCampaign = campaignId ? profileVisitCampaignIds.has(campaignId) : false;
       const actions = Array.isArray(row?.actions) ? row.actions : [];
+      const resultsPayload = Array.isArray(row?.results) ? row.results : [];
+      const resultIndicator = extractResultIndicator(resultsPayload);
+      const isProfileVisitCampaign = resultIndicator === 'profile_visit_view';
       const costPerActionType = Array.isArray(row?.cost_per_action_type) ? row.cost_per_action_type : [];
       const videoThruplayActions = Array.isArray(row?.video_thruplay_watched_actions) ? row.video_thruplay_watched_actions : [];
       const leadForms = isProfileVisitCampaign ? 0 : extractLeadForms(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLeadForms);
@@ -776,10 +748,11 @@ const aggregateMetaOverview = async (
       const siteLeads = isProfileVisitCampaign ? 0 : extractSiteLeads(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractSiteLeads);
       const landingPageViews = extractLandingPageViews(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLandingPageViews);
       const profileVisits =
+        asNumber(row?.instagram_profile_visits) ||
+        (isProfileVisitCampaign ? extractResultValue(resultsPayload) : 0) ||
         extractProfileVisits(actions) ||
-        deriveCountFromCostPerAction(spend, costPerActionType, extractProfileVisits) ||
-        (isProfileVisitCampaign ? linkClicks : 0);
-      const followers = extractFollowers(actions);
+        deriveCountFromCostPerAction(spend, costPerActionType, extractProfileVisits);
+      const followers = 0;
       const videoViews = extractVideoViews(actions);
       const thruplays =
         extractThruplays(actions) ||
@@ -1933,10 +1906,6 @@ export const loadDashboardCampaignAds = async (
   if (!metaToken) throw new Error('Meta Ads nao configurado para esta empresa.');
 
   const rows = await fetchMetaAdInsights(metaToken, link.meta_ad_account_id, window.dateFrom, window.dateTo, campaignId);
-  const profileVisitCampaignIds = await fetchMetaProfileVisitCampaignIds(metaToken, link.meta_ad_account_id, [campaignId]).catch(
-    () => new Set<string>(),
-  );
-  const isProfileVisitCampaign = profileVisitCampaignIds.has(campaignId);
   const adMap = new Map<string, MetaAdRow>();
   let campaignName = '';
 
@@ -1957,6 +1926,9 @@ export const loadDashboardCampaignAds = async (
     const cpm = asNumber(row?.cpm);
     const frequency = asNumber(row?.frequency);
     const actions = Array.isArray(row?.actions) ? row.actions : [];
+    const resultsPayload = Array.isArray(row?.results) ? row.results : [];
+    const resultIndicator = extractResultIndicator(resultsPayload);
+    const isProfileVisitCampaign = resultIndicator === 'profile_visit_view';
     const costPerActionType = Array.isArray(row?.cost_per_action_type) ? row.cost_per_action_type : [];
     const videoThruplayActions = Array.isArray(row?.video_thruplay_watched_actions) ? row.video_thruplay_watched_actions : [];
     const leadForms = isProfileVisitCampaign ? 0 : extractLeadForms(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLeadForms);
@@ -1964,10 +1936,11 @@ export const loadDashboardCampaignAds = async (
     const siteLeads = isProfileVisitCampaign ? 0 : extractSiteLeads(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractSiteLeads);
     const landingPageViews = extractLandingPageViews(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLandingPageViews);
     const profileVisits =
+      asNumber(row?.instagram_profile_visits) ||
+      (isProfileVisitCampaign ? extractResultValue(resultsPayload) : 0) ||
       extractProfileVisits(actions) ||
-      deriveCountFromCostPerAction(spend, costPerActionType, extractProfileVisits) ||
-      (isProfileVisitCampaign ? linkClicks : 0);
-    const followers = extractFollowers(actions);
+      deriveCountFromCostPerAction(spend, costPerActionType, extractProfileVisits);
+    const followers = 0;
     const videoViews = extractVideoViews(actions);
     const thruplays =
       extractThruplays(actions) ||
