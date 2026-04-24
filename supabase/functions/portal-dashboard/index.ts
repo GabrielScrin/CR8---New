@@ -9,6 +9,7 @@ import {
   loadDashboardWeekly,
 } from '../_shared/clientPortalAnalytics.ts';
 
+// Redeploy marker: force a fresh bundle when shared portal analytics changes.
 serve(async (req) => {
   try {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
