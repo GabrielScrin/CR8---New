@@ -1168,6 +1168,52 @@ const fetchInstagramDailyTotalValueSeries = async (
   return result;
 };
 
+const fetchInstagramMediaInsights = async (
+  graphBase: string,
+  mediaId: string,
+  instagramAccessToken: string,
+  mediaProductType: string,
+  isVideo: boolean,
+): Promise<Pick<InstagramOverview['media'][number], 'reach' | 'impressions' | 'saved' | 'shares' | 'videoViews'>> => {
+  const empty = { reach: null, impressions: null, saved: null, shares: null, videoViews: null };
+
+  try {
+    const normalizedProductType = asString(mediaProductType).toUpperCase();
+    const result = { ...empty };
+    const metrics = ['reach'];
+
+    if (normalizedProductType === 'FEED') metrics.push('views');
+    if (normalizedProductType !== 'STORY') metrics.push('saved');
+    if (normalizedProductType === 'FEED' || normalizedProductType === 'REEL' || normalizedProductType === 'REELS') metrics.push('shares');
+    if (isVideo) metrics.push(normalizedProductType === 'REELS' ? 'views' : 'video_views');
+
+    for (const metric of metrics) {
+      try {
+        const json = await fetchInstagramJson(
+          `${graphBase}/${mediaId}/insights?metric=${metric}&access_token=${instagramAccessToken}`,
+        );
+
+        for (const item of Array.isArray(json?.data) ? json.data : []) {
+          const value = item?.total_value?.value ?? item?.values?.[0]?.value ?? item?.value ?? null;
+          const parsedValue = typeof value === 'number' ? value : null;
+
+          if (item?.name === 'reach') result.reach = parsedValue;
+          if (item?.name === 'views') result.impressions = parsedValue;
+          if (item?.name === 'saved') result.saved = parsedValue;
+          if (item?.name === 'shares') result.shares = parsedValue;
+          if (item?.name === 'video_views' || item?.name === 'views') result.videoViews = parsedValue;
+        }
+      } catch {
+        // Alguns tipos de mídia não suportam todas as métricas.
+      }
+    }
+
+    return result;
+  } catch {
+    return empty;
+  }
+};
+
 const parseInstagramDemographics = (dataArr: any[]) => {
   let cities: Array<{ city: string; count: number }> = [];
   const ageMap: Record<string, { male: number; female: number }> = {};
@@ -1296,14 +1342,11 @@ const buildInstagramOverview = async (
 
       totalViews = totalValueMetric('views');
       totalProfileViews = totalValueMetric('profile_views');
-      totalFollowerGain = totalValueMetric('follows_and_unfollows');
       totalAccountsEngaged = totalValueMetric('accounts_engaged');
       viewsSeries = fetchedViewsSeries;
       engagedSeries = fetchedEngagedSeries;
       followerSeries = extractInstagramMetricSeries(followerCountJson.data ?? [], 'follower_count');
-      if (totalFollowerGain <= 0) {
-        totalFollowerGain = Object.values(followerSeries).reduce((sum, value) => sum + value, 0);
-      }
+      totalFollowerGain = Object.values(followerSeries).reduce((sum, value) => sum + value, 0);
       audience = parseInstagramDemographics([
         ...((demoCityJson.data ?? []) as any[]),
         ...((demoAgeJson.data ?? []) as any[]),
@@ -1330,34 +1373,22 @@ const buildInstagramOverview = async (
       media = await Promise.all(
         ((Array.isArray(mediaJson?.data) ? mediaJson.data : []) as any[]).map(async (item: any) => {
           const mediaId = asString(item?.id);
-          const metrics = ['reach'];
           const productType = asString(item?.media_product_type).toUpperCase();
           const mediaType = asString(item?.media_type).toUpperCase();
-          if (productType === 'FEED') metrics.push('views');
-          if (productType !== 'STORY') metrics.push('saved');
-          if (productType === 'FEED' || productType === 'REEL' || productType === 'REELS') metrics.push('shares');
-          if (mediaType === 'VIDEO') metrics.push('video_views');
-
-          let insights: any = { data: [] };
-          if (mediaId) {
-            try {
-              insights = await fetchInstagramJson(
-                `${graphBase}/${mediaId}/insights?metric=${metrics.join(',')}&access_token=${instagramAccessToken}`,
-              );
-            } catch {
-              insights = { data: [] };
-            }
-          }
-
-          const insightValue = (metricName: string) => {
-            const match = Array.isArray(insights?.data) ? insights.data.find((entry: any) => entry?.name === metricName) : null;
-            return match?.total_value?.value ?? match?.values?.[0]?.value ?? null;
-          };
+          const insights = mediaId
+            ? await fetchInstagramMediaInsights(
+                graphBase,
+                mediaId,
+                instagramAccessToken,
+                productType || 'FEED',
+                mediaType === 'VIDEO',
+              )
+            : { reach: null, impressions: null, saved: null, shares: null, videoViews: null };
 
           const commentsCount = typeof item?.comments_count === 'number' ? item.comments_count : null;
           const likeCount = typeof item?.like_count === 'number' ? item.like_count : null;
-          const saved = insightValue('saved');
-          const shares = insightValue('shares');
+          const saved = insights.saved;
+          const shares = insights.shares;
           const totalInteractions = [commentsCount, likeCount, saved, shares]
             .filter((value): value is number => typeof value === 'number')
             .reduce((sum, value) => sum + value, 0);
@@ -1371,11 +1402,11 @@ const buildInstagramOverview = async (
             thumbnailUrl: asString(item?.thumbnail_url) || asString(item?.media_url),
             timestamp: asString(item?.timestamp),
             permalink: asString(item?.permalink),
-            reach: insightValue('reach'),
-            impressions: insightValue('views'),
+            reach: insights.reach,
+            impressions: insights.impressions,
             saved,
             shares,
-            videoViews: insightValue('video_views'),
+            videoViews: insights.videoViews,
             commentsCount,
             likeCount,
             totalInteractions,
