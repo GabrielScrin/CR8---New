@@ -868,16 +868,6 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
               </div>
             ) : null}
 
-            {metrics ? (
-              <CampaignPerformanceFunnel
-                metrics={metrics}
-                goal={funnelGoal}
-                onGoalChange={setFunnelGoal}
-                visibleProfileVisitsCurrent={visibleProfileVisitsCurrent}
-                visibleProfileVisitsPrevious={visibleProfileVisitsPrevious}
-              />
-            ) : null}
-
             <div>
               <SectionLabel>Métricas de Entrega</SectionLabel>
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -961,7 +951,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
         )}
 
         <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
-          <div className="mb-5 flex items-center justify-between">
+          <div className="mb-5 flex items-center justify-between gap-4">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Evolução Diária</div>
               <div className="mt-1 text-base font-black text-white">Investimento, Leads &amp; Mensagens</div>
@@ -983,6 +973,16 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
             </ResponsiveContainer>
           </div>
         </div>
+
+        {isPerf && metrics ? (
+          <CampaignPerformanceFunnel
+            metrics={metrics}
+            goal={funnelGoal}
+            onGoalChange={setFunnelGoal}
+            visibleProfileVisitsCurrent={visibleProfileVisitsCurrent}
+            visibleProfileVisitsPrevious={visibleProfileVisitsPrevious}
+          />
+        ) : null}
 
         <div className="flex items-center justify-between gap-4">
           <div className="inline-flex overflow-hidden rounded-xl border border-white/[0.07] text-xs">
@@ -1267,6 +1267,20 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
             </div>
             <div className="mt-4 rounded-2xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-xs leading-5 text-white/50">
               <span className="font-semibold text-white/70">Legenda:</span> `Invest.` = investimento. `Leads` = formulários + leads no site. `CPL` = custo por lead. `Msgs` = mensagens iniciadas. `CTR` = taxa de cliques. `CPM` = custo por mil impressões. `LPV` = visualizações da página de destino. `Perfil` = visitas ao perfil. `TP` = ThruPlay. `Hook` = taxa de retenção inicial do vídeo. `Hold` = taxa de retenção até o ThruPlay.
+            </div>
+            <div className="hidden flex-wrap items-center justify-end gap-3 text-[11px] text-white/45 sm:flex">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#6366f1]" />
+                Investimento
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#10b981]" />
+                Leads
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#38bdf8]" />
+                Mensagens
+              </span>
             </div>
           </div>
         ) : (
