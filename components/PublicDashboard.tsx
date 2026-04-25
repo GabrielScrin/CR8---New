@@ -594,6 +594,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const [campaignAdsError, setCampaignAdsError] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
+  const latestDashboardRequestRef = useRef(0);
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
@@ -623,14 +624,20 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
       .finally(() => setLoadingBoot(false));
   }, [token]);
 
-  const loadData = useCallback(() => {
-    if (!dateFrom || !dateTo) return;
+  const loadData = useCallback((range?: { dateFrom: string; dateTo: string }) => {
+    const activeDateFrom = range?.dateFrom ?? dateFrom;
+    const activeDateTo = range?.dateTo ?? dateTo;
+    if (!activeDateFrom || !activeDateTo) return;
+
+    const requestId = Date.now();
+    latestDashboardRequestRef.current = requestId;
 
     setLoadingData(true);
     setErrorMsg(null);
 
-    fetchDashboardData({ token, dateFrom, dateTo, campaignIds })
+    fetchDashboardData({ token, dateFrom: activeDateFrom, dateTo: activeDateTo, campaignIds })
       .then((payload) => {
+        if (latestDashboardRequestRef.current !== requestId) return;
         setData(payload);
         const summary = payload.meta?.summary;
         if (summary && (summary.leadForms > 0 || summary.siteLeads > 0 || summary.messagesStarted > 0)) {
@@ -639,8 +646,13 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
           setViewMode('distribuicao');
         }
       })
-      .catch((error) => setErrorMsg(error?.message ?? 'Erro ao carregar dados.'))
-      .finally(() => setLoadingData(false));
+      .catch((error) => {
+        if (latestDashboardRequestRef.current !== requestId) return;
+        setErrorMsg(error?.message ?? 'Erro ao carregar dados.');
+      })
+      .finally(() => {
+        if (latestDashboardRequestRef.current === requestId) setLoadingData(false);
+      });
   }, [campaignIds, dateFrom, dateTo, token]);
 
   useEffect(() => {
@@ -767,6 +779,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
     setDateFrom(normalized.start);
     setDateTo(normalized.end);
     setDateDialogOpen(false);
+    loadData({ dateFrom: normalized.start, dateTo: normalized.end });
   };
 
   useEffect(() => {
