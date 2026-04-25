@@ -1300,12 +1300,13 @@ const buildInstagramOverview = async (
     let totalFollowerGain = 0;
     let totalAccountsEngaged = 0;
     let viewsSeries: Record<string, number> = {};
+    let profileViewsSeries: Record<string, number> = {};
     let engagedSeries: Record<string, number> = {};
     let followerSeries: Record<string, number> = {};
     let audience: InstagramOverview['audience'] = { cities: [], ageGroups: [], gender: null };
 
     try {
-      const [reachJson, totalsJson, followerCountJson, fetchedViewsSeries, fetchedEngagedSeries, demoCityJson, demoAgeJson] = await Promise.all([
+      const [reachJson, totalsJson, followerCountJson, fetchedViewsSeries, fetchedProfileViewsSeries, fetchedEngagedSeries, demoCityJson, demoAgeJson] = await Promise.all([
         fetchInstagramJson(
           `${graphBase}/${instagramBusinessAccountId}/insights?metric=reach&period=day&since=${since}&until=${until}&access_token=${instagramAccessToken}`,
         ),
@@ -1316,6 +1317,7 @@ const buildInstagramOverview = async (
           `${graphBase}/${instagramBusinessAccountId}/insights?metric=follower_count&period=day&since=${since}&until=${until}&access_token=${instagramAccessToken}`,
         ).catch(() => ({ data: [] })),
         fetchInstagramDailyTotalValueSeries(graphBase, instagramBusinessAccountId, instagramAccessToken, 'views', dateFrom, dateTo),
+        fetchInstagramDailyTotalValueSeries(graphBase, instagramBusinessAccountId, instagramAccessToken, 'profile_views', dateFrom, dateTo),
         fetchInstagramDailyTotalValueSeries(graphBase, instagramBusinessAccountId, instagramAccessToken, 'accounts_engaged', dateFrom, dateTo),
         fetchInstagramJson(
           `${graphBase}/${instagramBusinessAccountId}/insights?metric=follower_demographics&metric_type=total_value&period=lifetime&breakdown=city&access_token=${instagramAccessToken}`,
@@ -1340,13 +1342,14 @@ const buildInstagramOverview = async (
             : 0,
         );
 
-      totalViews = totalValueMetric('views');
-      totalProfileViews = totalValueMetric('profile_views');
-      totalAccountsEngaged = totalValueMetric('accounts_engaged');
       viewsSeries = fetchedViewsSeries;
+      profileViewsSeries = fetchedProfileViewsSeries;
       engagedSeries = fetchedEngagedSeries;
       followerSeries = extractInstagramMetricSeries(followerCountJson.data ?? [], 'follower_count');
+      totalViews = Object.values(viewsSeries).reduce((sum, value) => sum + value, 0);
+      totalProfileViews = Object.values(profileViewsSeries).reduce((sum, value) => sum + value, 0);
       totalFollowerGain = Object.values(followerSeries).reduce((sum, value) => sum + value, 0);
+      totalAccountsEngaged = Object.values(engagedSeries).reduce((sum, value) => sum + value, 0);
       audience = parseInstagramDemographics([
         ...((demoCityJson.data ?? []) as any[]),
         ...((demoAgeJson.data ?? []) as any[]),
