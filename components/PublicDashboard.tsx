@@ -41,6 +41,8 @@ import {
 } from '../lib/portalDashboard';
 import { PublicTrafficReport } from './PublicTrafficReport';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from './ui/dialog';
+import { InstagramMediaTypeChart } from './features/instagram/components/InstagramMediaTypeChart';
+import { InstagramPostsTable } from './features/instagram/components/InstagramPostsTable';
 
 type Tab = 'campanhas' | 'instagram' | 'relatorio';
 type CampaignPlatform = 'meta' | 'google';
@@ -1587,35 +1589,10 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
 
       {instagramView === 'content' ? (
         (ig?.media ?? []).length > 0 ? (
-          <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02]">
-            <div className="border-b border-white/[0.06] px-5 py-4">
-              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Conteúdo</div>
-              <div className="mt-0.5 text-base font-black text-white">Publicações recentes</div>
-            </div>
-            <div className="grid grid-cols-1 divide-y divide-white/[0.04] sm:grid-cols-2 sm:divide-x sm:divide-y-0 lg:grid-cols-3">
-              {(ig?.media ?? []).slice(0, 9).map((media) => (
-                <a
-                  key={media.id}
-                  href={media.permalink || undefined}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="group flex items-start gap-3 p-4 transition-colors hover:bg-white/[0.03]"
-                >
-                  <img src={media.thumbnailUrl || media.mediaUrl} alt="" className="h-16 w-16 shrink-0 rounded-xl border border-white/10 object-cover" />
-                  <div className="min-w-0 flex-1">
-                    <div className="line-clamp-2 text-xs font-medium leading-relaxed text-white/75">{media.caption || 'Sem legenda'}</div>
-                    <div className="mt-1.5 flex flex-wrap gap-x-3 text-[10px] text-white/35">
-                      {media.reach != null ? <span>Alcance {num(media.reach)}</span> : null}
-                      {media.totalInteractions != null ? <span>Inter. {num(media.totalInteractions)}</span> : null}
-                      {media.videoViews != null ? <span>Views {num(media.videoViews)}</span> : null}
-                      <span className="inline-flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                        <ExternalLink className="h-2.5 w-2.5" /> Abrir
-                      </span>
-                    </div>
-                  </div>
-                </a>
-              ))}
-            </div>
+          <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] py-5">
+            <InstagramMediaTypeChart media={ig.media as any} loading={false} />
+            <div className="mx-6 mb-5 border-t border-white/[0.07]" />
+            <InstagramPostsTable media={ig.media as any} loading={false} error={null} onReload={loadData} />
           </div>
         ) : (
           <div className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-white/40">

@@ -216,6 +216,7 @@ type InstagramOverview = {
     timestamp: string;
     permalink: string;
     reach: number | null;
+    impressions: number | null;
     saved: number | null;
     shares: number | null;
     videoViews: number | null;
@@ -1300,6 +1301,9 @@ const buildInstagramOverview = async (
       viewsSeries = fetchedViewsSeries;
       engagedSeries = fetchedEngagedSeries;
       followerSeries = extractInstagramMetricSeries(followerCountJson.data ?? [], 'follower_count');
+      if (totalFollowerGain <= 0) {
+        totalFollowerGain = Object.values(followerSeries).reduce((sum, value) => sum + value, 0);
+      }
       audience = parseInstagramDemographics([
         ...((demoCityJson.data ?? []) as any[]),
         ...((demoAgeJson.data ?? []) as any[]),
@@ -1329,6 +1333,7 @@ const buildInstagramOverview = async (
           const metrics = ['reach'];
           const productType = asString(item?.media_product_type).toUpperCase();
           const mediaType = asString(item?.media_type).toUpperCase();
+          if (productType === 'FEED') metrics.push('views');
           if (productType !== 'STORY') metrics.push('saved');
           if (productType === 'FEED' || productType === 'REEL' || productType === 'REELS') metrics.push('shares');
           if (mediaType === 'VIDEO') metrics.push('video_views');
@@ -1367,6 +1372,7 @@ const buildInstagramOverview = async (
             timestamp: asString(item?.timestamp),
             permalink: asString(item?.permalink),
             reach: insightValue('reach'),
+            impressions: insightValue('views'),
             saved,
             shares,
             videoViews: insightValue('video_views'),

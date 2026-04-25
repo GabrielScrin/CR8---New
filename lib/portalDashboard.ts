@@ -89,7 +89,7 @@ export type AdBreakdownRow = {
 export type InstagramMedia = {
   id: string; caption: string; mediaType: string; mediaProductType: string;
   mediaUrl: string; thumbnailUrl: string; timestamp: string; permalink: string;
-  reach: number | null; saved: number | null; shares: number | null;
+  reach: number | null; impressions: number | null; saved: number | null; shares: number | null;
   videoViews: number | null; commentsCount: number | null;
   likeCount: number | null; totalInteractions: number | null;
 };
