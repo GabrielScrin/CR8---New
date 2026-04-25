@@ -211,6 +211,14 @@ const GradientDefs = () => (
       <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.3} />
       <stop offset="100%" stopColor="#38bdf8" stopOpacity={0} />
     </linearGradient>
+    <linearGradient id="gProfileVisits" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stopColor="#f59e0b" stopOpacity={0.3} />
+      <stop offset="100%" stopColor="#f59e0b" stopOpacity={0} />
+    </linearGradient>
+    <linearGradient id="gThruplays" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stopColor="#14b8a6" stopOpacity={0.3} />
+      <stop offset="100%" stopColor="#14b8a6" stopOpacity={0} />
+    </linearGradient>
   </defs>
 );
 
@@ -795,6 +803,16 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
 
   const CampanhasTab = () => {
     const isPerf = viewMode === 'performance';
+    const chartSecondarySeries = isPerf
+      ? [
+          { key: 'leads', label: 'Leads', color: '#10b981', gradient: 'url(#gLeads)' },
+          { key: 'messages', label: 'Mensagens', color: '#38bdf8', gradient: 'url(#gMsgs)' },
+        ]
+      : [
+          { key: 'thruplays', label: 'ThruPlays', color: '#14b8a6', gradient: 'url(#gThruplays)' },
+          { key: 'profileVisits', label: 'Visitas ao Perfil', color: '#f59e0b', gradient: 'url(#gProfileVisits)' },
+        ];
+    const chartTitle = isPerf ? 'Investimento, Leads & Mensagens' : 'Investimento, ThruPlays & Visitas ao Perfil';
 
     return (
       <div className="space-y-6">
@@ -954,7 +972,19 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
           <div className="mb-5 flex items-center justify-between gap-4">
             <div>
               <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Evolução Diária</div>
-              <div className="mt-1 text-base font-black text-white">Investimento, Leads &amp; Mensagens</div>
+              <div className="mt-1 text-base font-black text-white">{chartTitle}</div>
+            </div>
+            <div className="hidden flex-wrap items-center justify-end gap-3 text-[11px] text-white/45 sm:flex">
+              <span className="inline-flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-[#6366f1]" />
+                Investimento
+              </span>
+              {chartSecondarySeries.map((item) => (
+                <span key={item.key} className="inline-flex items-center gap-1.5">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: item.color }} />
+                  {item.label}
+                </span>
+              ))}
             </div>
           </div>
           <div className="h-64">
@@ -967,8 +997,19 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                 <YAxis yAxisId="conv" orientation="right" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <Tooltip content={<ChartTooltip />} />
                 <Area yAxisId="spend" type="monotone" dataKey="spend" stroke="#6366f1" strokeWidth={2} fill="url(#gSpend)" name="Investimento" dot={false} />
-                <Area yAxisId="conv" type="monotone" dataKey="leads" stroke="#10b981" strokeWidth={2} fill="url(#gLeads)" name="Leads" dot={false} />
-                <Area yAxisId="conv" type="monotone" dataKey="messages" stroke="#38bdf8" strokeWidth={2} fill="url(#gMsgs)" name="Mensagens" dot={false} />
+                {chartSecondarySeries.map((item) => (
+                  <Area
+                    key={item.key}
+                    yAxisId="conv"
+                    type="monotone"
+                    dataKey={item.key}
+                    stroke={item.color}
+                    strokeWidth={2}
+                    fill={item.gradient}
+                    name={item.label}
+                    dot={false}
+                  />
+                ))}
               </AreaChart>
             </ResponsiveContainer>
           </div>

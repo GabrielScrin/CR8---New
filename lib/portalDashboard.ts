@@ -39,7 +39,15 @@ export type MetaSummary = {
   hookRate: number; holdRate: number;
 };
 
-export type DailyPoint = { date: string; spend: number; results: number; leads: number; messages: number };
+export type DailyPoint = {
+  date: string;
+  spend: number;
+  results: number;
+  leads: number;
+  messages: number;
+  profileVisits: number;
+  thruplays: number;
+};
 
 export type Campaign = {
   id: string; name: string; spend: number; impressions: number; reach: number;
