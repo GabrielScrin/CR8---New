@@ -197,7 +197,15 @@ type InstagramOverview = {
     date: string;
     dateIso: string;
     reach: number;
+    views: number;
+    followerDelta: number;
+    accountsEngaged: number;
   }>;
+  audience: {
+    cities: Array<{ city: string; count: number }>;
+    ageGroups: Array<{ range: string; male: number; female: number; total: number }>;
+    gender: { male: number; female: number; unknown: number; total: number } | null;
+  };
   media: Array<{
     id: string;
     caption: string;
@@ -456,6 +464,11 @@ const buildEmptyInstagramOverview = (reason: string): InstagramOverview => ({
     totalAccountsEngaged: 0,
   },
   series: [],
+  audience: {
+    cities: [],
+    ageGroups: [],
+    gender: null,
+  },
   media: [],
 });
 
@@ -1089,6 +1102,134 @@ const fetchInstagramJson = async (url: string) => {
   return json;
 };
 
+const extractInstagramInsightValue = (raw: unknown): number => {
+  if (typeof raw === 'number') return Number.isFinite(raw) ? raw : 0;
+  if (raw && typeof raw === 'object') {
+    const value = raw as Record<string, unknown>;
+    return asNumber(value.follows) - asNumber(value.unfollows);
+  }
+  return 0;
+};
+
+const extractInstagramMetricTotal = (dataArr: any[], metricName: string): number => {
+  const metric = (dataArr ?? []).find((item: any) => item?.name === metricName);
+  if (!metric) return 0;
+
+  if (metric.total_value?.value != null) return asNumber(metric.total_value.value);
+  if (Array.isArray(metric.values)) {
+    return metric.values.reduce((sum: number, point: any) => sum + extractInstagramInsightValue(point?.value), 0);
+  }
+
+  return 0;
+};
+
+const extractInstagramMetricSeries = (dataArr: any[], metricName: string): Record<string, number> => {
+  const metric = (dataArr ?? []).find((item: any) => item?.name === metricName);
+  if (!metric || !Array.isArray(metric.values)) return {};
+
+  return metric.values.reduce((acc: Record<string, number>, point: any) => {
+    const iso = asString(point?.end_time).slice(0, 10);
+    if (!iso) return acc;
+    acc[iso] = extractInstagramInsightValue(point?.value);
+    return acc;
+  }, {});
+};
+
+const fetchInstagramDailyTotalValueSeries = async (
+  graphBase: string,
+  instagramBusinessAccountId: string,
+  instagramAccessToken: string,
+  metricName: string,
+  dateFrom: string,
+  dateTo: string,
+): Promise<Record<string, number>> => {
+  const dates = daySeries(dateFrom, dateTo);
+  const result: Record<string, number> = {};
+
+  await Promise.all(
+    dates.map(async (iso) => {
+      const start = Math.floor(new Date(`${iso}T00:00:00.000Z`).getTime() / 1000);
+      const end = start + 86400;
+
+      try {
+        const json = await fetchInstagramJson(
+          `${graphBase}/${instagramBusinessAccountId}/insights` +
+          `?metric=${metricName}&metric_type=total_value&period=day` +
+          `&since=${start}&until=${end}&access_token=${instagramAccessToken}`,
+        );
+        result[iso] = extractInstagramMetricTotal(json.data ?? [], metricName);
+      } catch {
+        result[iso] = 0;
+      }
+    }),
+  );
+
+  return result;
+};
+
+const parseInstagramDemographics = (dataArr: any[]) => {
+  let cities: Array<{ city: string; count: number }> = [];
+  const ageMap: Record<string, { male: number; female: number }> = {};
+  let totalMale = 0;
+  let totalFemale = 0;
+  let totalUnknown = 0;
+
+  for (const metric of dataArr) {
+    const breakdowns: any[] = metric?.total_value?.breakdowns ?? [];
+
+    for (const breakdown of breakdowns) {
+      const keys: string[] = breakdown.dimension_keys ?? [];
+      const results: any[] = breakdown.results ?? [];
+
+      if (keys.length === 1 && keys[0] === 'city') {
+        cities = results
+          .map((result) => ({
+            city: asString(result?.dimension_values?.[0]),
+            count: asNumber(result?.value),
+          }))
+          .filter((city) => city.city)
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 10);
+      }
+
+      if (keys.includes('age') && keys.includes('gender')) {
+        const ageIdx = keys.indexOf('age');
+        const genderIdx = keys.indexOf('gender');
+
+        for (const result of results) {
+          const age = asString(result?.dimension_values?.[ageIdx]);
+          const gender = asString(result?.dimension_values?.[genderIdx]).toUpperCase();
+          const count = asNumber(result?.value);
+          if (!age) continue;
+          if (!ageMap[age]) ageMap[age] = { male: 0, female: 0 };
+
+          if (gender === 'M') {
+            ageMap[age].male += count;
+            totalMale += count;
+          } else if (gender === 'F') {
+            ageMap[age].female += count;
+            totalFemale += count;
+          } else {
+            totalUnknown += count;
+          }
+        }
+      }
+    }
+  }
+
+  const ageGroups = Object.entries(ageMap)
+    .map(([range, value]) => ({ range, male: value.male, female: value.female, total: value.male + value.female }))
+    .sort((a, b) => (Number.parseInt(a.range, 10) || 0) - (Number.parseInt(b.range, 10) || 0));
+
+  const genderTotal = totalMale + totalFemale + totalUnknown;
+
+  return {
+    cities,
+    ageGroups,
+    gender: genderTotal > 0 ? { male: totalMale, female: totalFemale, unknown: totalUnknown, total: genderTotal } : null,
+  };
+};
+
 const buildInstagramOverview = async (
   instagramAccessToken: string,
   instagramBusinessAccountId: string,
@@ -1106,27 +1247,42 @@ const buildInstagramOverview = async (
     );
 
     // Phase 2: Account-level insights — requires instagram_manage_insights; optional
-    const seriesMap = new Map<string, number>();
+    const reachSeriesMap = new Map<string, number>();
     let totalViews = 0;
     let totalProfileViews = 0;
     let totalFollowerGain = 0;
     let totalAccountsEngaged = 0;
+    let viewsSeries: Record<string, number> = {};
+    let engagedSeries: Record<string, number> = {};
+    let followerSeries: Record<string, number> = {};
+    let audience: InstagramOverview['audience'] = { cities: [], ageGroups: [], gender: null };
 
     try {
-      const [reachJson, totalsJson] = await Promise.all([
+      const [reachJson, totalsJson, followerCountJson, fetchedViewsSeries, fetchedEngagedSeries, demoCityJson, demoAgeJson] = await Promise.all([
         fetchInstagramJson(
           `${graphBase}/${instagramBusinessAccountId}/insights?metric=reach&period=day&since=${since}&until=${until}&access_token=${instagramAccessToken}`,
         ),
         fetchInstagramJson(
           `${graphBase}/${instagramBusinessAccountId}/insights?metric=views,profile_views,follows_and_unfollows,accounts_engaged&metric_type=total_value&period=day&since=${since}&until=${until}&access_token=${instagramAccessToken}`,
         ),
+        fetchInstagramJson(
+          `${graphBase}/${instagramBusinessAccountId}/insights?metric=follower_count&period=day&since=${since}&until=${until}&access_token=${instagramAccessToken}`,
+        ).catch(() => ({ data: [] })),
+        fetchInstagramDailyTotalValueSeries(graphBase, instagramBusinessAccountId, instagramAccessToken, 'views', dateFrom, dateTo),
+        fetchInstagramDailyTotalValueSeries(graphBase, instagramBusinessAccountId, instagramAccessToken, 'accounts_engaged', dateFrom, dateTo),
+        fetchInstagramJson(
+          `${graphBase}/${instagramBusinessAccountId}/insights?metric=follower_demographics&metric_type=total_value&period=lifetime&breakdown=city&access_token=${instagramAccessToken}`,
+        ).catch(() => ({ data: [] })),
+        fetchInstagramJson(
+          `${graphBase}/${instagramBusinessAccountId}/insights?metric=follower_demographics&metric_type=total_value&period=lifetime&breakdown=age,gender&access_token=${instagramAccessToken}`,
+        ).catch(() => ({ data: [] })),
       ]);
 
       const reachMetric = Array.isArray(reachJson?.data) ? reachJson.data.find((item: any) => item?.name === 'reach') : null;
       for (const point of reachMetric?.values ?? []) {
         const iso = asString(point?.end_time).slice(0, 10);
         if (!iso) continue;
-        seriesMap.set(iso, (seriesMap.get(iso) ?? 0) + asNumber(point?.value));
+        reachSeriesMap.set(iso, (reachSeriesMap.get(iso) ?? 0) + asNumber(point?.value));
       }
 
       const totalValueMetric = (name: string) =>
@@ -1141,6 +1297,13 @@ const buildInstagramOverview = async (
       totalProfileViews = totalValueMetric('profile_views');
       totalFollowerGain = totalValueMetric('follows_and_unfollows');
       totalAccountsEngaged = totalValueMetric('accounts_engaged');
+      viewsSeries = fetchedViewsSeries;
+      engagedSeries = fetchedEngagedSeries;
+      followerSeries = extractInstagramMetricSeries(followerCountJson.data ?? [], 'follower_count');
+      audience = parseInstagramDemographics([
+        ...((demoCityJson.data ?? []) as any[]),
+        ...((demoAgeJson.data ?? []) as any[]),
+      ]);
     } catch {
       // Insights permission not granted — profile + media still available
     }
@@ -1227,7 +1390,7 @@ const buildInstagramOverview = async (
         profilePictureUrl: asString(profileJson?.profile_picture_url),
       },
       summary: {
-        totalReach: Array.from(seriesMap.values()).reduce((sum, value) => sum + value, 0),
+        totalReach: Array.from(reachSeriesMap.values()).reduce((sum, value) => sum + value, 0),
         totalViews,
         totalProfileViews,
         totalFollowerGain,
@@ -1236,8 +1399,12 @@ const buildInstagramOverview = async (
       series: daySeries(dateFrom, dateTo).map((date) => ({
         date: `${date.slice(8, 10)}/${date.slice(5, 7)}`,
         dateIso: date,
-        reach: seriesMap.get(date) ?? 0,
+        reach: reachSeriesMap.get(date) ?? 0,
+        views: viewsSeries[date] ?? 0,
+        followerDelta: followerSeries[date] ?? 0,
+        accountsEngaged: engagedSeries[date] ?? 0,
       })),
+      audience,
       media,
     };
   } catch (error: any) {

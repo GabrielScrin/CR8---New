@@ -94,6 +94,10 @@ export type InstagramMedia = {
   likeCount: number | null; totalInteractions: number | null;
 };
 
+export type InstagramAudienceCity = { city: string; count: number };
+export type InstagramAudienceAge = { range: string; male: number; female: number; total: number };
+export type InstagramAudienceGender = { male: number; female: number; unknown: number; total: number } | null;
+
 export type DashboardData = {
   dateFrom: string; dateTo: string;
   prevDateFrom: string; prevDateTo: string;
@@ -111,7 +115,12 @@ export type DashboardData = {
       totalReach: number; totalViews: number;
       totalProfileViews: number; totalFollowerGain: number; totalAccountsEngaged: number;
     };
-    series: Array<{ date: string; dateIso: string; reach: number }>;
+    series: Array<{ date: string; dateIso: string; reach: number; views: number; followerDelta: number; accountsEngaged: number }>;
+    audience: {
+      cities: InstagramAudienceCity[];
+      ageGroups: InstagramAudienceAge[];
+      gender: InstagramAudienceGender;
+    };
     media: InstagramMedia[];
   };
   prevInstagram: {

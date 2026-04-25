@@ -3,6 +3,8 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -47,6 +49,7 @@ type CampaignSortKey = 'spend' | 'leads' | 'msgs' | 'ctr' | 'cpc';
 type AdSortKey = 'spend' | 'leads' | 'msgs' | 'ctr' | 'hook' | 'hold';
 type InstagramView = 'overview' | 'content';
 type FunnelGoal = 'messagesStarted' | 'leadForms' | 'siteLeads' | 'profileVisits';
+type InstagramChartMetricKey = 'reach' | 'views' | 'accountsEngaged' | 'followerDelta';
 type DatePreset =
   | 'today'
   | 'yesterday'
@@ -291,6 +294,14 @@ const FunnelStageCard: React.FC<{
   </div>
 );
 
+const fmtYAxis = (value: number) => {
+  if (Math.abs(value) >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+  if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(0)}k`;
+  return `${Math.round(value)}`;
+};
+
+const pctShare = (part: number, total: number) => (total > 0 ? ((part / total) * 100).toFixed(1) : '0.0');
+
 const CampaignPerformanceFunnel: React.FC<{
   metrics: ReturnType<typeof useCampaignMetrics>;
   goal: FunnelGoal;
@@ -463,6 +474,18 @@ const CampaignPerformanceFunnel: React.FC<{
   );
 };
 
+const INSTAGRAM_CHART_METRICS: Array<{
+  key: InstagramChartMetricKey;
+  label: string;
+  color: string;
+  axis: 'left' | 'right';
+}> = [
+  { key: 'reach', label: 'Alcance', color: '#3b82f6', axis: 'left' },
+  { key: 'views', label: 'Visualizações', color: '#a855f7', axis: 'left' },
+  { key: 'accountsEngaged', label: 'Contas Engajadas', color: '#ec4899', axis: 'right' },
+  { key: 'followerDelta', label: 'Seguidores', color: '#10b981', axis: 'right' },
+];
+
 const ChartTooltip: React.FC<any> = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
 
@@ -546,6 +569,9 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const [viewMode, setViewMode] = useState<ViewMode>('performance');
   const [instagramView, setInstagramView] = useState<InstagramView>('overview');
   const [funnelGoal, setFunnelGoal] = useState<FunnelGoal>('messagesStarted');
+  const [instagramChartMetrics, setInstagramChartMetrics] = useState<Set<InstagramChartMetricKey>>(
+    new Set(['reach', 'views']),
+  );
   const [datePreset, setDatePreset] = useState<DatePreset>('last_30d');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -829,7 +855,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
           <>
             <div>
               <SectionLabel>Investimento &amp; Alcance</SectionLabel>
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
                 <KpiCard label="Valor Investido" value={brl(metrics?.spend ?? 0)} delta={delta(metrics?.spend ?? 0, metrics?.prevSpend ?? 0)} accent="#6366f1" hint="vs período anterior" />
                 <KpiCard label="Alcance" value={num(metrics?.reach ?? 0)} delta={delta(metrics?.reach ?? 0, metrics?.prevReach ?? 0)} accent="#a855f7" />
                 <KpiCard label="Impressões" value={num(metrics?.impressions ?? 0)} delta={delta(metrics?.impressions ?? 0, metrics?.prevImpressions ?? 0)} accent="#8b5cf6" />
@@ -888,7 +914,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
 
             <div>
               <SectionLabel>Métricas de Entrega</SectionLabel>
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
                 <KpiCard label="CTR Médio" value={pct(metrics?.ctr ?? 0)} delta={delta(metrics?.ctr ?? 0, metrics?.prevCtr ?? 0)} accent="#06b6d4" />
                 <KpiCard label="Cliques no Link" value={num(metrics?.linkClicks ?? 0)} delta={delta(metrics?.linkClicks ?? 0, metrics?.prevLinkClicks ?? 0)} accent="#3b82f6" />
                 <KpiCard label="Vis. Pág. Destino" value={num(metrics?.landingPageViews ?? 0)} delta={delta(metrics?.landingPageViews ?? 0, metrics?.prevLandingPageViews ?? 0)} accent="#10b981" />
@@ -1338,7 +1364,23 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
     );
   };
 
-  const InstagramTab = () => (
+  const InstagramTab = () => {
+    const toggleInstagramMetric = (key: InstagramChartMetricKey) => {
+      setInstagramChartMetrics((current) => {
+        const next = new Set(current);
+        if (next.has(key)) {
+          if (next.size > 1) next.delete(key);
+        } else {
+          next.add(key);
+        }
+        return next;
+      });
+    };
+
+    const cityMax = ig?.audience?.cities?.[0]?.count ?? 1;
+    const ageTotal = (ig?.audience?.ageGroups ?? []).reduce((sum, item) => sum + item.total, 0) || 1;
+
+    return (
     <div className="space-y-6">
       {igProfile ? (
         <div className="flex items-center gap-5 rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-5">
@@ -1387,34 +1429,153 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
             <>
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
                 <KpiCard label="Alcance" value={num(ig.summary.totalReach)} delta={delta(ig.summary.totalReach, prevIg?.summary.totalReach ?? 0)} accent="#f43f5e" hint="vs período anterior" />
-                <KpiCard label="Views" value={num(ig.summary.totalViews)} delta={delta(ig.summary.totalViews, prevIg?.summary.totalViews ?? 0)} accent="#f59e0b" />
-                <KpiCard label="Visitas ao Perfil" value={num(ig.summary.totalProfileViews)} delta={delta(ig.summary.totalProfileViews, prevIg?.summary.totalProfileViews ?? 0)} accent="#38bdf8" />
-                <KpiCard label="Novos Seguidores" value={num(ig.summary.totalFollowerGain)} delta={delta(ig.summary.totalFollowerGain, prevIg?.summary.totalFollowerGain ?? 0)} accent="#34d399" />
+                <KpiCard label="Visualizações" value={num(ig.summary.totalViews)} delta={delta(ig.summary.totalViews, prevIg?.summary.totalViews ?? 0)} accent="#a855f7" />
+                <KpiCard label="Visitas ao Perfil" value={num(ig.summary.totalProfileViews)} delta={delta(ig.summary.totalProfileViews, prevIg?.summary.totalProfileViews ?? 0)} accent="#fb7185" />
+                <KpiCard label="Contas Engajadas" value={num(ig.summary.totalAccountsEngaged)} delta={delta(ig.summary.totalAccountsEngaged, prevIg?.summary.totalAccountsEngaged ?? 0)} accent="#ec4899" />
+                <KpiCard label="Seguidores Ganhos" value={num(ig.summary.totalFollowerGain)} delta={delta(ig.summary.totalFollowerGain, prevIg?.summary.totalFollowerGain ?? 0)} accent="#34d399" />
+                <KpiCard label="Total Seguidores" value={num(igProfile?.followersCount ?? 0)} accent="#f59e0b" />
               </div>
 
-              {ig.series.some((item) => item.reach > 0) ? (
+              {ig.series.some((item) => item.reach > 0 || item.views > 0 || item.accountsEngaged > 0 || item.followerDelta > 0) ? (
                 <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
-                  <div className="mb-5 flex items-center justify-between">
+                  <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div>
                       <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Instagram Orgânico</div>
                       <div className="mt-1 text-base font-black text-white">Alcance diário</div>
                     </div>
-                    {igProfile?.followersCount ? <div className="text-xs text-white/40">{num(igProfile.followersCount)} seguidores</div> : null}
+                    <div className="flex flex-wrap gap-2">
+                      {INSTAGRAM_CHART_METRICS.map((metric) => {
+                        const active = instagramChartMetrics.has(metric.key);
+                        return (
+                          <button
+                            key={metric.key}
+                            type="button"
+                            onClick={() => toggleInstagramMetric(metric.key)}
+                            className="flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-all"
+                            style={{
+                              borderColor: active ? metric.color : 'rgba(255,255,255,0.12)',
+                              background: active ? `${metric.color}20` : 'transparent',
+                              color: active ? metric.color : 'rgba(255,255,255,0.48)',
+                            }}
+                          >
+                            <span className="h-2 w-2 rounded-full" style={{ background: active ? metric.color : 'rgba(255,255,255,0.18)' }} />
+                            {metric.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                   <div className="h-56">
                     <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={ig.series}>
-                        <GradientDefs />
+                      <LineChart data={ig.series} margin={{ top: 4, right: 8, left: -10, bottom: 0 }}>
                         <CartesianGrid stroke="rgba(255,255,255,0.05)" vertical={false} />
                         <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                        <YAxis yAxisId="left" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={fmtYAxis} />
+                        <YAxis yAxisId="right" orientation="right" tick={{ fill: 'rgba(255,255,255,0.35)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={fmtYAxis} />
                         <Tooltip content={<ChartTooltip />} />
-                        <Area type="monotone" dataKey="reach" stroke="#f43f5e" strokeWidth={2} fill="url(#gReach)" name="Alcance" dot={false} />
-                      </AreaChart>
+                        {INSTAGRAM_CHART_METRICS.filter((metric) => instagramChartMetrics.has(metric.key)).map((metric) => (
+                          <Line
+                            key={metric.key}
+                            yAxisId={metric.axis}
+                            type="monotone"
+                            dataKey={metric.key}
+                            name={metric.label}
+                            stroke={metric.color}
+                            strokeWidth={2.2}
+                            dot={false}
+                            activeDot={{ r: 4, fill: metric.color }}
+                          />
+                        ))}
+                      </LineChart>
                     </ResponsiveContainer>
                   </div>
                 </div>
               ) : null}
+
+              <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
+                <div className="mb-5">
+                  <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Audiência</div>
+                  <div className="mt-1 text-base font-black text-white">Perfil demográfico e geográfico</div>
+                </div>
+                {ig.audience.cities.length === 0 && ig.audience.ageGroups.length === 0 ? (
+                  <div className="rounded-2xl border border-dashed border-white/10 px-4 py-10 text-center text-sm text-white/40">
+                    Dados de audiência indisponíveis para esta conta.
+                  </div>
+                ) : (
+                  <div className="grid gap-6 lg:grid-cols-3">
+                    <div>
+                      <div className="mb-3 flex items-center gap-2">
+                        <div className="h-5 w-0.5 rounded-full bg-gradient-to-b from-amber-500 to-orange-400" />
+                        <span className="text-[15px] font-bold text-white">Top Cidades</span>
+                      </div>
+                      <div className="space-y-2">
+                        {ig.audience.cities.map((city) => (
+                          <div key={city.city}>
+                            <div className="mb-0.5 flex items-center justify-between">
+                              <span className="truncate text-xs text-white/85">{city.city}</span>
+                              <span className="text-xs tabular-nums text-white/45">{num(city.count)}</span>
+                            </div>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                              <div className="h-full rounded-full bg-gradient-to-r from-blue-500 to-violet-500" style={{ width: `${(city.count / cityMax) * 100}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-3 flex items-center gap-2">
+                        <div className="h-5 w-0.5 rounded-full bg-gradient-to-b from-violet-500 to-purple-400" />
+                        <span className="text-[15px] font-bold text-white">Faixa Etária</span>
+                      </div>
+                      <div className="space-y-2">
+                        {ig.audience.ageGroups.map((group) => (
+                          <div key={group.range}>
+                            <div className="mb-0.5 flex items-center justify-between">
+                              <span className="text-xs text-white/85">{group.range}</span>
+                              <span className="text-xs tabular-nums text-white/45">{pctShare(group.total, ageTotal)}%</span>
+                            </div>
+                            <div className="flex h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+                              <div className="h-full bg-blue-500" style={{ width: `${pctShare(group.male, group.total)}%` }} />
+                              <div className="h-full bg-pink-500" style={{ width: `${pctShare(group.female, group.total)}%` }} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <div className="mb-3 flex items-center gap-2">
+                        <div className="h-5 w-0.5 rounded-full bg-gradient-to-b from-pink-500 to-rose-400" />
+                        <span className="text-[15px] font-bold text-white">Gênero</span>
+                      </div>
+                      {ig.audience.gender ? (
+                        <div className="space-y-3">
+                          {[
+                            { label: 'Masculino', value: ig.audience.gender.male, color: '#3b82f6' },
+                            { label: 'Feminino', value: ig.audience.gender.female, color: '#ec4899' },
+                            { label: 'Não identificado', value: ig.audience.gender.unknown, color: '#94a3b8' },
+                          ].map((item) => (
+                            <div key={item.label}>
+                              <div className="mb-1 flex items-center justify-between">
+                                <span className="text-xs text-white/85">{item.label}</span>
+                                <span className="text-xs font-semibold tabular-nums" style={{ color: item.color }}>
+                                  {pctShare(item.value, ig.audience.gender?.total ?? 0)}%
+                                </span>
+                              </div>
+                              <div className="h-2 overflow-hidden rounded-full bg-white/[0.06]">
+                                <div className="h-full rounded-full" style={{ width: `${pctShare(item.value, ig.audience.gender?.total ?? 0)}%`, background: item.color }} />
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="text-sm text-white/40">Sem dados de gênero.</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
             </>
           ) : null}
         </>
@@ -1471,6 +1632,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
       ) : null}
     </div>
   );
+  };
 
   const RelatorioTab = () => (
     <div className="space-y-6">
