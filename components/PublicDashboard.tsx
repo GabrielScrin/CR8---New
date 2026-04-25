@@ -46,6 +46,7 @@ type ViewMode = 'performance' | 'distribuicao';
 type CampaignSortKey = 'spend' | 'leads' | 'msgs' | 'ctr' | 'cpc';
 type AdSortKey = 'spend' | 'leads' | 'msgs' | 'ctr' | 'hook' | 'hold';
 type InstagramView = 'overview' | 'content';
+type FunnelGoal = 'messagesStarted' | 'leadForms' | 'siteLeads' | 'profileVisits';
 type DatePreset =
   | 'today'
   | 'yesterday'
@@ -70,6 +71,12 @@ const brl = (value: number) =>
 
 const num = (value: number) =>
   new Intl.NumberFormat('pt-BR').format(Math.round(value ?? 0));
+
+const compactNum = (value: number) =>
+  new Intl.NumberFormat('pt-BR', {
+    notation: value >= 1000 ? 'compact' : 'standard',
+    maximumFractionDigits: value >= 1000 ? 1 : 0,
+  }).format(Math.round(value ?? 0));
 
 const pct = (value: number, digits = 1) => `${(value ?? 0).toFixed(digits)}%`;
 const isoLabel = (value: string) => `${value.slice(8, 10)}/${value.slice(5, 7)}`;
@@ -245,6 +252,209 @@ const KpiCard: React.FC<{
   </div>
 );
 
+const MiniMetricPill: React.FC<{
+  label: string;
+  value: string;
+  delta?: number | null;
+  invertDelta?: boolean;
+}> = ({ label, value, delta: change, invertDelta }) => (
+  <div className="rounded-2xl border border-white/[0.08] bg-[#0c0f15]/90 px-3 py-2.5 shadow-[0_12px_28px_rgba(0,0,0,0.24)] backdrop-blur-xl">
+    <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/28">{label}</div>
+    <div className="mt-1 text-base font-black tracking-tight text-white">{value}</div>
+    <div className="mt-1">{change !== undefined ? <DeltaBadge value={change ?? null} invert={invertDelta} /> : <span className="text-[10px] text-white/18">â€”</span>}</div>
+  </div>
+);
+
+const FunnelStageCard: React.FC<{
+  label: string;
+  value: number;
+  delta?: number | null;
+  widthClass: string;
+  accent: string;
+}> = ({ label, value, delta: change, widthClass, accent }) => (
+  <div className={`relative mx-auto overflow-hidden rounded-[28px] border border-white/[0.08] bg-[linear-gradient(180deg,rgba(255,255,255,0.10),rgba(255,255,255,0.04))] px-6 py-4 shadow-[0_18px_60px_rgba(0,0,0,0.38)] backdrop-blur-xl ${widthClass}`}>
+    <div className="absolute inset-x-[18%] top-0 h-px bg-white/20" />
+    <div className="pointer-events-none absolute inset-0 opacity-70" style={{ background: `radial-gradient(circle at 50% 0%, ${accent}22 0%, transparent 58%)` }} />
+    <div className="text-center">
+      <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-white/38">{label}</div>
+      <div className="mt-1 text-[30px] font-black tracking-[-0.05em] text-white leading-none">{compactNum(value)}</div>
+      <div className="mt-1 flex justify-center">{change !== undefined ? <DeltaBadge value={change ?? null} /> : null}</div>
+    </div>
+  </div>
+);
+
+const CampaignPerformanceFunnel: React.FC<{
+  metrics: ReturnType<typeof useCampaignMetrics>;
+  goal: FunnelGoal;
+  onGoalChange: (goal: FunnelGoal) => void;
+  visibleProfileVisitsCurrent: number;
+  visibleProfileVisitsPrevious: number;
+}> = ({ metrics, goal, onGoalChange, visibleProfileVisitsCurrent, visibleProfileVisitsPrevious }) => {
+  if (!metrics) return null;
+
+  const goalOptions: Array<{ id: FunnelGoal; label: string; available: boolean }> = [
+    { id: 'messagesStarted', label: 'Mensagens', available: (metrics.messagesStarted ?? 0) > 0 },
+    { id: 'leadForms', label: 'Leads / Formulários', available: (metrics.leadForms ?? 0) > 0 },
+    { id: 'siteLeads', label: 'Leads no Site', available: (metrics.siteLeads ?? 0) > 0 || (metrics.landingPageViews ?? 0) > 0 },
+    { id: 'profileVisits', label: 'Visitas ao Perfil', available: visibleProfileVisitsCurrent > 0 },
+  ];
+
+  const selectedGoal = goalOptions.find((item) => item.id === goal) ?? goalOptions[0];
+  const goalCurrentMap: Record<FunnelGoal, number> = {
+    messagesStarted: metrics.messagesStarted ?? 0,
+    leadForms: metrics.leadForms ?? 0,
+    siteLeads: metrics.siteLeads ?? 0,
+    profileVisits: visibleProfileVisitsCurrent,
+  };
+  const goalPreviousMap: Record<FunnelGoal, number> = {
+    messagesStarted: metrics.prevMsgs ?? 0,
+    leadForms: metrics.prevLeadForms ?? 0,
+    siteLeads: 0,
+    profileVisits: visibleProfileVisitsPrevious,
+  };
+  const goalAccentMap: Record<FunnelGoal, string> = {
+    messagesStarted: '#38bdf8',
+    leadForms: '#10b981',
+    siteLeads: '#34d399',
+    profileVisits: '#f59e0b',
+  };
+
+  const finalValue = goalCurrentMap[goal] ?? 0;
+  const finalPrevValue = goalPreviousMap[goal] ?? 0;
+  const costPerResult = finalValue > 0 ? metrics.spend / finalValue : 0;
+  const clickToResultRate = metrics.linkClicks > 0 ? (finalValue / metrics.linkClicks) * 100 : 0;
+  const impressionToClickRate = metrics.impressions > 0 ? (metrics.linkClicks / metrics.impressions) * 100 : 0;
+  const reachToImpressionRate = metrics.reach > 0 ? metrics.impressions / metrics.reach : 0;
+  const landingToSiteLeadRate = metrics.landingPageViews > 0 ? (metrics.siteLeads / metrics.landingPageViews) * 100 : 0;
+
+  const stages: Array<{ key: string; label: string; value: number; prev: number; widthClass: string; accent: string }> = [
+    { key: 'reach', label: 'Alcance', value: metrics.reach ?? 0, prev: metrics.prevReach ?? 0, widthClass: 'w-full max-w-[760px]', accent: '#8b5cf6' },
+    { key: 'impressions', label: 'Impressões', value: metrics.impressions ?? 0, prev: metrics.prevImpressions ?? 0, widthClass: 'w-[88%] max-w-[660px]', accent: '#6366f1' },
+    { key: 'clicks', label: 'Cliques no Link', value: metrics.linkClicks ?? 0, prev: metrics.prevLinkClicks ?? 0, widthClass: 'w-[74%] max-w-[560px]', accent: '#3b82f6' },
+  ];
+
+  if (goal === 'siteLeads') {
+    stages.push({
+      key: 'landingPageViews',
+      label: 'Vis. Página Destino',
+      value: metrics.landingPageViews ?? 0,
+      prev: metrics.prevLandingPageViews ?? 0,
+      widthClass: 'w-[60%] max-w-[460px]',
+      accent: '#10b981',
+    });
+  }
+
+  stages.push({
+    key: goal,
+    label: selectedGoal.label,
+    value: finalValue,
+    prev: finalPrevValue,
+    widthClass: goal === 'siteLeads' ? 'w-[48%] max-w-[360px]' : 'w-[56%] max-w-[420px]',
+    accent: goalAccentMap[goal],
+  });
+
+  const leftStats =
+    goal === 'messagesStarted'
+      ? [
+          { label: 'CPM', value: brl(metrics.cpm ?? 0), delta: delta(metrics.cpm ?? 0, metrics.prevCpm ?? 0), invertDelta: true },
+          { label: 'Custo/Msg', value: finalValue > 0 ? brl(costPerResult) : 'â€”', delta: null, invertDelta: true },
+        ]
+      : goal === 'leadForms'
+        ? [
+            { label: 'CPL Form', value: finalValue > 0 ? brl(costPerResult) : 'â€”', delta: null, invertDelta: true },
+            { label: 'CPM', value: brl(metrics.cpm ?? 0), delta: delta(metrics.cpm ?? 0, metrics.prevCpm ?? 0), invertDelta: true },
+          ]
+        : goal === 'siteLeads'
+          ? [
+              { label: 'CPL Site', value: finalValue > 0 ? brl(costPerResult) : 'â€”', delta: null, invertDelta: true },
+              { label: 'LPV > Lead', value: pct(landingToSiteLeadRate), delta: null, invertDelta: false },
+            ]
+          : [
+              { label: 'CPV Perfil', value: finalValue > 0 ? brl(costPerResult) : 'â€”', delta: null, invertDelta: true },
+              { label: 'Freq.', value: (metrics.frequency ?? 0).toFixed(2), delta: null, invertDelta: false },
+            ];
+
+  const rightStats =
+    goal === 'messagesStarted'
+      ? [
+          { label: 'CTR', value: pct(metrics.ctr ?? 0), delta: delta(metrics.ctr ?? 0, metrics.prevCtr ?? 0), invertDelta: false },
+          { label: 'Clique > Msg', value: pct(clickToResultRate), delta: null, invertDelta: false },
+        ]
+      : goal === 'leadForms'
+        ? [
+            { label: 'CTR', value: pct(metrics.ctr ?? 0), delta: delta(metrics.ctr ?? 0, metrics.prevCtr ?? 0), invertDelta: false },
+            { label: 'Clique > Form', value: pct(clickToResultRate), delta: null, invertDelta: false },
+          ]
+        : goal === 'siteLeads'
+          ? [
+              { label: 'Connect Rate', value: pct(metrics.connectRate ?? 0), delta: null, invertDelta: false },
+              { label: 'Clique > Site', value: pct(clickToResultRate), delta: null, invertDelta: false },
+            ]
+          : [
+              { label: 'CTR', value: pct(metrics.ctr ?? 0), delta: delta(metrics.ctr ?? 0, metrics.prevCtr ?? 0), invertDelta: false },
+              { label: 'Clique > Perfil', value: pct(clickToResultRate), delta: null, invertDelta: false },
+            ];
+
+  return (
+    <div className="overflow-hidden rounded-[32px] border border-white/[0.08] bg-[radial-gradient(circle_at_top,rgba(99,102,241,0.12),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.02))] px-4 py-5 shadow-[0_24px_80px_rgba(0,0,0,0.32)] sm:px-6">
+      <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <SectionLabel>Funil da Campanha</SectionLabel>
+          <div className="text-sm font-semibold text-white/70">Da entrega ao resultado final, com seletor por objetivo.</div>
+        </div>
+        <div className="inline-flex flex-wrap gap-2 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-1">
+          {goalOptions.filter((item) => item.available).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => onGoalChange(item.id)}
+              className={`rounded-xl px-3 py-2 text-[11px] font-bold uppercase tracking-[0.12em] transition-all ${
+                goal === item.id ? 'bg-indigo-600 text-white shadow-[0_8px_24px_rgba(79,70,229,0.38)]' : 'text-white/45 hover:text-white/75'
+              }`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[170px_minmax(0,1fr)_170px] lg:items-center">
+        <div className="grid gap-3">
+          {leftStats.map((item) => (
+            <MiniMetricPill key={item.label} label={item.label} value={item.value} delta={item.delta} invertDelta={item.invertDelta} />
+          ))}
+        </div>
+
+        <div className="relative py-2">
+          <div className="pointer-events-none absolute left-1/2 top-3 bottom-3 w-px -translate-x-1/2 bg-gradient-to-b from-white/0 via-white/12 to-white/0" />
+          <div className="space-y-3">
+            {stages.map((stage, index) => (
+              <React.Fragment key={stage.key}>
+                <FunnelStageCard
+                  label={stage.label}
+                  value={stage.value}
+                  delta={delta(stage.value, stage.prev)}
+                  widthClass={stage.widthClass}
+                  accent={stage.accent}
+                />
+                {index < stages.length - 1 ? <div className="mx-auto h-3 w-px bg-white/15" /> : null}
+              </React.Fragment>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid gap-3">
+          {rightStats.map((item) => (
+            <MiniMetricPill key={item.label} label={item.label} value={item.value} delta={item.delta} invertDelta={item.invertDelta} />
+          ))}
+          <MiniMetricPill label="Imp. > Clique" value={pct(impressionToClickRate)} delta={null} />
+          <MiniMetricPill label="Imp./Alcance" value={`${reachToImpressionRate.toFixed(2)}x`} delta={null} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ChartTooltip: React.FC<any> = ({ active, payload, label }) => {
   if (!active || !payload?.length) return null;
 
@@ -327,6 +537,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const [campaignPlatform, setCampaignPlatform] = useState<CampaignPlatform>('meta');
   const [viewMode, setViewMode] = useState<ViewMode>('performance');
   const [instagramView, setInstagramView] = useState<InstagramView>('overview');
+  const [funnelGoal, setFunnelGoal] = useState<FunnelGoal>('messagesStarted');
   const [datePreset, setDatePreset] = useState<DatePreset>('last_30d');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
@@ -473,6 +684,16 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
     () => formatDateRangeLabel(normalizeDateRange(dateFrom, dateTo)),
     [dateFrom, dateTo],
   );
+
+  useEffect(() => {
+    const availableGoals: FunnelGoal[] = [];
+    if ((metrics?.messagesStarted ?? 0) > 0) availableGoals.push('messagesStarted');
+    if ((metrics?.leadForms ?? 0) > 0) availableGoals.push('leadForms');
+    if ((metrics?.siteLeads ?? 0) > 0 || (metrics?.landingPageViews ?? 0) > 0) availableGoals.push('siteLeads');
+    if (visibleProfileVisitsCurrent > 0) availableGoals.push('profileVisits');
+    if (availableGoals.length === 0) return;
+    if (!availableGoals.includes(funnelGoal)) setFunnelGoal(availableGoals[0]);
+  }, [funnelGoal, metrics?.landingPageViews, metrics?.leadForms, metrics?.messagesStarted, metrics?.siteLeads, visibleProfileVisitsCurrent]);
 
   const openDateDialog = () => {
     setDraftDatePreset(datePreset);
@@ -645,6 +866,16 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                   <strong className="font-semibold text-white/75">Resultados</strong> considera somente <span className="text-white/80">Mensagens iniciadas + Lead Forms + Leads no site</span>. Visitas ao perfil e seguidores aparecem separados e nao entram nesse total.
                 </div>
               </div>
+            ) : null}
+
+            {metrics ? (
+              <CampaignPerformanceFunnel
+                metrics={metrics}
+                goal={funnelGoal}
+                onGoalChange={setFunnelGoal}
+                visibleProfileVisitsCurrent={visibleProfileVisitsCurrent}
+                visibleProfileVisitsPrevious={visibleProfileVisitsPrevious}
+              />
             ) : null}
 
             <div>
