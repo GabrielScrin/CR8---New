@@ -595,6 +595,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const filterRef = useRef<HTMLDivElement>(null);
   const latestDashboardRequestRef = useRef(0);
+  const showDashboardOverlay = loadingData || (tab === 'relatorio' && loadingWeekly);
 
   useEffect(() => {
     const handler = (event: MouseEvent) => {
@@ -1709,7 +1710,22 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   ];
 
   return (
-    <div className="min-h-screen text-white" style={{ background: 'linear-gradient(160deg,#070810 0%,#090b14 60%,#07080e 100%)' }}>
+    <div className="relative min-h-screen text-white" style={{ background: 'linear-gradient(160deg,#070810 0%,#090b14 60%,#07080e 100%)' }}>
+      {showDashboardOverlay ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#070810]/72 backdrop-blur-sm">
+          <div className="rounded-[28px] border border-white/10 bg-[#0c1017]/95 px-8 py-7 shadow-[0_28px_80px_-38px_rgba(0,0,0,0.9)]">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-indigo-500/20 bg-indigo-500/10">
+                <Loader2 className="h-6 w-6 animate-spin text-indigo-300" />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-white">Atualizando dashboard</div>
+                <div className="mt-1 text-xs text-white/45">Carregando métricas e gráficos do período selecionado.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="pointer-events-none fixed inset-0 overflow-hidden">
         <div className="absolute -top-32 -left-32 h-96 w-96 rounded-full bg-indigo-600/10 blur-3xl" />
         <div className="absolute top-0 right-0 h-64 w-64 rounded-full bg-violet-600/8 blur-3xl" />

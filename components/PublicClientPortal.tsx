@@ -175,11 +175,13 @@ export const PublicClientPortal: React.FC<PublicClientPortalProps> = ({ token })
   const [loadingBootstrap, setLoadingBootstrap] = useState(true);
   const [loadingOverview, setLoadingOverview] = useState(false);
   const [loadingWeekly, setLoadingWeekly] = useState(false);
+  const [loadingWeeklyDetail, setLoadingWeeklyDetail] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [activeTab, setActiveTab] = useState<PortalTab>('campanhas');
+  const showPortalOverlay = loadingOverview || (activeTab === 'relatorios' && (loadingWeekly || loadingWeeklyDetail));
 
   useEffect(() => {
     let alive = true;
@@ -277,6 +279,7 @@ export const PublicClientPortal: React.FC<PublicClientPortalProps> = ({ token })
     }
 
     let alive = true;
+    setLoadingWeeklyDetail(true);
     fetchClientPortalWeeklyDetail(token, selectedCompanyId, selectedWeeklyId)
       .then((payload) => {
         if (!alive) return;
@@ -285,6 +288,9 @@ export const PublicClientPortal: React.FC<PublicClientPortalProps> = ({ token })
       .catch((fetchError: any) => {
         if (!alive) return;
         setError(fetchError?.message ?? 'Falha ao carregar o relatório semanal.');
+      })
+      .finally(() => {
+        if (alive) setLoadingWeeklyDetail(false);
       });
 
     return () => {
@@ -500,7 +506,22 @@ export const PublicClientPortal: React.FC<PublicClientPortalProps> = ({ token })
   }
 
   return (
-    <div className="min-h-screen bg-[#05070d] text-white" style={{ backgroundImage: 'radial-gradient(circle at top left, rgba(79,140,255,0.18), transparent 28%), radial-gradient(circle at top right, rgba(16,185,129,0.12), transparent 24%)' }}>
+    <div className="relative min-h-screen bg-[#05070d] text-white" style={{ backgroundImage: 'radial-gradient(circle at top left, rgba(79,140,255,0.18), transparent 28%), radial-gradient(circle at top right, rgba(16,185,129,0.12), transparent 24%)' }}>
+      {showPortalOverlay ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#05070d]/72 backdrop-blur-sm">
+          <div className="rounded-[28px] border border-white/10 bg-[#0c1017]/95 px-8 py-7 shadow-[0_28px_80px_-38px_rgba(0,0,0,0.9)]">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.04]">
+                <Loader2 className="h-6 w-6 animate-spin" style={{ color: accent }} />
+              </div>
+              <div>
+                <div className="text-sm font-semibold text-white">Carregando dashboard</div>
+                <div className="mt-1 text-xs text-white/45">Atualizando dados da visualização selecionada.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div className="mx-auto max-w-[1440px] px-4 pb-12 pt-5 sm:px-6 lg:px-8">
         <div className="sticky top-0 z-20 mb-6 rounded-[30px] border border-white/10 bg-[#080b13]/85 p-4 backdrop-blur-xl shadow-[0_28px_80px_-38px_rgba(0,0,0,0.75)]">
           <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
