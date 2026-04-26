@@ -169,6 +169,11 @@ export type WeeklyReportDetail = {
   next_week: string[] | null;
   created_at: string;
   updated_at: string;
+  traffic_report?: {
+    public_id: string;
+    title: string | null;
+    created_at: string;
+  } | null;
 };
 
 const postClientPortal = async <T>(body: Record<string, unknown>): Promise<T> => {

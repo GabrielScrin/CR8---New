@@ -1631,7 +1631,33 @@ export const loadPortalWeeklyDetail = async (
 
   if (error) throw error;
   if (!data) throw new Error('weekly report not found');
-  return data as WeeklyReportRow;
+
+  const { data: trafficData } = await supabaseAdmin
+    .from('traffic_reports')
+    .select('public_id,title,created_at')
+    .eq('company_id', companyId)
+    .eq('period_start', String((data as any).period_start))
+    .eq('period_end', String((data as any).period_end))
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  return {
+    ...(data as WeeklyReportRow),
+    traffic_report: trafficData
+      ? {
+          public_id: asString((trafficData as any)?.public_id),
+          title: asString((trafficData as any)?.title) || null,
+          created_at: asString((trafficData as any)?.created_at),
+        }
+      : null,
+  } as WeeklyReportRow & {
+    traffic_report: {
+      public_id: string;
+      title: string | null;
+      created_at: string;
+    } | null;
+  };
 };
 
 const buildFallbackWeeklyNarrative = (input: {

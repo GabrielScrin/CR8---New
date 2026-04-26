@@ -229,7 +229,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
   const previousPlatform = d.previousLayers?.platform ?? (d.previous ? { ...EMPTY_PLATFORM, profileVisits: d.previous.profileVisits ?? 0, followers: d.previous.followers ?? 0, businessLeads: d.previous.results ?? 0 } : null);
   const currentBusiness = d.currentLayers?.business ?? { ...EMPTY_BUSINESS, leadSignals: d.current?.results ?? 0 };
   const previousBusiness = d.previousLayers?.business ?? (d.previous ? { ...EMPTY_BUSINESS, leadSignals: d.previous.results ?? 0 } : null);
-  const campaigns = d.campaigns ?? [];
+  const campaigns = (d.campaigns ?? []).filter((campaign) => Number(campaign?.spend ?? 0) > 0);
   const topAds = d.topAds ?? [];
   const timeseries = d.timeseries ?? [];
   const hasPrevious = Boolean(d.periodPrevious);
