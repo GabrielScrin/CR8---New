@@ -78,6 +78,91 @@ const metricCard = (
 
 const emptyWeeklyReport: WeeklyReportDetail | null = null;
 
+type WeeklyMetaMetrics = {
+  available?: boolean;
+  reason?: string;
+  summary?: {
+    spend?: number;
+    impressions?: number;
+    reach?: number;
+    clicks?: number;
+    linkClicks?: number;
+    ctr?: number;
+    cpc?: number;
+    cpm?: number;
+    frequency?: number;
+    results?: number;
+    messagesStarted?: number;
+    leadForms?: number;
+    siteLeads?: number;
+    profileVisits?: number;
+    followers?: number;
+    videoViews?: number;
+    thruplays?: number;
+  };
+  timeseries?: Array<{ date?: string; spend?: number; results?: number }>;
+  campaigns?: Array<{
+    id?: string;
+    name?: string;
+    spend?: number;
+    impressions?: number;
+    reach?: number;
+    ctr?: number;
+    cpc?: number;
+    cpm?: number;
+    frequency?: number;
+    results?: number;
+  }>;
+};
+
+type WeeklyGoogleMetrics = {
+  available?: boolean;
+  reason?: string;
+  summary?: {
+    spend?: number;
+    impressions?: number;
+    clicks?: number;
+    conversions?: number;
+    conversionValue?: number;
+    ctr?: number;
+    cpc?: number;
+    cpm?: number;
+  };
+  timeseries?: Array<{ date?: string; spend?: number; results?: number }>;
+  campaigns?: Array<{
+    id?: string;
+    name?: string;
+    spend?: number;
+    impressions?: number;
+    ctr?: number;
+    cpc?: number;
+    cpm?: number;
+    conversions?: number;
+  }>;
+};
+
+type WeeklyInstagramMetrics = {
+  available?: boolean;
+  reason?: string;
+  summary?: {
+    totalReach?: number;
+    totalViews?: number;
+    totalProfileViews?: number;
+    totalFollowerGain?: number;
+    totalAccountsEngaged?: number;
+  };
+  series?: Array<{ date?: string; dateIso?: string; reach?: number; views?: number; followerDelta?: number; accountsEngaged?: number }>;
+};
+
+type WeeklyBusinessMetrics = {
+  crmLeads?: number;
+  won?: number;
+  revenue?: number;
+  pendingFollowup?: number;
+};
+
+const weeklyMetricNumber = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : 0);
+
 export const PublicClientPortal: React.FC<PublicClientPortalProps> = ({ token }) => {
   const [bootstrap, setBootstrap] = useState<ClientPortalBootstrap | null>(null);
   const [overview, setOverview] = useState<ClientPortalOverview | null>(null);
@@ -258,6 +343,139 @@ export const PublicClientPortal: React.FC<PublicClientPortalProps> = ({ token })
     }
     return Array.from(base.values());
   }, [overview]);
+
+  const weeklyDetailMetrics = useMemo(() => {
+    const metrics = (weeklyReport?.metrics ?? {}) as Record<string, unknown>;
+    const meta = (metrics.meta ?? {}) as WeeklyMetaMetrics;
+    const googleAds = (metrics.google_ads ?? {}) as WeeklyGoogleMetrics;
+    const instagram = (metrics.instagram ?? {}) as WeeklyInstagramMetrics;
+    const business = (metrics.business ?? {}) as WeeklyBusinessMetrics;
+
+    const metaSummary = meta.summary ?? {};
+    const googleSummary = googleAds.summary ?? {};
+    const instagramSummary = instagram.summary ?? {};
+
+    const paidSpend = weeklyMetricNumber(metaSummary.spend) + weeklyMetricNumber(googleSummary.spend);
+    const paidImpressions = weeklyMetricNumber(metaSummary.impressions) + weeklyMetricNumber(googleSummary.impressions);
+    const paidReach = weeklyMetricNumber(metaSummary.reach);
+    const paidResults =
+      weeklyMetricNumber(metaSummary.results) +
+      weeklyMetricNumber(googleSummary.conversions);
+    const paidLinkClicks = weeklyMetricNumber(metaSummary.linkClicks) + weeklyMetricNumber(googleSummary.clicks);
+    const paidCtr =
+      paidImpressions > 0 ? (paidLinkClicks / paidImpressions) * 100 : 0;
+    const paidCpc = paidLinkClicks > 0 ? paidSpend / paidLinkClicks : 0;
+    const paidCpm = paidImpressions > 0 ? (paidSpend / paidImpressions) * 1000 : 0;
+
+    const journeySteps = [
+      { label: 'Investimento', value: brl(paidSpend), hint: '' },
+      { label: 'Impressões', value: int(paidImpressions), hint: '' },
+      { label: 'Alcance', value: int(paidReach), hint: paidImpressions > 0 ? `${pct((paidReach / paidImpressions) * 100, 1)} das impressões` : '' },
+      { label: 'Cliques', value: int(paidLinkClicks), hint: paidReach > 0 ? `${pct((paidLinkClicks / paidReach) * 100, 2)} do alcance` : '' },
+      { label: 'Resultados', value: int(paidResults), hint: paidLinkClicks > 0 ? `${pct((paidResults / paidLinkClicks) * 100, 2)} dos cliques` : '' },
+    ];
+
+    const timeseriesMap = new Map<string, { date: string; metaSpend: number; googleSpend: number; metaResults: number; googleResults: number }>();
+    for (const row of meta.timeseries ?? []) {
+      const iso = String(row?.date ?? '');
+      if (!iso) continue;
+      timeseriesMap.set(iso, {
+        date: isoToLabel(iso),
+        metaSpend: weeklyMetricNumber(row?.spend),
+        googleSpend: 0,
+        metaResults: weeklyMetricNumber(row?.results),
+        googleResults: 0,
+      });
+    }
+    for (const row of googleAds.timeseries ?? []) {
+      const iso = String(row?.date ?? '');
+      if (!iso) continue;
+      const existing = timeseriesMap.get(iso) ?? {
+        date: isoToLabel(iso),
+        metaSpend: 0,
+        googleSpend: 0,
+        metaResults: 0,
+        googleResults: 0,
+      };
+      existing.googleSpend = weeklyMetricNumber(row?.spend);
+      existing.googleResults = weeklyMetricNumber(row?.results);
+      timeseriesMap.set(iso, existing);
+    }
+
+    const campaigns = [
+      ...((meta.campaigns ?? []).map((campaign) => ({
+        key: `meta:${String(campaign.id ?? '')}`,
+        platform: 'Meta',
+        name: String(campaign.name ?? 'Campanha'),
+        spend: weeklyMetricNumber(campaign.spend),
+        impressions: weeklyMetricNumber(campaign.impressions),
+        reach: weeklyMetricNumber(campaign.reach),
+        ctr: weeklyMetricNumber(campaign.ctr),
+        cpc: weeklyMetricNumber(campaign.cpc),
+        cpm: weeklyMetricNumber(campaign.cpm),
+        frequency: weeklyMetricNumber(campaign.frequency),
+        results: weeklyMetricNumber(campaign.results),
+      }))),
+      ...((googleAds.campaigns ?? []).map((campaign) => ({
+        key: `google:${String(campaign.id ?? '')}`,
+        platform: 'Google',
+        name: String(campaign.name ?? 'Campanha'),
+        spend: weeklyMetricNumber(campaign.spend),
+        impressions: weeklyMetricNumber(campaign.impressions),
+        reach: 0,
+        ctr: weeklyMetricNumber(campaign.ctr),
+        cpc: weeklyMetricNumber(campaign.cpc),
+        cpm: weeklyMetricNumber(campaign.cpm),
+        frequency: 0,
+        results: weeklyMetricNumber(campaign.conversions),
+      }))),
+    ].sort((a, b) => b.spend - a.spend);
+
+    const objectiveCards = [
+      { label: 'Mensagens', value: weeklyMetricNumber(metaSummary.messagesStarted), accent: '#14b8a6' },
+      { label: 'Lead Forms', value: weeklyMetricNumber(metaSummary.leadForms), accent: '#f97316' },
+      { label: 'Leads no Site', value: weeklyMetricNumber(metaSummary.siteLeads), accent: '#ef4444' },
+      { label: 'Visitas ao Perfil', value: weeklyMetricNumber(metaSummary.profileVisits), accent: '#3b82f6' },
+      { label: 'Seguidores Ads', value: weeklyMetricNumber(metaSummary.followers), accent: '#22c55e' },
+      { label: 'ThruPlays', value: weeklyMetricNumber(metaSummary.thruplays), accent: '#a855f7' },
+    ].filter((item) => item.value > 0);
+
+    const businessCards = [
+      { label: 'Leads no CRM', value: weeklyMetricNumber(business.crmLeads), accent: '#22c55e' },
+      { label: 'Ganhos', value: weeklyMetricNumber(business.won), accent: '#10b981' },
+      { label: 'Receita', value: weeklyMetricNumber(business.revenue), accent: '#f59e0b', currency: true },
+      { label: 'Follow-up pendente', value: weeklyMetricNumber(business.pendingFollowup), accent: '#eab308' },
+    ].filter((item) => item.value > 0);
+
+    const instagramCards = [
+      { label: 'Alcance IG', value: weeklyMetricNumber(instagramSummary.totalReach), accent: '#fb7185' },
+      { label: 'Views IG', value: weeklyMetricNumber(instagramSummary.totalViews), accent: '#a855f7' },
+      { label: 'Visitas ao Perfil IG', value: weeklyMetricNumber(instagramSummary.totalProfileViews), accent: '#38bdf8' },
+      { label: 'Contas Engajadas', value: weeklyMetricNumber(instagramSummary.totalAccountsEngaged), accent: '#ec4899' },
+      { label: 'Seguidores Ganhos', value: weeklyMetricNumber(instagramSummary.totalFollowerGain), accent: '#34d399' },
+    ].filter((item) => item.value > 0);
+
+    return {
+      meta,
+      googleAds,
+      instagram,
+      business,
+      paidSpend,
+      paidImpressions,
+      paidReach,
+      paidResults,
+      paidLinkClicks,
+      paidCtr,
+      paidCpc,
+      paidCpm,
+      journeySteps,
+      timeseries: Array.from(timeseriesMap.values()),
+      campaigns,
+      objectiveCards,
+      businessCards,
+      instagramCards,
+    };
+  }, [weeklyReport]);
 
   if (loadingBootstrap) {
     return (
@@ -632,8 +850,162 @@ export const PublicClientPortal: React.FC<PublicClientPortalProps> = ({ token })
               </div>
             </div>
             {weeklyReport ? (
-              <div className="space-y-5">
-                <div className="rounded-[22px] border border-white/8 bg-white/[0.03] p-4 text-sm leading-6 text-white/82">
+              <>
+                <div className="rounded-[24px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02))' }}>
+                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Resumo executivo</div>
+                  <div className="mt-3 text-sm leading-7 text-white/82">
+                    {weeklyReport.summary ?? 'Resumo indisponivel para esta semana.'}
+                  </div>
+                </div>
+
+                <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                  {metricCard('Investimento', brl(weeklyDetailMetrics.paidSpend), 'Meta + Google na semana', accent)}
+                  {metricCard('Resultados', int(weeklyDetailMetrics.paidResults), 'Conversoes e resultados pagos', '#22c55e')}
+                  {metricCard('Alcance Pago', int(weeklyDetailMetrics.paidReach), 'Meta Ads na semana', '#f59e0b')}
+                  {metricCard('CTR Pago', pct(weeklyDetailMetrics.paidCtr), 'Cliques / impressoes', '#38bdf8')}
+                  {metricCard('CPC Pago', brl(weeklyDetailMetrics.paidCpc), 'Custo por clique', '#14b8a6')}
+                  {metricCard('CPM Pago', brl(weeklyDetailMetrics.paidCpm), 'Custo por mil impressoes', '#a855f7')}
+                  {metricCard('Alcance IG', int(weeklyMetricNumber(weeklyDetailMetrics.instagram.summary?.totalReach)), 'Organico da semana', '#fb7185')}
+                  {metricCard('Seguidores IG', int(weeklyMetricNumber(weeklyDetailMetrics.instagram.summary?.totalFollowerGain)), 'Ganho organico na semana', '#34d399')}
+                </div>
+
+                <div className="mt-6 rounded-[24px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(10,13,20,0.95), rgba(8,10,16,0.98))' }}>
+                  <div className="mb-4">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Jornada da semana</div>
+                    <div className="mt-1 text-lg font-black tracking-[-0.04em] text-white">Midia paga</div>
+                  </div>
+                  <div className="grid gap-3 xl:grid-cols-5">
+                    {weeklyDetailMetrics.journeySteps.map((step) => (
+                      <div key={step.label} className="rounded-[20px] border border-white/8 bg-white/[0.03] px-4 py-4">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.16em] text-white/40">{step.label}</div>
+                        <div className="mt-2 text-2xl font-black tracking-[-0.04em] text-white">{step.value}</div>
+                        <div className="mt-2 text-xs text-white/45">{step.hint || ' '}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {weeklyDetailMetrics.timeseries.length > 0 && (
+                  <div className="mt-6 rounded-[24px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(10,13,20,0.95), rgba(8,10,16,0.98))' }}>
+                    <div className="mb-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Evolucao diaria</div>
+                      <div className="mt-1 text-lg font-black tracking-[-0.04em] text-white">Investimento e resultados</div>
+                    </div>
+                    <div className="h-[320px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <ComposedChart data={weeklyDetailMetrics.timeseries}>
+                          <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+                          <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                          <YAxis yAxisId="left" tick={{ fill: 'rgba(255,255,255,0.55)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                          <YAxis yAxisId="right" orientation="right" tick={{ fill: 'rgba(255,255,255,0.45)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ background: '#0d1320', border: '1px solid rgba(255,255,255,0.12)', borderRadius: 18, color: '#fff' }} />
+                          <Bar yAxisId="left" dataKey="metaSpend" fill={accent} name="Meta Invest." radius={[6, 6, 0, 0]} />
+                          <Bar yAxisId="left" dataKey="googleSpend" fill="#34d399" name="Google Invest." radius={[6, 6, 0, 0]} />
+                          <Line yAxisId="right" type="monotone" dataKey="metaResults" stroke="#f59e0b" strokeWidth={2.5} dot={false} name="Meta Resultados" />
+                          <Line yAxisId="right" type="monotone" dataKey="googleResults" stroke="#f472b6" strokeWidth={2.5} dot={false} name="Google Conversoes" />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+
+                {weeklyDetailMetrics.objectiveCards.length > 0 && (
+                  <div className="mt-6 rounded-[24px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(10,13,20,0.95), rgba(8,10,16,0.98))' }}>
+                    <div className="mb-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Objetivos ativos</div>
+                      <div className="mt-1 text-lg font-black tracking-[-0.04em] text-white">Resultados por objetivo</div>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      {weeklyDetailMetrics.objectiveCards.map((item) => (
+                        <div key={item.label} className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
+                          <div className="mb-3 flex items-center justify-between">
+                            <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/40">{item.label}</div>
+                            <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.accent, boxShadow: `0 0 20px ${item.accent}` }} />
+                          </div>
+                          <div className="text-2xl font-black tracking-[-0.04em] text-white">{int(item.value)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {(weeklyDetailMetrics.businessCards.length > 0 || weeklyDetailMetrics.instagramCards.length > 0) && (
+                  <div className="mt-6 grid gap-6 xl:grid-cols-2">
+                    <div className="rounded-[24px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(10,13,20,0.95), rgba(8,10,16,0.98))' }}>
+                      <div className="mb-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Negocio</div>
+                        <div className="mt-1 text-lg font-black tracking-[-0.04em] text-white">CRM e receita</div>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {weeklyDetailMetrics.businessCards.map((item) => (
+                          <div key={item.label} className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
+                            <div className="mb-3 flex items-center justify-between">
+                              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/40">{item.label}</div>
+                              <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.accent, boxShadow: `0 0 20px ${item.accent}` }} />
+                            </div>
+                            <div className="text-2xl font-black tracking-[-0.04em] text-white">{item.currency ? brl(item.value) : int(item.value)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-[24px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(10,13,20,0.95), rgba(8,10,16,0.98))' }}>
+                      <div className="mb-4">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Instagram</div>
+                        <div className="mt-1 text-lg font-black tracking-[-0.04em] text-white">Organico da semana</div>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {weeklyDetailMetrics.instagramCards.map((item) => (
+                          <div key={item.label} className="rounded-[20px] border border-white/8 bg-white/[0.03] p-4">
+                            <div className="mb-3 flex items-center justify-between">
+                              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/40">{item.label}</div>
+                              <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.accent, boxShadow: `0 0 20px ${item.accent}` }} />
+                            </div>
+                            <div className="text-2xl font-black tracking-[-0.04em] text-white">{int(item.value)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {weeklyDetailMetrics.campaigns.length > 0 && (
+                  <div className="mt-6 rounded-[24px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(10,13,20,0.95), rgba(8,10,16,0.98))' }}>
+                    <div className="mb-4 flex items-center justify-between">
+                      <div>
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Campanhas</div>
+                        <div className="mt-1 text-lg font-black tracking-[-0.04em] text-white">Detalhamento da semana</div>
+                      </div>
+                      <div className="text-xs text-white/45">{weeklyDetailMetrics.campaigns.length} campanhas</div>
+                    </div>
+                    <div className="overflow-hidden rounded-[20px] border border-white/8">
+                      <div className="grid grid-cols-[minmax(0,2fr)_0.55fr_0.5fr_0.5fr_0.55fr] gap-3 bg-white/[0.04] px-4 py-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-white/40">
+                        <div>Campanha</div>
+                        <div>Invest.</div>
+                        <div>CTR</div>
+                        <div>CPM</div>
+                        <div>Resultados</div>
+                      </div>
+                      <div className="max-h-[480px] overflow-auto">
+                        {weeklyDetailMetrics.campaigns.map((campaign) => (
+                          <div key={campaign.key} className="grid grid-cols-[minmax(0,2fr)_0.55fr_0.5fr_0.5fr_0.55fr] gap-3 border-t border-white/6 px-4 py-3">
+                            <div className="min-w-0">
+                              <div className="truncate text-sm font-medium text-white/88">{campaign.name}</div>
+                              <div className="mt-1 text-xs text-white/40">{campaign.platform}</div>
+                            </div>
+                            <div className="text-sm text-white/75">{brl(campaign.spend)}</div>
+                            <div className="text-sm text-white/75">{pct(campaign.ctr)}</div>
+                            <div className="text-sm text-white/75">{campaign.cpm > 0 ? brl(campaign.cpm) : '-'}</div>
+                            <div className="text-sm text-white/75">{int(campaign.results)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-5">
+                <div className="hidden rounded-[22px] border border-white/8 bg-white/[0.03] p-4 text-sm leading-6 text-white/82">
                   {weeklyReport.summary ?? 'Resumo indisponível para esta semana.'}
                 </div>
                 <div className="grid gap-4 sm:grid-cols-3">
@@ -666,6 +1038,7 @@ export const PublicClientPortal: React.FC<PublicClientPortalProps> = ({ token })
                   </div>
                 </div>
               </div>
+              </>
             ) : (
               <div className="rounded-[22px] border border-dashed border-white/10 px-4 py-10 text-center text-sm text-white/45">
                 Selecione um relatório semanal para ver o resumo completo.
