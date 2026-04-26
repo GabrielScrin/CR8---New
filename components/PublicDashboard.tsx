@@ -112,8 +112,9 @@ const getStartOfWeekUtc = (value: Date) => {
 
 const getRangeForPreset = (preset: Exclude<DatePreset, 'custom'>): DateRange => {
   const today = getTodayUtc();
-  const year = today.getUTCFullYear();
-  const month = today.getUTCMonth();
+  const stableReferenceDay = shiftUtcDate(today, -2);
+  const stableYear = stableReferenceDay.getUTCFullYear();
+  const stableMonth = stableReferenceDay.getUTCMonth();
 
   if (preset === 'today') return { start: isoUtcDate(today), end: isoUtcDate(today) };
   if (preset === 'yesterday') {
@@ -121,19 +122,19 @@ const getRangeForPreset = (preset: Exclude<DatePreset, 'custom'>): DateRange => 
     return { start: isoUtcDate(yesterday), end: isoUtcDate(yesterday) };
   }
   if (preset === 'today_yesterday') return { start: isoUtcDate(shiftUtcDate(today, -1)), end: isoUtcDate(today) };
-  if (preset === 'last_7d') return { start: isoUtcDate(shiftUtcDate(today, -6)), end: isoUtcDate(today) };
-  if (preset === 'last_14d') return { start: isoUtcDate(shiftUtcDate(today, -13)), end: isoUtcDate(today) };
-  if (preset === 'last_28d') return { start: isoUtcDate(shiftUtcDate(today, -27)), end: isoUtcDate(today) };
-  if (preset === 'last_30d') return { start: isoUtcDate(shiftUtcDate(today, -29)), end: isoUtcDate(today) };
-  if (preset === 'this_week') return { start: isoUtcDate(getStartOfWeekUtc(today)), end: isoUtcDate(today) };
+  if (preset === 'last_7d') return { start: isoUtcDate(shiftUtcDate(stableReferenceDay, -6)), end: isoUtcDate(stableReferenceDay) };
+  if (preset === 'last_14d') return { start: isoUtcDate(shiftUtcDate(stableReferenceDay, -13)), end: isoUtcDate(stableReferenceDay) };
+  if (preset === 'last_28d') return { start: isoUtcDate(shiftUtcDate(stableReferenceDay, -27)), end: isoUtcDate(stableReferenceDay) };
+  if (preset === 'last_30d') return { start: isoUtcDate(shiftUtcDate(stableReferenceDay, -29)), end: isoUtcDate(stableReferenceDay) };
+  if (preset === 'this_week') return { start: isoUtcDate(getStartOfWeekUtc(stableReferenceDay)), end: isoUtcDate(stableReferenceDay) };
   if (preset === 'last_week') {
-    const thisWeekStart = getStartOfWeekUtc(today);
+    const thisWeekStart = getStartOfWeekUtc(stableReferenceDay);
     return { start: isoUtcDate(shiftUtcDate(thisWeekStart, -7)), end: isoUtcDate(shiftUtcDate(thisWeekStart, -1)) };
   }
-  if (preset === 'this_month') return { start: isoUtcDate(new Date(Date.UTC(year, month, 1))), end: isoUtcDate(today) };
+  if (preset === 'this_month') return { start: isoUtcDate(new Date(Date.UTC(stableYear, stableMonth, 1))), end: isoUtcDate(stableReferenceDay) };
   return {
-    start: isoUtcDate(new Date(Date.UTC(year, month - 1, 1))),
-    end: isoUtcDate(new Date(Date.UTC(year, month, 0))),
+    start: isoUtcDate(new Date(Date.UTC(stableYear, stableMonth - 1, 1))),
+    end: isoUtcDate(new Date(Date.UTC(stableYear, stableMonth, 0))),
   };
 };
 
