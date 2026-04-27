@@ -115,6 +115,17 @@ type NativeResultType =
   | 'video_views'
   | 'followers';
 
+type CampaignMetaNode = {
+  objective?: string;
+};
+
+type AdsetMetaNode = {
+  campaignId?: string;
+  destinationType?: string;
+  optimizationGoal?: string;
+  promotedObject?: Record<string, unknown> | null;
+};
+
 type GoogleCampaignRow = {
   id: string;
   name: string;
@@ -683,7 +694,7 @@ const fetchMetaAdInsights = async (
     const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/${adAccountId}/insights`);
     url.searchParams.set(
       'fields',
-      'campaign_id,campaign_name,ad_id,ad_name,spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions,results,cost_per_result,cost_per_action_type,instagram_profile_visits,video_thruplay_watched_actions',
+      'campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions,results,cost_per_result,cost_per_action_type,instagram_profile_visits,video_thruplay_watched_actions',
     );
     url.searchParams.set('level', 'ad');
     url.searchParams.set('time_range', JSON.stringify({ since: dateFrom, until: dateTo }));
@@ -779,6 +790,53 @@ const fetchMetaAdThumbnails = async (
     // thumbnails são não-críticos
   }
   return thumbnailMap;
+};
+
+const chunk = <T,>(items: T[], size: number) => {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+};
+
+const fetchCampaignMetadataByIds = async (metaAccessToken: string, campaignIds: string[]) => {
+  const out = new Map<string, CampaignMetaNode>();
+  const ids = Array.from(new Set(campaignIds)).filter(Boolean);
+  for (const group of chunk(ids, 50)) {
+    const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/`);
+    url.searchParams.set('ids', group.join(','));
+    url.searchParams.set('fields', 'objective');
+    url.searchParams.set('access_token', metaAccessToken);
+    const json = await fetchJson(url.toString()).catch(() => null);
+    if (!json || typeof json !== 'object') continue;
+    for (const id of group) {
+      const node = (json as any)?.[id];
+      out.set(id, { objective: node?.objective != null ? String(node.objective) : undefined });
+    }
+  }
+  return out;
+};
+
+const fetchAdsetMetadataByIds = async (metaAccessToken: string, adsetIds: string[]) => {
+  const out = new Map<string, AdsetMetaNode>();
+  const ids = Array.from(new Set(adsetIds)).filter(Boolean);
+  for (const group of chunk(ids, 50)) {
+    const url = new URL(`https://graph.facebook.com/${META_GRAPH_VERSION}/`);
+    url.searchParams.set('ids', group.join(','));
+    url.searchParams.set('fields', 'campaign_id,destination_type,optimization_goal,promoted_object');
+    url.searchParams.set('access_token', metaAccessToken);
+    const json = await fetchJson(url.toString()).catch(() => null);
+    if (!json || typeof json !== 'object') continue;
+    for (const id of group) {
+      const node = (json as any)?.[id];
+      out.set(id, {
+        campaignId: node?.campaign_id != null ? String(node.campaign_id) : undefined,
+        destinationType: node?.destination_type != null ? String(node.destination_type) : undefined,
+        optimizationGoal: node?.optimization_goal != null ? String(node.optimization_goal) : undefined,
+        promotedObject: node?.promoted_object && typeof node.promoted_object === 'object' ? node.promoted_object : null,
+      });
+    }
+  }
+  return out;
 };
 
 const aggregateMetaOverview = async (
@@ -2679,6 +2737,11 @@ const buildPortalWeeklyTrafficLikeReport = async (
     activeCampaigns.map(async (campaign) => {
       const rows = await fetchMetaAdInsights(metaToken, link.meta_ad_account_id, periodStart, periodEnd, campaign.id);
       const thumbnailMap = await fetchMetaAdThumbnails(metaToken, link.meta_ad_account_id, campaign.id).catch(() => new Map<string, string>());
+      const adsetMetaMap = await fetchAdsetMetadataByIds(
+        metaToken,
+        rows.map((row) => asString(row?.adset_id)).filter(Boolean),
+      ).catch(() => new Map<string, AdsetMetaNode>());
+      const campaignMetaMap = await fetchCampaignMetadataByIds(metaToken, [campaign.id]).catch(() => new Map<string, CampaignMetaNode>());
       const adMap = new Map<string, MetaAdRow>();
 
       for (const row of rows) {
@@ -2697,7 +2760,13 @@ const buildPortalWeeklyTrafficLikeReport = async (
         const resultsPayload = Array.isArray(row?.results) ? row.results : [];
         const resultIndicator = extractResultIndicator(resultsPayload);
         const resultValue = extractResultValue(resultsPayload);
+        const adsetMeta = adsetMetaMap.get(asString(row?.adset_id));
+        const campaignMeta = campaignMetaMap.get(campaign.id);
         const nativeType = inferNativeTypeFromContext({
+          objective: campaignMeta?.objective,
+          destinationType: adsetMeta?.destinationType,
+          optimizationGoal: adsetMeta?.optimizationGoal,
+          promotedObject: adsetMeta?.promotedObject,
           nameHint: `${campaign.name} ${asString(row?.ad_name)}`,
         });
         const isProfileVisitCampaign = resultIndicator === 'profile_visit_view';
