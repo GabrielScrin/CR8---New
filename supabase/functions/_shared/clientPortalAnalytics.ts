@@ -694,17 +694,46 @@ const fetchMetaAdInsights = async (
   return rows;
 };
 
+const getResultEntryValue = (entry: any) => {
+  const values = Array.isArray(entry?.values) ? entry.values : [];
+  if (values.length > 0) return asNumber(values[0]?.value);
+  return asNumber(entry?.value);
+};
+
+const scoreResultIndicator = (indicator: string) => {
+  const normalized = asString(indicator).toLowerCase();
+  if (!normalized) return 0;
+  if (normalized.includes('profile_visit')) return 100;
+  if (normalized.includes('messaging') || normalized.includes('onsite_conversion.messaging_conversation_started')) return 95;
+  if (normalized.includes('lead') && normalized.includes('omni')) return 92;
+  if ((normalized.includes('lead') && normalized.includes('website')) || (normalized.includes('offsite_conversion') && normalized.includes('lead'))) return 90;
+  if (normalized.includes('landing_page_view')) return 80;
+  if (normalized.includes('follow')) return 70;
+  if (normalized.includes('thruplay')) return 40;
+  if (normalized.includes('video_view')) return 30;
+  return 10;
+};
+
+const extractPreferredResultEntry = (results: any[] | undefined) => {
+  if (!Array.isArray(results) || results.length === 0) return null;
+  return [...results]
+    .map((entry) => ({
+      entry,
+      indicator: asString(entry?.indicator).toLowerCase(),
+      value: getResultEntryValue(entry),
+      score: scoreResultIndicator(asString(entry?.indicator)),
+    }))
+    .sort((a, b) => b.score - a.score || b.value - a.value)[0]?.entry ?? null;
+};
+
 const extractResultIndicator = (results: any[] | undefined) => {
-  if (!Array.isArray(results) || results.length === 0) return '';
-  return asString(results[0]?.indicator).toLowerCase();
+  const preferred = extractPreferredResultEntry(results);
+  return asString(preferred?.indicator).toLowerCase();
 };
 
 const extractResultValue = (results: any[] | undefined) => {
-  if (!Array.isArray(results) || results.length === 0) return 0;
-  const first = results[0];
-  const values = Array.isArray(first?.values) ? first.values : [];
-  if (values.length > 0) return asNumber(values[0]?.value);
-  return asNumber(first?.value);
+  const preferred = extractPreferredResultEntry(results);
+  return preferred ? getResultEntryValue(preferred) : 0;
 };
 
 const fetchMetaAdThumbnails = async (
