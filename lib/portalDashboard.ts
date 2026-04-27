@@ -17,6 +17,7 @@ export type DashboardBootstrap = {
   id: string;
   name: string;
   clientName: string | null;
+  serverDate?: string;
   metaAdAccountId: string;
   metaAdAccountName: string;
   instagramBusinessAccountId: string | null;

@@ -98,6 +98,12 @@ const getTodayUtc = () => {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
 };
 
+const parseIsoDateAsUtc = (value?: string | null) => {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return getTodayUtc();
+  const [year, month, day] = value.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, day));
+};
+
 const shiftUtcDate = (value: Date, days: number) => {
   const next = new Date(value);
   next.setUTCDate(next.getUTCDate() + days);
@@ -110,8 +116,8 @@ const getStartOfWeekUtc = (value: Date) => {
   return shiftUtcDate(value, offset);
 };
 
-const getRangeForPreset = (preset: Exclude<DatePreset, 'custom'>): DateRange => {
-  const today = getTodayUtc();
+const getRangeForPreset = (preset: Exclude<DatePreset, 'custom'>, referenceDate?: string | null): DateRange => {
+  const today = parseIsoDateAsUtc(referenceDate);
   const stableReferenceDay = shiftUtcDate(today, -1);
   const stableYear = stableReferenceDay.getUTCFullYear();
   const stableMonth = stableReferenceDay.getUTCMonth();
@@ -614,7 +620,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
     fetchDashboardBootstrap(token)
       .then((payload) => {
         setBootstrap(payload);
-        const defaultRange = getRangeForPreset('last_30d');
+        const defaultRange = getRangeForPreset('last_30d', payload.serverDate);
         setDatePreset('last_30d');
         setDateFrom(defaultRange.start);
         setDateTo(defaultRange.end);
@@ -759,13 +765,13 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
       const fallbackRange =
         normalizeDateRange(draftDateFrom, draftDateTo) ??
         normalizeDateRange(dateFrom, dateTo) ??
-        getRangeForPreset('last_30d');
+        getRangeForPreset('last_30d', bootstrap?.serverDate);
       setDraftDateFrom(fallbackRange.start);
       setDraftDateTo(fallbackRange.end);
       return;
     }
 
-    const nextRange = getRangeForPreset(nextPreset);
+    const nextRange = getRangeForPreset(nextPreset, bootstrap?.serverDate);
     setDraftDateFrom(nextRange.start);
     setDraftDateTo(nextRange.end);
   };
@@ -773,7 +779,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const applyDateFilter = () => {
     const normalized =
       normalizeDateRange(draftDateFrom, draftDateTo) ??
-      (draftDatePreset === 'custom' ? null : getRangeForPreset(draftDatePreset));
+      (draftDatePreset === 'custom' ? null : getRangeForPreset(draftDatePreset, bootstrap?.serverDate));
 
     if (!normalized) return;
 

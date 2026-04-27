@@ -318,6 +318,17 @@ const parseDateInput = (raw: string | null | undefined, fallback: string) => {
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback;
 };
 
+const getSaoPauloDateString = () => {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Sao_Paulo',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(new Date());
+  const get = (type: string) => parts.find((part) => part.type === type)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+};
+
 const dateDiffDays = (startIso: string, endIso: string) => {
   const start = new Date(`${startIso}T00:00:00.000Z`).getTime();
   const end = new Date(`${endIso}T00:00:00.000Z`).getTime();
@@ -620,10 +631,10 @@ const splitCampaignIds = (campaignIds: string[]) => {
 };
 
 const buildDateWindow = (dateFromRaw?: string, dateToRaw?: string) => {
-  const today = new Date();
-  const defaultEnd = today.toISOString().slice(0, 10);
-  const startDate = new Date();
-  startDate.setUTCDate(startDate.getUTCDate() - 6);
+  const today = new Date(`${getSaoPauloDateString()}T00:00:00.000Z`);
+  const endDate = shiftUtcDate(today, -1);
+  const defaultEnd = endDate.toISOString().slice(0, 10);
+  const startDate = shiftUtcDate(endDate, -6);
   const defaultStart = startDate.toISOString().slice(0, 10);
 
   const dateFrom = parseDateInput(dateFromRaw, defaultStart);
@@ -2225,6 +2236,7 @@ export const loadDashboardBootstrap = async (supabaseAdmin: SupabaseClient, toke
     id: link.id,
     name: link.name,
     clientName: link.client_name,
+    serverDate: getSaoPauloDateString(),
     metaAdAccountId: link.meta_ad_account_id,
     metaAdAccountName: metaAccountName,
     instagramBusinessAccountId: link.instagram_business_account_id,
@@ -3256,9 +3268,8 @@ export const loadDashboardWeekly = async (
 
   const metaToken = asString((companyTokens as any)?.meta_access_token);
 
-  const today = new Date();
-  const defaultPeriodEnd = new Date(today);
-  defaultPeriodEnd.setUTCDate(defaultPeriodEnd.getUTCDate() - 1);
+  const today = new Date(`${getSaoPauloDateString()}T00:00:00.000Z`);
+  const defaultPeriodEnd = shiftUtcDate(today, -1);
   const defaultPeriodStart = new Date(defaultPeriodEnd);
   defaultPeriodStart.setUTCDate(defaultPeriodStart.getUTCDate() - 6);
   const defaultPeriodStartStr = defaultPeriodStart.toISOString().slice(0, 10);
