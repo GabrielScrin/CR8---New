@@ -2664,14 +2664,32 @@ const buildPortalWeeklyTrafficLikeReport = async (
     };
   });
 
-  const topAds = allAds
+  const rankedAdsByCampaign = Array.from(
+    allAds.reduce((map, ad) => {
+      const key = ad.campaignName || 'Sem campanha';
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(ad);
+      return map;
+    }, new Map<string, (MetaAdRow & { idc?: number; classification?: string })[]>()),
+  )
+    .map(([campaignName, ads]) => ({
+      campaignName,
+      ads: [...ads].sort(
+        (a, b) =>
+          (b.nativeResultValue ?? 0) - (a.nativeResultValue ?? 0) ||
+          ((b as any).idc ?? 0) - ((a as any).idc ?? 0) ||
+          b.spend - a.spend,
+      ),
+    }))
     .sort(
       (a, b) =>
-        (b.nativeResultValue ?? 0) - (a.nativeResultValue ?? 0) ||
-        ((b as any).idc ?? 0) - ((a as any).idc ?? 0) ||
-        b.spend - a.spend,
-    )
-    .slice(0, 18)
+        ((b.ads[0]?.nativeResultValue ?? 0) - (a.ads[0]?.nativeResultValue ?? 0)) ||
+        (((b.ads[0] as any)?.idc ?? 0) - ((a.ads[0] as any)?.idc ?? 0)) ||
+        ((b.ads[0]?.spend ?? 0) - (a.ads[0]?.spend ?? 0)),
+    );
+
+  const topAds = rankedAdsByCampaign
+    .flatMap(({ ads }) => ads)
     .map((ad) => {
       const described =
         ad.nativeResultLabel && ad.nativeResultValue > 0
