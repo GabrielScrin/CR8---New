@@ -2403,15 +2403,6 @@ const inferNativeTypeFromContext = (input: {
   const nameHint = normalizeMetaSignal(input.nameHint);
 
   if (
-    optimizationGoal.includes('THRUPLAY') ||
-    optimizationGoal.includes('VIDEO') ||
-    objective.includes('VIDEO') ||
-    objective.includes('OUTCOME_VIDEO')
-  ) {
-    return 'video_views';
-  }
-
-  if (
     optimizationGoal.includes('LANDING_PAGE') ||
     promotedJson.includes('LANDING_PAGE_VIEW')
   ) {
@@ -2432,6 +2423,24 @@ const inferNativeTypeFromContext = (input: {
   }
 
   if (
+    nameHint.includes('CONTATO') ||
+    nameHint.includes('CHAMADA') ||
+    nameHint.includes('LIGACAO') ||
+    nameHint.includes('TELEFONE') ||
+    nameHint.includes('CALL')
+  ) {
+    return 'site_leads';
+  }
+
+  if (
+    nameHint.includes('LEAD') ||
+    nameHint.includes('CADASTRO') ||
+    nameHint.includes('CAPTACAO')
+  ) {
+    return 'lead_forms';
+  }
+
+  if (
     nameHint.includes('WHATSAPP') ||
     nameHint.includes('WHATS') ||
     nameHint.includes(' MENSA') ||
@@ -2449,6 +2458,15 @@ const inferNativeTypeFromContext = (input: {
     promotedJson.includes('INSTAGRAM_PROFILE')
   ) {
     return 'profile_visits';
+  }
+
+  if (
+    optimizationGoal.includes('THRUPLAY') ||
+    optimizationGoal.includes('VIDEO') ||
+    objective.includes('VIDEO') ||
+    objective.includes('OUTCOME_VIDEO')
+  ) {
+    return 'video_views';
   }
 
   if (
@@ -2498,9 +2516,7 @@ const inferNativeTypeFromContext = (input: {
   }
 
   if (nameHint.includes('PERFIL') || nameHint.includes('PROFILE') || nameHint.includes('INSTAGRAM')) return 'profile_visits';
-  if (nameHint.includes('CONTATO') || nameHint.includes('CHAMADA') || nameHint.includes('LIGACAO') || nameHint.includes('TELEFONE') || nameHint.includes('CALL')) return 'site_leads';
   if (nameHint.includes('SITE') || nameHint.includes('LPV') || nameHint.includes('LANDING')) return 'landing_page_views';
-  if (nameHint.includes('LEAD')) return 'lead_forms';
   if (nameHint.includes('VIDEO') || nameHint.includes('THRUPLAY')) return 'video_views';
 
   return 'unknown';
