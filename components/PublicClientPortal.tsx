@@ -873,26 +873,22 @@ export const PublicClientPortal: React.FC<PublicClientPortalProps> = ({ token })
             </div>
             {weeklyReport ? (
               <>
-                {weeklyReport.traffic_report?.public_id ? (
+                {weeklyReport.traffic_like_report ? (
                   <div className="rounded-[24px] border border-white/10 p-5" style={{ background: 'linear-gradient(180deg, rgba(10,13,20,0.95), rgba(8,10,16,0.98))' }}>
                     <div className="mb-4 flex items-center justify-between gap-4">
                       <div>
                         <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-white/45">Visualização completa</div>
                         <div className="mt-1 text-lg font-black tracking-[-0.04em] text-white">
-                          {weeklyReport.traffic_report.title || 'Relatório de Tráfego'}
+                          Relatório de Tráfego
                         </div>
                       </div>
-                      <a
-                        href={`/traffic-report/${weeklyReport.traffic_report.public_id}`}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="inline-flex items-center gap-2 rounded-[16px] border border-white/10 bg-white/[0.03] px-4 py-2 text-sm font-semibold text-white/80 transition-colors hover:bg-white/[0.05]"
-                      >
-                        Abrir completo
-                        <ExternalLink className="h-4 w-4" />
-                      </a>
                     </div>
-                    <PublicTrafficReport publicId={weeklyReport.traffic_report.public_id} embedded />
+                    <PublicTrafficReport
+                      embedded
+                      reportDataOverride={weeklyReport.traffic_like_report as any}
+                      titleOverride="Relatório de Tráfego"
+                      createdAtOverride={weeklyReport.created_at}
+                    />
                   </div>
                 ) : null}
 

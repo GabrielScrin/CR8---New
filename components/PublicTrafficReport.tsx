@@ -2,8 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { getSupabaseAnonKey, getSupabaseUrl } from '../lib/supabase';
 
 interface PublicTrafficReportProps {
-  publicId: string;
+  publicId?: string;
   embedded?: boolean;
+  reportDataOverride?: ReportData | null;
+  titleOverride?: string | null;
+  createdAtOverride?: string | null;
 }
 
 type PeriodSummary = {
@@ -182,13 +185,32 @@ const MetricGrid: React.FC<{ items: MetricCard[]; hasPrevious: boolean }> = ({ i
   </div>
 );
 
-export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ publicId, embedded = false }) => {
+export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ publicId, embedded = false, reportDataOverride = null, titleOverride = null, createdAtOverride = null }) => {
   const [report, setReport] = useState<TrafficReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
+    if (reportDataOverride) {
+      setReport({
+        id: 'embedded',
+        public_id: publicId ?? 'embedded',
+        title: titleOverride ?? 'Relatorio de Trafego',
+        period_start: reportDataOverride.periodCurrent.start,
+        period_end: reportDataOverride.periodCurrent.end,
+        report_data: reportDataOverride,
+        created_at: createdAtOverride ?? new Date().toISOString(),
+      });
+      setLoading(false);
+      setError(null);
+      return;
+    }
+    if (!publicId) {
+      setError('Relatorio nao encontrado.');
+      setLoading(false);
+      return;
+    }
     const anonKey = getSupabaseAnonKey();
     const baseUrl = getSupabaseUrl();
     if (!anonKey || !baseUrl) {
@@ -206,7 +228,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
       })
       .catch(() => setError('Erro ao carregar relatorio.'))
       .finally(() => setLoading(false));
-  }, [publicId]);
+  }, [createdAtOverride, publicId, reportDataOverride, titleOverride]);
 
   const copyLink = () => {
     navigator.clipboard.writeText(window.location.href).catch(() => {});

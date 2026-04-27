@@ -169,6 +169,7 @@ export type WeeklyReportDetail = {
   next_week: string[] | null;
   created_at: string;
   updated_at: string;
+  traffic_like_report?: Record<string, unknown> | null;
   traffic_report?: {
     public_id: string;
     title: string | null;

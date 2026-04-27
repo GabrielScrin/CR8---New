@@ -247,6 +247,12 @@ type TrafficReportRow = {
   report_data?: any;
 };
 
+const IDC_THRESHOLDS = {
+  otimo: 0.8,
+  bom: 0.6,
+  regular: 0.4,
+};
+
 let cachedGoogleAccessToken: { token: string; expiresAtMs: number } | null = null;
 
 export const createSupabaseAdmin = () =>
@@ -1622,6 +1628,13 @@ export const loadPortalWeeklyDetail = async (
   const context = await getPortalContext(supabaseAdmin, token);
   assertCompanyAllowed(context, companyId);
   const link = await getPortalLinkRow(supabaseAdmin, token);
+  const { data: companyRow, error: companyError } = await supabaseAdmin
+    .from('companies')
+    .select('meta_ad_account_id,meta_access_token,meta_token_expires_at')
+    .eq('id', companyId)
+    .maybeSingle();
+
+  if (companyError) throw companyError;
 
   const { data, error } = await supabaseAdmin
     .from('weekly_reports')
@@ -1632,41 +1645,31 @@ export const loadPortalWeeklyDetail = async (
 
   if (error) throw error;
   if (!data) throw new Error('weekly report not found');
-
-  const { data: trafficRows } = await supabaseAdmin
-    .from('traffic_reports')
-    .select('public_id,title,created_at,report_data')
-    .eq('company_id', companyId)
-    .eq('period_start', String((data as any).period_start))
-    .eq('period_end', String((data as any).period_end))
-    .order('created_at', { ascending: false })
-    .limit(25);
-
-  const matchedTrafficReport = (((trafficRows ?? []) as any[])
-    .map((item) => ({
-      public_id: asString(item?.public_id),
-      title: asString(item?.title) || null,
-      created_at: asString(item?.created_at),
-      report_data: item?.report_data ?? {},
-    }))
-    .map((row) => ({ row, score: scoreTrafficReportMatch(row, link) }))
-    .sort((a, b) => b.score - a.score || b.row.created_at.localeCompare(a.row.created_at)))[0];
+  const trafficLikeReport = await buildPortalWeeklyTrafficLikeReport(
+    supabaseAdmin,
+    link,
+    companyRow ?? {},
+    String((data as any).period_start),
+    String((data as any).period_end),
+    {
+      summary: (data as any).summary ?? null,
+      highlights: ((data as any).highlights ?? []) as string[] | null,
+      risks: ((data as any).risks ?? []) as string[] | null,
+      next_week: ((data as any).next_week ?? []) as string[] | null,
+    },
+  ).catch(() => null);
 
   return {
     ...(data as WeeklyReportRow),
-    traffic_report: matchedTrafficReport && matchedTrafficReport.score > 0
-      ? {
-          public_id: matchedTrafficReport.row.public_id,
-          title: matchedTrafficReport.row.title,
-          created_at: matchedTrafficReport.row.created_at,
-        }
-      : null,
+    traffic_report: null,
+    traffic_like_report: trafficLikeReport,
   } as WeeklyReportRow & {
     traffic_report: {
       public_id: string;
       title: string | null;
       created_at: string;
     } | null;
+    traffic_like_report: Record<string, unknown> | null;
   };
 };
 
@@ -2267,6 +2270,388 @@ const normalizeLoose = (value: string | null | undefined) =>
     .toLowerCase()
     .replace(/\s+/g, ' ')
     .trim();
+
+const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
+
+const normalizeHigherBetter = (value: number, min: number, max: number) => {
+  const denom = max - min;
+  if (!Number.isFinite(denom) || denom <= 0) return 0;
+  return clamp01((value - min) / denom);
+};
+
+const normalizeLowerBetter = (value: number, min: number, max: number) =>
+  clamp01(1 - normalizeHigherBetter(value, min, max));
+
+const describeResult = (row: {
+  messagesStarted: number;
+  leadForms: number;
+  siteLeads: number;
+  profileVisits: number;
+  followers: number;
+  videoViews: number;
+  thruplays: number;
+}) => {
+  const options = [
+    { key: 'messagesStarted', label: 'Mensagens iniciadas', value: row.messagesStarted },
+    { key: 'leadForms', label: 'Lead forms', value: row.leadForms },
+    { key: 'siteLeads', label: 'Leads no site', value: row.siteLeads },
+    { key: 'profileVisits', label: 'Visitas ao perfil', value: row.profileVisits },
+    { key: 'followers', label: 'Seguidores', value: row.followers },
+    { key: 'thruplays', label: 'ThruPlays', value: row.thruplays },
+    { key: 'videoViews', label: 'Views 3s', value: row.videoViews },
+  ];
+  const winner = options.sort((a, b) => b.value - a.value)[0];
+  return {
+    resultLabel: winner?.label ?? 'Resultados',
+    resultValue: winner?.value ?? 0,
+  };
+};
+
+const classifyAdsByIdc = <T extends { impressions: number; hookRate: number; holdRate: number; ctr: number; cpc: number }>(
+  rows: T[],
+) => {
+  const hookValues = rows.map((row) => row.hookRate ?? 0);
+  const holdValues = rows.map((row) => row.holdRate ?? 0);
+  const ctrValues = rows.map((row) => row.ctr ?? 0);
+  const cpcValues = rows.map((row) => row.cpc).filter((value) => Number.isFinite(value));
+
+  const [minHook, maxHook] = [Math.min(...hookValues, 0), Math.max(...hookValues, 0)];
+  const [minHold, maxHold] = [Math.min(...holdValues, 0), Math.max(...holdValues, 0)];
+  const [minCtr, maxCtr] = [Math.min(...ctrValues, 0), Math.max(...ctrValues, 0)];
+  const [minCpc, maxCpc] = cpcValues.length ? [Math.min(...cpcValues), Math.max(...cpcValues)] : [0, 1];
+
+  return rows.map((row) => {
+    const scoreHook = normalizeHigherBetter(row.hookRate ?? 0, minHook, maxHook);
+    const scoreHold = normalizeHigherBetter(row.holdRate ?? 0, minHold, maxHold);
+    const scoreCtr = normalizeHigherBetter(row.ctr ?? 0, minCtr, maxCtr);
+    const scoreCpc = Number.isFinite(row.cpc) ? normalizeLowerBetter(row.cpc, minCpc, maxCpc) : 0;
+
+    let idc01 = 0;
+    if ((row.hookRate ?? 0) > 0 && (row.holdRate ?? 0) > 0) {
+      idc01 = scoreHook * 0.3 + scoreHold * 0.3 + scoreCtr * 0.25 + scoreCpc * 0.15;
+    } else if ((row.hookRate ?? 0) > 0 || (row.holdRate ?? 0) > 0) {
+      const scoreVideo = (row.hookRate ?? 0) > 0 ? scoreHook : scoreHold;
+      idc01 = scoreVideo * 0.5 + scoreCtr * 0.35 + scoreCpc * 0.15;
+    } else {
+      idc01 = scoreCtr * 0.625 + scoreCpc * 0.375;
+    }
+
+    const classification =
+      row.impressions === 0
+        ? undefined
+        : idc01 >= IDC_THRESHOLDS.otimo
+          ? 'otimo'
+          : idc01 >= IDC_THRESHOLDS.bom
+            ? 'bom'
+            : idc01 >= IDC_THRESHOLDS.regular
+              ? 'regular'
+              : 'ruim';
+
+    return {
+      ...row,
+      idc: Math.round(idc01 * 100),
+      classification,
+    };
+  });
+};
+
+const buildPortalWeeklyTrafficLikeReport = async (
+  supabaseAdmin: SupabaseClient,
+  link: PortalLinkRow,
+  companyRow: any,
+  periodStart: string,
+  periodEnd: string,
+  weeklyNarrative: { summary: string | null; highlights: string[] | null; risks: string[] | null; next_week: string[] | null },
+) => {
+  const metaToken = asString(companyRow?.meta_access_token);
+  if (!metaToken || !link.meta_ad_account_id) return null;
+
+  const days = dateDiffDays(periodStart, periodEnd) + 1;
+  const prevEnd = shiftUtcDate(new Date(`${periodStart}T00:00:00.000Z`), -1).toISOString().slice(0, 10);
+  const prevStart = shiftUtcDate(new Date(`${periodStart}T00:00:00.000Z`), -days).toISOString().slice(0, 10);
+
+  const [currentMeta, previousMeta, currentBusiness, previousBusiness, metaAccountName] = await Promise.all([
+    aggregateMetaOverview(metaToken, link.meta_ad_account_id, periodStart, periodEnd, []),
+    aggregateMetaOverview(metaToken, link.meta_ad_account_id, prevStart, prevEnd, []),
+    loadBusinessOverview(supabaseAdmin, link.company_id, `${periodStart}T00:00:00.000Z`, `${nextDateIso(periodEnd)}T00:00:00.000Z`),
+    loadBusinessOverview(supabaseAdmin, link.company_id, `${prevStart}T00:00:00.000Z`, `${nextDateIso(prevEnd)}T00:00:00.000Z`),
+    getMetaAccountName(metaToken, link.meta_ad_account_id).catch(() => link.meta_ad_account_name || link.meta_ad_account_id),
+  ]);
+
+  const activeCampaigns = currentMeta.campaigns.filter((campaign) => campaign.spend > 0);
+  const campaignAds = await Promise.all(
+    activeCampaigns.map(async (campaign) => {
+      const rows = await fetchMetaAdInsights(metaToken, link.meta_ad_account_id, periodStart, periodEnd, campaign.id);
+      const thumbnailMap = await fetchMetaAdThumbnails(metaToken, link.meta_ad_account_id, campaign.id).catch(() => new Map<string, string>());
+      const adMap = new Map<string, MetaAdRow>();
+
+      for (const row of rows) {
+        const adId = asString(row?.ad_id);
+        if (!adId) continue;
+        const spend = asNumber(row?.spend);
+        const impressions = asNumber(row?.impressions);
+        const reach = asNumber(row?.reach);
+        const clicks = asNumber(row?.clicks);
+        const linkClicks = asNumber(row?.inline_link_clicks);
+        const ctr = asNumber(row?.ctr);
+        const cpc = asNumber(row?.cpc);
+        const cpm = asNumber(row?.cpm);
+        const frequency = asNumber(row?.frequency);
+        const actions = Array.isArray(row?.actions) ? row.actions : [];
+        const resultsPayload = Array.isArray(row?.results) ? row.results : [];
+        const resultIndicator = extractResultIndicator(resultsPayload);
+        const isProfileVisitCampaign = resultIndicator === 'profile_visit_view';
+        const costPerActionType = Array.isArray(row?.cost_per_action_type) ? row.cost_per_action_type : [];
+        const videoThruplayActions = Array.isArray(row?.video_thruplay_watched_actions) ? row.video_thruplay_watched_actions : [];
+        const leadForms = isProfileVisitCampaign ? 0 : extractLeadForms(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLeadForms);
+        const messagesStarted = isProfileVisitCampaign ? 0 : extractMessagingStarted(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractMessagingStarted);
+        const siteLeads = isProfileVisitCampaign ? 0 : extractSiteLeads(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractSiteLeads);
+        const landingPageViews = extractLandingPageViews(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLandingPageViews);
+        const profileVisits =
+          asNumber(row?.instagram_profile_visits) ||
+          (isProfileVisitCampaign ? extractResultValue(resultsPayload) : 0) ||
+          extractProfileVisits(actions) ||
+          deriveCountFromCostPerAction(spend, costPerActionType, extractProfileVisits);
+        const followers = 0;
+        const videoViews = extractVideoViews(actions);
+        const thruplays =
+          extractThruplays(actions) ||
+          extractActionTotal(videoThruplayActions) ||
+          deriveCountFromCostPerAction(spend, costPerActionType, extractThruplays);
+        const results = leadForms + messagesStarted + siteLeads;
+
+        const previous = adMap.get(adId) ?? {
+          id: adId,
+          name: asString(row?.ad_name) || adId,
+          thumbnailUrl: '',
+          campaignId: campaign.id,
+          campaignName: campaign.name,
+          spend: 0,
+          impressions: 0,
+          reach: 0,
+          clicks: 0,
+          linkClicks: 0,
+          ctr: 0,
+          cpc: 0,
+          cpm: 0,
+          frequency: 0,
+          results: 0,
+          messagesStarted: 0,
+          leadForms: 0,
+          siteLeads: 0,
+          landingPageViews: 0,
+          profileVisits: 0,
+          followers: 0,
+          videoViews: 0,
+          thruplays: 0,
+          hookRate: 0,
+          holdRate: 0,
+        };
+
+        previous.spend += spend;
+        previous.impressions += impressions;
+        previous.reach += reach;
+        previous.clicks += clicks;
+        previous.linkClicks += linkClicks;
+        previous.results += results;
+        previous.messagesStarted += messagesStarted;
+        previous.leadForms += leadForms;
+        previous.siteLeads += siteLeads;
+        previous.landingPageViews += landingPageViews;
+        previous.profileVisits += profileVisits;
+        previous.followers += followers;
+        previous.videoViews += videoViews;
+        previous.thruplays += thruplays;
+        previous.ctr = previous.impressions > 0 ? (previous.clicks / previous.impressions) * 100 : ctr;
+        previous.cpc = previous.clicks > 0 ? previous.spend / previous.clicks : cpc;
+        previous.cpm = previous.impressions > 0 ? (previous.spend / previous.impressions) * 1000 : cpm;
+        previous.frequency = previous.reach > 0 ? previous.impressions / previous.reach : frequency;
+        previous.hookRate = previous.impressions > 0 ? previous.videoViews / previous.impressions : 0;
+        previous.holdRate = previous.videoViews > 0 ? previous.thruplays / previous.videoViews : 0;
+        previous.thumbnailUrl = thumbnailMap.get(adId) ?? previous.thumbnailUrl;
+        adMap.set(adId, previous);
+      }
+
+      return Array.from(adMap.values()).filter((item) => item.spend > 0);
+    }),
+  );
+
+  const allAds = classifyAdsByIdc(campaignAds.flat());
+
+  const currentPlatform = {
+    videoViews: currentMeta.summary.videoViews,
+    thruplays: currentMeta.summary.thruplays,
+    profileVisits: currentMeta.summary.profileVisits,
+    followers: currentMeta.summary.followers,
+    messagesStarted: currentMeta.summary.messagesStarted,
+    leadForms: currentMeta.summary.leadForms,
+    siteLeads: currentMeta.summary.siteLeads,
+    businessLeads: currentMeta.summary.results + currentBusiness.crmLeads,
+  };
+
+  const previousPlatform = {
+    videoViews: previousMeta.summary.videoViews,
+    thruplays: previousMeta.summary.thruplays,
+    profileVisits: previousMeta.summary.profileVisits,
+    followers: previousMeta.summary.followers,
+    messagesStarted: previousMeta.summary.messagesStarted,
+    leadForms: previousMeta.summary.leadForms,
+    siteLeads: previousMeta.summary.siteLeads,
+    businessLeads: previousMeta.summary.results + previousBusiness.crmLeads,
+  };
+
+  const currentBusinessLayer = {
+    crmLeads: currentBusiness.crmLeads,
+    won: currentBusiness.won,
+    revenue: currentBusiness.revenue,
+    pendingFollowup: currentBusiness.pendingFollowup,
+    leadSignals: currentMeta.summary.results + currentBusiness.crmLeads,
+  };
+
+  const previousBusinessLayer = {
+    crmLeads: previousBusiness.crmLeads,
+    won: previousBusiness.won,
+    revenue: previousBusiness.revenue,
+    pendingFollowup: previousBusiness.pendingFollowup,
+    leadSignals: previousMeta.summary.results + previousBusiness.crmLeads,
+  };
+
+  const currentSummary = {
+    invest: currentMeta.summary.spend,
+    impressions: currentMeta.summary.impressions,
+    reach: currentMeta.summary.reach,
+    clicks: currentMeta.summary.clicks,
+    linkClicks: currentMeta.summary.linkClicks,
+    ctr: currentMeta.summary.ctr,
+    cpc: currentMeta.summary.cpc,
+    cpm: currentMeta.summary.cpm,
+    frequency: currentMeta.summary.frequency,
+    results: currentBusinessLayer.leadSignals,
+    resultLabel: 'Leads de negocio',
+    costPerResult: currentBusinessLayer.leadSignals > 0 ? currentMeta.summary.spend / currentBusinessLayer.leadSignals : undefined,
+    profileVisits: currentMeta.summary.profileVisits || undefined,
+    followers: currentMeta.summary.followers || undefined,
+  };
+
+  const previousSummary = {
+    invest: previousMeta.summary.spend,
+    impressions: previousMeta.summary.impressions,
+    reach: previousMeta.summary.reach,
+    clicks: previousMeta.summary.clicks,
+    linkClicks: previousMeta.summary.linkClicks,
+    ctr: previousMeta.summary.ctr,
+    cpc: previousMeta.summary.cpc,
+    cpm: previousMeta.summary.cpm,
+    frequency: previousMeta.summary.frequency,
+    results: previousBusinessLayer.leadSignals,
+    resultLabel: 'Leads de negocio',
+    costPerResult: previousBusinessLayer.leadSignals > 0 ? previousMeta.summary.spend / previousBusinessLayer.leadSignals : undefined,
+    profileVisits: previousMeta.summary.profileVisits || undefined,
+    followers: previousMeta.summary.followers || undefined,
+  };
+
+  const campaignRows = allAds.map((ad) => {
+    const described = describeResult(ad);
+    return {
+      name: ad.name,
+      status: 'active',
+      spend: ad.spend,
+      reach: ad.reach,
+      impressions: ad.impressions,
+      results: described.resultValue,
+      resultLabel: described.resultLabel,
+      costPerResult: described.resultValue > 0 ? ad.spend / described.resultValue : 0,
+      ctr: ad.ctr,
+      cpc: ad.cpc,
+      cpm: ad.cpm,
+      frequency: ad.frequency,
+      hookRate: ad.hookRate,
+      holdRate: ad.holdRate,
+      idc: (ad as any).idc,
+      classification: (ad as any).classification,
+    };
+  });
+
+  const topAds = allAds
+    .sort((a, b) => ((b as any).idc ?? 0) - ((a as any).idc ?? 0) || b.spend - a.spend)
+    .slice(0, 18)
+    .map((ad) => {
+      const described = describeResult(ad);
+      return {
+        id: ad.id,
+        name: ad.name,
+        campaign: ad.campaignName,
+        spend: ad.spend,
+        impressions: ad.impressions,
+        reach: ad.reach,
+        ctr: ad.ctr,
+        cpc: ad.cpc,
+        cpm: ad.cpm,
+        frequency: ad.frequency,
+        results: described.resultValue,
+        resultLabel: described.resultLabel,
+        hookRate: ad.hookRate,
+        holdRate: ad.holdRate,
+        idc: (ad as any).idc ?? 0,
+        idcClass:
+          (ad as any).classification === 'otimo'
+            ? 'great'
+            : (ad as any).classification === 'bom'
+              ? 'good'
+              : (ad as any).classification === 'regular'
+                ? 'ok'
+                : 'bad',
+        thumbnailUrl: ad.thumbnailUrl,
+      };
+    });
+
+  const activeObjectives = [
+    { key: 'thruplays', label: 'ThruPlays', current: currentPlatform.thruplays, previous: previousPlatform.thruplays, layer: 'platform' },
+    { key: 'videoViews', label: 'Views 3s', current: currentPlatform.videoViews, previous: previousPlatform.videoViews, layer: 'platform' },
+    { key: 'profileVisits', label: 'Visitas ao perfil', current: currentPlatform.profileVisits, previous: previousPlatform.profileVisits, layer: 'platform' },
+    { key: 'followers', label: 'Seguidores', current: currentPlatform.followers, previous: previousPlatform.followers, layer: 'platform' },
+    { key: 'messagesStarted', label: 'Mensagens iniciadas', current: currentPlatform.messagesStarted, previous: previousPlatform.messagesStarted, layer: 'platform' },
+    { key: 'leadForms', label: 'Lead Forms', current: currentPlatform.leadForms, previous: previousPlatform.leadForms, layer: 'platform' },
+    { key: 'siteLeads', label: 'Leads no site', current: currentPlatform.siteLeads, previous: previousPlatform.siteLeads, layer: 'platform' },
+    { key: 'crmLeads', label: 'Leads no CRM', current: currentBusinessLayer.crmLeads, previous: previousBusinessLayer.crmLeads, layer: 'business' },
+    { key: 'won', label: 'Ganhos', current: currentBusinessLayer.won, previous: previousBusinessLayer.won, layer: 'business' },
+  ].filter((item) => item.current > 0 || item.previous > 0);
+
+  return {
+    schemaVersion: 2,
+    clientName: asString(link.client_name || link.name) || 'Cliente',
+    agencyName: 'CR8',
+    adAccountId: link.meta_ad_account_id,
+    adAccountName: metaAccountName,
+    level: 'ad',
+    scope: 'account',
+    scopeLabel: metaAccountName,
+    periodCurrent: { label: `${periodStart} a ${periodEnd}`, start: periodStart, end: periodEnd },
+    periodPrevious: { label: `${prevStart} a ${prevEnd}`, start: prevStart, end: prevEnd },
+    current: currentSummary,
+    previous: previousSummary,
+    currentLayers: {
+      media: currentSummary,
+      platform: currentPlatform,
+      business: currentBusinessLayer,
+    },
+    previousLayers: {
+      media: previousSummary,
+      platform: previousPlatform,
+      business: previousBusinessLayer,
+    },
+    activeObjectives,
+    timeseries: currentMeta.timeseries.map((point) => ({
+      name: point.date.slice(8, 10) + '/' + point.date.slice(5, 7),
+      metaSpend: point.spend,
+      metaLeads: point.results,
+    })),
+    campaigns: campaignRows,
+    topAds,
+    insights: [weeklyNarrative.summary, ...((weeklyNarrative.highlights ?? []).filter(Boolean))].filter(Boolean),
+    actionItems: [...(weeklyNarrative.risks ?? []), ...(weeklyNarrative.next_week ?? [])],
+  };
+};
 
 const scoreTrafficReportMatch = (
   report: TrafficReportRow,
