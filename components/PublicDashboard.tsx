@@ -112,7 +112,7 @@ const getStartOfWeekUtc = (value: Date) => {
 
 const getRangeForPreset = (preset: Exclude<DatePreset, 'custom'>): DateRange => {
   const today = getTodayUtc();
-  const stableReferenceDay = shiftUtcDate(today, -2);
+  const stableReferenceDay = shiftUtcDate(today, -1);
   const stableYear = stableReferenceDay.getUTCFullYear();
   const stableMonth = stableReferenceDay.getUTCMonth();
 

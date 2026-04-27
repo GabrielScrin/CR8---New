@@ -2651,6 +2651,13 @@ const inferNativeResultFromIndicator = (input: {
         nativeResultValue: nativeValue,
       };
     }
+    if (input.payloadValue > 0) {
+      return {
+        nativeResultType: input.nativeType,
+        nativeResultLabel: labelForNativeType(input.nativeType, (input.thruplays ?? 0) > 0),
+        nativeResultValue: input.payloadValue,
+      };
+    }
   }
 
   if (indicator.includes('profile_visit')) {
