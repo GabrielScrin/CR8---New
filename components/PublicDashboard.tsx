@@ -1647,9 +1647,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                 createdAtOverride={new Date().toISOString()}
               />
             </div>
-          ) : null}
-
-          {weekly.trafficReport?.publicId ? (
+          ) : weekly.trafficReport?.publicId ? (
             <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
               <div className="mb-5 flex items-center justify-between gap-4">
                 <div>
@@ -1668,50 +1666,52 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
               </div>
               <PublicTrafficReport publicId={weekly.trafficReport.publicId} embedded />
             </div>
-          ) : null}
-
-          <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-5">
-            <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Período analisado</div>
-            <div className="text-xl font-black text-white">{weekly.periodStart} → {weekly.periodEnd}</div>
-            <p className="mt-3 text-sm leading-relaxed text-white/60">{weekly.summary}</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KpiCard label="Investimento" value={brl(weekly.meta.spend)} accent="#6366f1" hint="últimos 7 dias" />
-            <KpiCard label="Resultados" value={num(weekly.meta.results)} accent="#10b981" />
-            <KpiCard label="Alcance" value={num(weekly.meta.reach)} accent="#f59e0b" />
-            <KpiCard label="Alcance IG" value={num(weekly.instagram.totalReach)} accent="#f43f5e" />
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] p-5">
-              <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400/70">Destaques</div>
-              <div className="space-y-2.5">
-                {(weekly.highlights ?? []).map((item, index) => (
-                  <div key={index} className="border-l-2 border-emerald-500/30 pl-3 text-sm leading-relaxed text-emerald-100/80">{item}</div>
-                ))}
+          ) : (
+            <>
+              <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-5">
+                <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Período analisado</div>
+                <div className="text-xl font-black text-white">{weekly.periodStart} → {weekly.periodEnd}</div>
+                <p className="mt-3 text-sm leading-relaxed text-white/60">{weekly.summary}</p>
               </div>
-            </div>
 
-            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-5">
-              <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-400/70">Atenção</div>
-              <div className="space-y-2.5">
-                {(weekly.risks ?? []).map((item, index) => (
-                  <div key={index} className="border-l-2 border-amber-500/30 pl-3 text-sm leading-relaxed text-amber-100/80">{item}</div>
-                ))}
-                {(weekly.risks ?? []).length === 0 ? <div className="text-sm text-white/30">Sem alertas.</div> : null}
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <KpiCard label="Investimento" value={brl(weekly.meta.spend)} accent="#6366f1" hint="últimos 7 dias" />
+                <KpiCard label="Resultados" value={num(weekly.meta.results)} accent="#10b981" />
+                <KpiCard label="Alcance" value={num(weekly.meta.reach)} accent="#f59e0b" />
+                <KpiCard label="Alcance IG" value={num(weekly.instagram.totalReach)} accent="#f43f5e" />
               </div>
-            </div>
 
-            <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.04] p-5">
-              <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/70">Próxima semana</div>
-              <div className="space-y-2.5">
-                {(weekly.next_week ?? []).map((item, index) => (
-                  <div key={index} className="border-l-2 border-indigo-500/30 pl-3 text-sm leading-relaxed text-indigo-100/80">{item}</div>
-                ))}
+              <div className="grid gap-4 lg:grid-cols-3">
+                <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/[0.04] p-5">
+                  <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-emerald-400/70">Destaques</div>
+                  <div className="space-y-2.5">
+                    {(weekly.highlights ?? []).map((item, index) => (
+                      <div key={index} className="border-l-2 border-emerald-500/30 pl-3 text-sm leading-relaxed text-emerald-100/80">{item}</div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/[0.04] p-5">
+                  <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-amber-400/70">Atenção</div>
+                  <div className="space-y-2.5">
+                    {(weekly.risks ?? []).map((item, index) => (
+                      <div key={index} className="border-l-2 border-amber-500/30 pl-3 text-sm leading-relaxed text-amber-100/80">{item}</div>
+                    ))}
+                    {(weekly.risks ?? []).length === 0 ? <div className="text-sm text-white/30">Sem alertas.</div> : null}
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-indigo-500/20 bg-indigo-500/[0.04] p-5">
+                  <div className="mb-3 text-[10px] font-bold uppercase tracking-[0.2em] text-indigo-400/70">Próxima semana</div>
+                  <div className="space-y-2.5">
+                    {(weekly.next_week ?? []).map((item, index) => (
+                      <div key={index} className="border-l-2 border-indigo-500/30 pl-3 text-sm leading-relaxed text-indigo-100/80">{item}</div>
+                    ))}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
         </>
       ) : (
         <div className="flex h-40 items-center justify-center text-sm text-white/30">Sem relatório disponível.</div>

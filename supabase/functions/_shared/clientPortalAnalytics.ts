@@ -283,6 +283,12 @@ const nextDateIso = (dateIso: string) => {
   return date.toISOString().slice(0, 10);
 };
 
+const shiftUtcDate = (date: Date, deltaDays: number) => {
+  const shifted = new Date(date);
+  shifted.setUTCDate(shifted.getUTCDate() + deltaDays);
+  return shifted;
+};
+
 const parseDateInput = (raw: string | null | undefined, fallback: string) => {
   const value = asString(raw);
   return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : fallback;
@@ -2767,7 +2773,17 @@ export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: 
     periodStartStr,
     periodEndStr,
     narrative,
-  ).catch(() => null);
+  ).catch((error) => {
+    console.error('loadDashboardWeekly trafficLikeReport error', {
+      token,
+      companyId: link.company_id,
+      adAccountId: link.meta_ad_account_id,
+      periodStart: periodStartStr,
+      periodEnd: periodEndStr,
+      error: error instanceof Error ? { message: error.message, stack: error.stack } : String(error),
+    });
+    return null;
+  });
 
   return {
     periodStart: periodStartStr,
