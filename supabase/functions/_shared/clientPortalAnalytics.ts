@@ -100,6 +100,9 @@ type MetaAdRow = {
   thruplays: number;
   hookRate: number;
   holdRate: number;
+  nativeResultType: string;
+  nativeResultLabel: string;
+  nativeResultValue: number;
 };
 
 type GoogleCampaignRow = {
@@ -1695,7 +1698,7 @@ const buildFallbackWeeklyNarrative = (input: {
 
   const highlights = [
     `Investimento total do período: ${totalSpend.toFixed(2)}.`,
-    `Captação consolidada: ${Math.round(totalLeads)} sinais de resultado entre mídia e CRM.`,
+    `Captação consolidada: ${Math.round(totalLeads)} Leads entre mídia e CRM.`,
     `Instagram gerou ${Math.round(asNumber(instagram?.summary?.totalProfileViews))} visitas ao perfil no período.`,
   ];
 
@@ -2313,6 +2316,64 @@ const describeResult = (row: {
   };
 };
 
+const mapNativeResultLabel = (indicator: string) => {
+  const normalized = asString(indicator).toLowerCase();
+  if (!normalized) return '';
+  if (normalized.includes('profile_visit')) return 'Visitas ao perfil';
+  if (normalized.includes('messaging') || normalized.includes('onsite_conversion.messaging_conversation_started')) return 'Mensagens iniciadas';
+  if (normalized.includes('lead') && normalized.includes('omni')) return 'Lead Forms';
+  if (normalized.includes('lead') && normalized.includes('website')) return 'Leads no site';
+  if (normalized.includes('offsite_conversion') && normalized.includes('lead')) return 'Leads no site';
+  if (normalized.includes('landing_page_view')) return 'Vis. pag. destino';
+  if (normalized.includes('follow')) return 'Seguidores';
+  if (normalized.includes('thruplay')) return 'ThruPlays';
+  if (normalized.includes('video_view')) return 'Views 3s';
+  return '';
+};
+
+const inferNativeResultFromIndicator = (input: {
+  indicator: string;
+  payloadValue: number;
+  messagesStarted: number;
+  leadForms: number;
+  siteLeads: number;
+  landingPageViews: number;
+  profileVisits: number;
+  followers: number;
+  videoViews: number;
+  thruplays: number;
+}) => {
+  const indicator = asString(input.indicator).toLowerCase();
+  const label = mapNativeResultLabel(indicator);
+
+  if (indicator.includes('profile_visit')) {
+    return { nativeResultType: indicator, nativeResultLabel: label || 'Visitas ao perfil', nativeResultValue: input.profileVisits || input.payloadValue };
+  }
+  if (indicator.includes('messaging') || indicator.includes('onsite_conversion.messaging_conversation_started')) {
+    return { nativeResultType: indicator, nativeResultLabel: label || 'Mensagens iniciadas', nativeResultValue: input.messagesStarted || input.payloadValue };
+  }
+  if (indicator.includes('lead') && indicator.includes('omni')) {
+    return { nativeResultType: indicator, nativeResultLabel: label || 'Lead Forms', nativeResultValue: input.leadForms || input.payloadValue };
+  }
+  if ((indicator.includes('lead') && indicator.includes('website')) || (indicator.includes('offsite_conversion') && indicator.includes('lead'))) {
+    return { nativeResultType: indicator, nativeResultLabel: label || 'Leads no site', nativeResultValue: input.siteLeads || input.payloadValue };
+  }
+  if (indicator.includes('landing_page_view')) {
+    return { nativeResultType: indicator, nativeResultLabel: label || 'Vis. pag. destino', nativeResultValue: input.landingPageViews || input.payloadValue };
+  }
+  if (indicator.includes('follow')) {
+    return { nativeResultType: indicator, nativeResultLabel: label || 'Seguidores', nativeResultValue: input.followers || input.payloadValue };
+  }
+  if (indicator.includes('thruplay')) {
+    return { nativeResultType: indicator, nativeResultLabel: label || 'ThruPlays', nativeResultValue: input.thruplays || input.payloadValue };
+  }
+  if (indicator.includes('video_view')) {
+    return { nativeResultType: indicator, nativeResultLabel: label || 'Views 3s', nativeResultValue: input.videoViews || input.payloadValue };
+  }
+
+  return { nativeResultType: '', nativeResultLabel: '', nativeResultValue: 0 };
+};
+
 const classifyAdsByIdc = <T extends { impressions: number; hookRate: number; holdRate: number; ctr: number; cpc: number }>(
   rows: T[],
 ) => {
@@ -2406,6 +2467,7 @@ const buildPortalWeeklyTrafficLikeReport = async (
         const actions = Array.isArray(row?.actions) ? row.actions : [];
         const resultsPayload = Array.isArray(row?.results) ? row.results : [];
         const resultIndicator = extractResultIndicator(resultsPayload);
+        const resultValue = extractResultValue(resultsPayload);
         const isProfileVisitCampaign = resultIndicator === 'profile_visit_view';
         const costPerActionType = Array.isArray(row?.cost_per_action_type) ? row.cost_per_action_type : [];
         const videoThruplayActions = Array.isArray(row?.video_thruplay_watched_actions) ? row.video_thruplay_watched_actions : [];
@@ -2425,6 +2487,18 @@ const buildPortalWeeklyTrafficLikeReport = async (
           extractActionTotal(videoThruplayActions) ||
           deriveCountFromCostPerAction(spend, costPerActionType, extractThruplays);
         const results = leadForms + messagesStarted + siteLeads;
+        const nativeResult = inferNativeResultFromIndicator({
+          indicator: resultIndicator,
+          payloadValue: resultValue,
+          messagesStarted,
+          leadForms,
+          siteLeads,
+          landingPageViews,
+          profileVisits,
+          followers,
+          videoViews,
+          thruplays,
+        });
 
         const previous = adMap.get(adId) ?? {
           id: adId,
@@ -2452,6 +2526,9 @@ const buildPortalWeeklyTrafficLikeReport = async (
           thruplays: 0,
           hookRate: 0,
           holdRate: 0,
+          nativeResultType: '',
+          nativeResultLabel: '',
+          nativeResultValue: 0,
         };
 
         previous.spend += spend;
@@ -2474,6 +2551,11 @@ const buildPortalWeeklyTrafficLikeReport = async (
         previous.frequency = previous.reach > 0 ? previous.impressions / previous.reach : frequency;
         previous.hookRate = previous.impressions > 0 ? previous.videoViews / previous.impressions : 0;
         previous.holdRate = previous.videoViews > 0 ? previous.thruplays / previous.videoViews : 0;
+        if (nativeResult.nativeResultLabel) {
+          previous.nativeResultType = nativeResult.nativeResultType;
+          previous.nativeResultLabel = nativeResult.nativeResultLabel;
+          previous.nativeResultValue += nativeResult.nativeResultValue;
+        }
         previous.thumbnailUrl = thumbnailMap.get(adId) ?? previous.thumbnailUrl;
         adMap.set(adId, previous);
       }
@@ -2511,7 +2593,7 @@ const buildPortalWeeklyTrafficLikeReport = async (
     won: currentBusiness.won,
     revenue: currentBusiness.revenue,
     pendingFollowup: currentBusiness.pendingFollowup,
-    leadSignals: currentMeta.summary.results + currentBusiness.crmLeads,
+    businessLeads: currentMeta.summary.results + currentBusiness.crmLeads,
   };
 
   const previousBusinessLayer = {
@@ -2519,7 +2601,7 @@ const buildPortalWeeklyTrafficLikeReport = async (
     won: previousBusiness.won,
     revenue: previousBusiness.revenue,
     pendingFollowup: previousBusiness.pendingFollowup,
-    leadSignals: previousMeta.summary.results + previousBusiness.crmLeads,
+    businessLeads: previousMeta.summary.results + previousBusiness.crmLeads,
   };
 
   const currentSummary = {
@@ -2532,9 +2614,9 @@ const buildPortalWeeklyTrafficLikeReport = async (
     cpc: currentMeta.summary.cpc,
     cpm: currentMeta.summary.cpm,
     frequency: currentMeta.summary.frequency,
-    results: currentBusinessLayer.leadSignals,
+    results: currentBusinessLayer.businessLeads,
     resultLabel: 'Leads de negocio',
-    costPerResult: currentBusinessLayer.leadSignals > 0 ? currentMeta.summary.spend / currentBusinessLayer.leadSignals : undefined,
+    costPerResult: currentBusinessLayer.businessLeads > 0 ? currentMeta.summary.spend / currentBusinessLayer.businessLeads : undefined,
     profileVisits: currentMeta.summary.profileVisits || undefined,
     followers: currentMeta.summary.followers || undefined,
   };
@@ -2549,15 +2631,18 @@ const buildPortalWeeklyTrafficLikeReport = async (
     cpc: previousMeta.summary.cpc,
     cpm: previousMeta.summary.cpm,
     frequency: previousMeta.summary.frequency,
-    results: previousBusinessLayer.leadSignals,
+    results: previousBusinessLayer.businessLeads,
     resultLabel: 'Leads de negocio',
-    costPerResult: previousBusinessLayer.leadSignals > 0 ? previousMeta.summary.spend / previousBusinessLayer.leadSignals : undefined,
+    costPerResult: previousBusinessLayer.businessLeads > 0 ? previousMeta.summary.spend / previousBusinessLayer.businessLeads : undefined,
     profileVisits: previousMeta.summary.profileVisits || undefined,
     followers: previousMeta.summary.followers || undefined,
   };
 
   const campaignRows = allAds.map((ad) => {
-    const described = describeResult(ad);
+    const described =
+      ad.nativeResultLabel && ad.nativeResultValue > 0
+        ? { resultLabel: ad.nativeResultLabel, resultValue: ad.nativeResultValue }
+        : describeResult(ad);
     return {
       name: ad.name,
       status: 'active',
@@ -2579,10 +2664,18 @@ const buildPortalWeeklyTrafficLikeReport = async (
   });
 
   const topAds = allAds
-    .sort((a, b) => ((b as any).idc ?? 0) - ((a as any).idc ?? 0) || b.spend - a.spend)
+    .sort(
+      (a, b) =>
+        (b.nativeResultValue ?? 0) - (a.nativeResultValue ?? 0) ||
+        ((b as any).idc ?? 0) - ((a as any).idc ?? 0) ||
+        b.spend - a.spend,
+    )
     .slice(0, 18)
     .map((ad) => {
-      const described = describeResult(ad);
+      const described =
+        ad.nativeResultLabel && ad.nativeResultValue > 0
+          ? { resultLabel: ad.nativeResultLabel, resultValue: ad.nativeResultValue }
+          : describeResult(ad);
       return {
         id: ad.id,
         name: ad.name,

@@ -42,7 +42,7 @@ type BusinessSummary = {
   won: number;
   revenue: number;
   pendingFollowup: number;
-  leadSignals: number;
+  businessLeads: number;
 };
 
 type ObjectiveMetric = {
@@ -134,7 +134,7 @@ type MetricCard = {
 
 const EMPTY_MEDIA: PeriodSummary = { invest: 0, impressions: 0, reach: 0, clicks: 0, linkClicks: 0, ctr: 0, cpc: 0, cpm: 0, frequency: 0, results: 0, resultLabel: 'Resultados' };
 const EMPTY_PLATFORM: PlatformSummary = { videoViews: 0, thruplays: 0, profileVisits: 0, followers: 0, messagesStarted: 0, leadForms: 0, siteLeads: 0, businessLeads: 0 };
-const EMPTY_BUSINESS: BusinessSummary = { crmLeads: 0, won: 0, revenue: 0, pendingFollowup: 0, leadSignals: 0 };
+const EMPTY_BUSINESS: BusinessSummary = { crmLeads: 0, won: 0, revenue: 0, pendingFollowup: 0, businessLeads: 0 };
 const IDC_COLORS: Record<string, string> = { great: '#22c55e', good: '#f59e0b', ok: '#f97316', bad: '#ef4444' };
 
 const n2 = (v: number) => v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -249,8 +249,8 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
   const previousMedia = d.previousLayers?.media ?? d.previous ?? null;
   const currentPlatform = d.currentLayers?.platform ?? { ...EMPTY_PLATFORM, profileVisits: d.current?.profileVisits ?? 0, followers: d.current?.followers ?? 0, businessLeads: d.current?.results ?? 0 };
   const previousPlatform = d.previousLayers?.platform ?? (d.previous ? { ...EMPTY_PLATFORM, profileVisits: d.previous.profileVisits ?? 0, followers: d.previous.followers ?? 0, businessLeads: d.previous.results ?? 0 } : null);
-  const currentBusiness = d.currentLayers?.business ?? { ...EMPTY_BUSINESS, leadSignals: d.current?.results ?? 0 };
-  const previousBusiness = d.previousLayers?.business ?? (d.previous ? { ...EMPTY_BUSINESS, leadSignals: d.previous.results ?? 0 } : null);
+  const currentBusiness = d.currentLayers?.business ?? { ...EMPTY_BUSINESS, businessLeads: d.current?.results ?? 0 };
+  const previousBusiness = d.previousLayers?.business ?? (d.previous ? { ...EMPTY_BUSINESS, businessLeads: d.previous.results ?? 0 } : null);
   const campaigns = (d.campaigns ?? []).filter((campaign) => Number(campaign?.spend ?? 0) > 0);
   const topAds = d.topAds ?? [];
   const timeseries = d.timeseries ?? [];
@@ -264,7 +264,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
     const fallback: ObjectiveMetric[] = [];
     if (currentPlatform.profileVisits > 0) fallback.push({ key: 'profileVisits', label: 'Visitas ao perfil', current: currentPlatform.profileVisits, previous: previousPlatform?.profileVisits ?? 0, layer: 'platform' });
     if (currentPlatform.followers > 0) fallback.push({ key: 'followers', label: 'Seguidores', current: currentPlatform.followers, previous: previousPlatform?.followers ?? 0, layer: 'platform' });
-    if (currentBusiness.leadSignals > 0) fallback.push({ key: 'leadSignals', label: 'Leads de negocio', current: currentBusiness.leadSignals, previous: previousBusiness?.leadSignals ?? 0, layer: 'business' });
+    if (currentBusiness.businessLeads > 0) fallback.push({ key: 'businessLeads', label: 'Leads de negocio', current: currentBusiness.businessLeads, previous: previousBusiness?.businessLeads ?? 0, layer: 'business' });
     return fallback;
   })();
 
@@ -281,7 +281,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
 
   const platformCards: MetricCard[] = activeObjectives.filter((item) => item.layer === 'platform').map((item) => ({ label: item.label, current: item.current, previous: item.previous, format: 'integer', color: objectiveColor(item.label) }));
   const businessCards = [
-    { label: 'Leads de negocio', current: currentBusiness.leadSignals, previous: previousBusiness?.leadSignals ?? 0, format: 'integer', color: 'red' },
+    { label: 'Leads de negocio', current: currentBusiness.businessLeads, previous: previousBusiness?.businessLeads ?? 0, format: 'integer', color: 'red' },
     { label: 'Leads no CRM', current: currentBusiness.crmLeads, previous: previousBusiness?.crmLeads ?? 0, format: 'integer', color: 'green' },
     { label: 'Ganhos', current: currentBusiness.won, previous: previousBusiness?.won ?? 0, format: 'integer', color: 'green' },
     { label: 'Receita', current: currentBusiness.revenue, previous: previousBusiness?.revenue ?? 0, format: 'currency', color: 'purple' },
@@ -294,7 +294,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
     { label: 'Impressoes', current: currentMedia.impressions, previous: previousMedia?.impressions ?? 0, format: 'integer', color: 'yellow' },
     { label: 'Alcance', current: currentMedia.reach, previous: previousMedia?.reach ?? 0, format: 'integer', color: 'green' },
     { label: 'Cliques no link', current: currentMedia.linkClicks, previous: previousMedia?.linkClicks ?? 0, format: 'integer', color: 'teal' },
-    { label: 'Leads de negocio', current: currentBusiness.leadSignals, previous: previousBusiness?.leadSignals ?? 0, format: 'integer', color: 'red' },
+    { label: 'Leads de negocio', current: currentBusiness.businessLeads, previous: previousBusiness?.businessLeads ?? 0, format: 'integer', color: 'red' },
     { label: 'Leads no CRM', current: currentBusiness.crmLeads, previous: previousBusiness?.crmLeads ?? 0, format: 'integer', color: 'green' },
     { label: 'Receita', current: currentBusiness.revenue, previous: previousBusiness?.revenue ?? 0, format: 'currency', color: 'purple' },
   ];
@@ -342,7 +342,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
           <div style={{ marginTop: 40, marginBottom: 40 }}>
             <SectionTitle label="Jornada da semana" />
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {[{ label: 'Investimento', val: brl(currentMedia.invest), sub: 'base', hi: false }, { label: 'Impressoes', val: nInt(currentMedia.impressions), sub: currentMedia.invest > 0 ? `${((currentMedia.impressions / currentMedia.invest) * 100).toFixed(0)}/R$` : '', hi: false }, { label: 'Alcance', val: nInt(currentMedia.reach), sub: currentMedia.impressions > 0 ? `${((currentMedia.reach / currentMedia.impressions) * 100).toFixed(1)}% imp.` : '', hi: false }, { label: 'Cliques', val: nInt(currentMedia.clicks), sub: currentMedia.reach > 0 ? `${((currentMedia.clicks / currentMedia.reach) * 100).toFixed(2)}% alc.` : '', hi: false }, { label: 'Cliques no link', val: nInt(currentMedia.linkClicks), sub: currentMedia.clicks > 0 ? `${((currentMedia.linkClicks / currentMedia.clicks) * 100).toFixed(1)}% cliques` : '', hi: false }, ...(currentBusiness.leadSignals > 0 ? [{ label: 'Leads de negocio', val: nInt(currentBusiness.leadSignals), sub: 'Mensagens + lead forms + site + CRM', hi: true }] : [])].map((step, i, arr) => <React.Fragment key={step.label}><div style={{ flex: 1, minWidth: 90, background: step.hi ? 'rgba(34,197,94,0.06)' : '#0d1117', border: `1px solid ${step.hi ? 'rgba(34,197,94,0.3)' : '#1e2733'}`, borderRadius: 12, padding: '14px 16px' }}><div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: step.hi ? '#22c55e' : '#4d5a6e', marginBottom: 6 }}>{step.label}</div><div style={{ fontSize: 20, fontWeight: 800, color: step.hi ? '#22c55e' : '#e8edf5', lineHeight: 1 }}>{step.val}</div>{step.sub && <div style={{ fontSize: 10, color: '#4d5a6e', marginTop: 3, fontFamily: 'monospace' }}>{step.sub}</div>}</div>{i < arr.length - 1 && <div style={{ display: 'flex', alignItems: 'center', color: '#4d5a6e', paddingTop: 22 }}>{'>'}</div>}</React.Fragment>)}
+              {[{ label: 'Investimento', val: brl(currentMedia.invest), sub: 'base', hi: false }, { label: 'Impressoes', val: nInt(currentMedia.impressions), sub: currentMedia.invest > 0 ? `${((currentMedia.impressions / currentMedia.invest) * 100).toFixed(0)}/R$` : '', hi: false }, { label: 'Alcance', val: nInt(currentMedia.reach), sub: currentMedia.impressions > 0 ? `${((currentMedia.reach / currentMedia.impressions) * 100).toFixed(1)}% imp.` : '', hi: false }, { label: 'Cliques', val: nInt(currentMedia.clicks), sub: currentMedia.reach > 0 ? `${((currentMedia.clicks / currentMedia.reach) * 100).toFixed(2)}% alc.` : '', hi: false }, { label: 'Cliques no link', val: nInt(currentMedia.linkClicks), sub: currentMedia.clicks > 0 ? `${((currentMedia.linkClicks / currentMedia.clicks) * 100).toFixed(1)}% cliques` : '', hi: false }, ...(currentBusiness.businessLeads > 0 ? [{ label: 'Leads de negocio', val: nInt(currentBusiness.businessLeads), sub: 'Mensagens + lead forms + site + CRM', hi: true }] : [])].map((step, i, arr) => <React.Fragment key={step.label}><div style={{ flex: 1, minWidth: 90, background: step.hi ? 'rgba(34,197,94,0.06)' : '#0d1117', border: `1px solid ${step.hi ? 'rgba(34,197,94,0.3)' : '#1e2733'}`, borderRadius: 12, padding: '14px 16px' }}><div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: step.hi ? '#22c55e' : '#4d5a6e', marginBottom: 6 }}>{step.label}</div><div style={{ fontSize: 20, fontWeight: 800, color: step.hi ? '#22c55e' : '#e8edf5', lineHeight: 1 }}>{step.val}</div>{step.sub && <div style={{ fontSize: 10, color: '#4d5a6e', marginTop: 3, fontFamily: 'monospace' }}>{step.sub}</div>}</div>{i < arr.length - 1 && <div style={{ display: 'flex', alignItems: 'center', color: '#4d5a6e', paddingTop: 22 }}>{'>'}</div>}</React.Fragment>)}
             </div>
           </div>
         )}
@@ -366,7 +366,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
 
         {topAds.length > 0 && (
           <div style={{ marginBottom: 40 }}>
-            <SectionTitle label="Melhores criativos - IDC" />
+            <SectionTitle label="Melhores criativos" />
             {(() => {
               const grouped = new Map<string, TopAd[]>();
               for (const ad of topAds) {
@@ -375,8 +375,9 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
                 grouped.get(key)!.push(ad);
               }
               return Array.from(grouped.entries()).map(([campaignName, ads]) => {
-                const champion = ads[0];
-                const runners = ads.slice(1);
+                const rankedAds = [...ads].sort((a, b) => b.results - a.results || b.idc - a.idc || b.spend - a.spend);
+                const champion = rankedAds[0];
+                const runners = rankedAds.slice(1);
                 const champColor = IDC_COLORS[champion.idcClass] ?? '#8a95a8';
                 const hasThumb = (ad: TopAd) => ad.thumbnailUrl && !ad.thumbnailUrl.startsWith('data:') && ad.thumbnailUrl.startsWith('http');
                 return (
@@ -453,10 +454,10 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
             <SectionTitle label="Evolucao diaria" />
             <div style={{ background: '#0d1117', border: '1px solid #1e2733', borderRadius: 14, overflow: 'hidden' }}>
               <div style={{ padding: '20px 24px 8px' }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#e8edf5', marginBottom: 16 }}>Gasto diario e sinais de lead</div>
-                {(() => { const maxSpend = Math.max(...timeseries.map((t) => t.metaSpend), 1); return timeseries.map((t, i) => <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}><div style={{ fontSize: 11, color: '#8a95a8', width: 50, flexShrink: 0 }}>{t.name}</div><div style={{ flex: 1, height: 22, background: '#141921', borderRadius: 5, overflow: 'hidden' }}><div style={{ height: '100%', width: `${(t.metaSpend / maxSpend) * 100}%`, background: 'linear-gradient(90deg,#3b82f6,#6366f1)', borderRadius: 5, display: 'flex', alignItems: 'center', padding: '0 8px', minWidth: 40 }}><span style={{ fontSize: 10, fontWeight: 700, color: '#fff' }}>{brl(t.metaSpend)}</span></div></div><div style={{ fontSize: 11, fontWeight: 700, color: t.metaLeads > 0 ? '#22c55e' : '#4d5a6e', width: 80, textAlign: 'right', fontFamily: 'DM Mono, monospace', flexShrink: 0 }}>{t.metaLeads > 0 ? `${t.metaLeads} sinais` : '-'}</div></div>); })()}
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#e8edf5', marginBottom: 16 }}>Gasto diario e Leads</div>
+                {(() => { const maxSpend = Math.max(...timeseries.map((t) => t.metaSpend), 1); return timeseries.map((t, i) => <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}><div style={{ fontSize: 11, color: '#8a95a8', width: 50, flexShrink: 0 }}>{t.name}</div><div style={{ flex: 1, height: 22, background: '#141921', borderRadius: 5, overflow: 'hidden' }}><div style={{ height: '100%', width: `${(t.metaSpend / maxSpend) * 100}%`, background: 'linear-gradient(90deg,#3b82f6,#6366f1)', borderRadius: 5, display: 'flex', alignItems: 'center', padding: '0 8px', minWidth: 40 }}><span style={{ fontSize: 10, fontWeight: 700, color: '#fff' }}>{brl(t.metaSpend)}</span></div></div><div style={{ fontSize: 11, fontWeight: 700, color: t.metaLeads > 0 ? '#22c55e' : '#4d5a6e', width: 80, textAlign: 'right', fontFamily: 'DM Mono, monospace', flexShrink: 0 }}>{t.metaLeads > 0 ? `${t.metaLeads} Leads` : '-'}</div></div>); })()}
               </div>
-              <div style={{ padding: '12px 24px 16px', borderTop: '1px solid #1e2733', display: 'flex', gap: 24 }}><div><div style={{ fontSize: 10, color: '#4d5a6e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Total gasto</div><div style={{ fontSize: 20, fontWeight: 800, color: '#3b82f6', fontFamily: 'DM Mono, monospace' }}>{brl(timeseries.reduce((s, t) => s + t.metaSpend, 0))}</div></div><div><div style={{ fontSize: 10, color: '#4d5a6e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Total sinais</div><div style={{ fontSize: 20, fontWeight: 800, color: '#22c55e', fontFamily: 'DM Mono, monospace' }}>{timeseries.reduce((s, t) => s + t.metaLeads, 0)}</div></div></div>
+              <div style={{ padding: '12px 24px 16px', borderTop: '1px solid #1e2733', display: 'flex', gap: 24 }}><div><div style={{ fontSize: 10, color: '#4d5a6e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Total gasto</div><div style={{ fontSize: 20, fontWeight: 800, color: '#3b82f6', fontFamily: 'DM Mono, monospace' }}>{brl(timeseries.reduce((s, t) => s + t.metaSpend, 0))}</div></div><div><div style={{ fontSize: 10, color: '#4d5a6e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 2 }}>Total Leads</div><div style={{ fontSize: 20, fontWeight: 800, color: '#22c55e', fontFamily: 'DM Mono, monospace' }}>{timeseries.reduce((s, t) => s + t.metaLeads, 0)}</div></div></div>
             </div>
           </div>
         )}
