@@ -134,6 +134,7 @@ export type DashboardWeekly = {
   summary: string; highlights: string[]; risks: string[]; next_week: string[];
   meta: { spend: number; impressions: number; reach: number; results: number; ctr: number; cpc: number; campaigns: number };
   instagram: { totalReach: number; totalViews: number; totalProfileViews: number; totalFollowerGain: number };
+  trafficLikeReport?: Record<string, unknown> | null;
   trafficReport: { publicId: string; title: string | null; createdAt: string } | null;
 };
 

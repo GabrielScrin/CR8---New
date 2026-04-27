@@ -1634,6 +1634,21 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
         </div>
       ) : weekly ? (
         <>
+          {weekly.trafficLikeReport ? (
+            <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
+              <div className="mb-5">
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Relatório final</div>
+                <div className="mt-0.5 text-base font-black text-white">Relatório Semanal</div>
+              </div>
+              <PublicTrafficReport
+                embedded
+                reportDataOverride={weekly.trafficLikeReport as any}
+                titleOverride="Relatório Semanal"
+                createdAtOverride={new Date().toISOString()}
+              />
+            </div>
+          ) : null}
+
           {weekly.trafficReport?.publicId ? (
             <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
               <div className="mb-5 flex items-center justify-between gap-4">

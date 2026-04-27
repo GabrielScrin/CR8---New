@@ -2743,14 +2743,13 @@ export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: 
     refreshInstagramTokenIfNeeded(supabaseAdmin, link.company_id, igResolvedWeekly.token, igResolvedWeekly.expiresAtMs).catch(() => {});
   }
 
-  const [meta, instagram, latestTrafficReport] = await Promise.all([
+  const [meta, instagram] = await Promise.all([
     metaToken
       ? aggregateMetaOverview(metaToken, link.meta_ad_account_id, periodStartStr, periodEndStr, [])
       : Promise.resolve(buildEmptyMetaOverview('Meta Ads nao configurado para esta empresa.')),
     link.instagram_business_account_id && igToken
       ? buildInstagramOverview(igToken, link.instagram_business_account_id, periodStartStr, periodEndStr)
       : Promise.resolve(buildEmptyInstagramOverview('')),
-    loadLatestTrafficReport(supabaseAdmin, link),
   ]);
 
   const companyName = link.client_name || link.name || 'Cliente';
@@ -2761,6 +2760,14 @@ export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: 
   };
 
   const narrative = await generateWeeklyNarrative({ companyName, periodStart: periodStartStr, periodEnd: periodEndStr, metrics });
+  const trafficLikeReport = await buildPortalWeeklyTrafficLikeReport(
+    supabaseAdmin,
+    link,
+    companyTokens ?? {},
+    periodStartStr,
+    periodEndStr,
+    narrative,
+  ).catch(() => null);
 
   return {
     periodStart: periodStartStr,
@@ -2784,13 +2791,8 @@ export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: 
       totalProfileViews: instagram.summary.totalProfileViews,
       totalFollowerGain: instagram.summary.totalFollowerGain,
     },
-    trafficReport: latestTrafficReport
-      ? {
-          publicId: latestTrafficReport.public_id,
-          title: latestTrafficReport.title,
-          createdAt: latestTrafficReport.created_at,
-        }
-      : null,
+    trafficLikeReport,
+    trafficReport: null,
   };
 };
 
