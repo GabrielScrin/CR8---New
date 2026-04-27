@@ -383,9 +383,11 @@ const extractLeadForms = (actions: any[] | undefined) =>
     actions,
     (t) =>
       t === 'lead' ||
+      t === 'omni_lead' ||
       t === 'onsite_conversion.lead_grouped' ||
       t.includes('lead_grouped') ||
-      t.includes('lead_form'),
+      t.includes('lead_form') ||
+      t.includes('submit_application'),
   );
 
 const extractSiteLeads = (actions: any[] | undefined) =>
@@ -397,7 +399,17 @@ const extractSiteLeads = (actions: any[] | undefined) =>
       t === 'omni_lead' ||
       t === 'omni_complete_registration' ||
       t.includes('fb_pixel_lead') ||
-      (t.startsWith('offsite_conversion.') && (t.includes('lead') || t.includes('contact') || t.includes('complete_registration'))),
+      t.includes('custom_conversion') ||
+      t.includes('custom_event') ||
+      t.includes('complete_registration') ||
+      t.includes('submit_application') ||
+      (t.startsWith('offsite_conversion.') && (
+        t.includes('lead') ||
+        t.includes('contact') ||
+        t.includes('complete_registration') ||
+        t.includes('submit_application') ||
+        t.includes('custom')
+      )),
   );
 
 const extractMessagingStarted = (actions: any[] | undefined) =>
@@ -735,25 +747,74 @@ const scoreResultIndicator = (indicator: string) => {
   return 10;
 };
 
-const extractPreferredResultEntry = (results: any[] | undefined) => {
+const scoreResultIndicatorForNativeType = (indicator: string, nativeType?: NativeResultType) => {
+  const normalized = asString(indicator).toLowerCase();
+  if (!normalized || !nativeType || nativeType === 'unknown') return scoreResultIndicator(normalized);
+
+  switch (nativeType) {
+    case 'messages_started':
+      if (normalized.includes('messaging') || normalized.includes('onsite_conversion.messaging_conversation_started')) return 1000;
+      break;
+    case 'profile_visits':
+      if (normalized.includes('profile_visit')) return 1000;
+      break;
+    case 'lead_forms':
+      if (
+        (normalized.includes('lead') && normalized.includes('omni')) ||
+        normalized.includes('lead_form') ||
+        normalized.includes('onsite_conversion.lead_grouped') ||
+        normalized.includes('submit_application') ||
+        normalized === 'lead'
+      ) return 1000;
+      break;
+    case 'site_leads':
+      if (
+        (normalized.includes('offsite_conversion') && (normalized.includes('lead') || normalized.includes('contact') || normalized.includes('complete_registration'))) ||
+        normalized.includes('omni_contact') ||
+        normalized.includes('omni_lead') ||
+        normalized.includes('omni_complete_registration') ||
+        normalized.includes('custom_conversion') ||
+        normalized.includes('custom_event') ||
+        normalized.includes('contact') ||
+        normalized.includes('complete_registration') ||
+        normalized.includes('submit_application') ||
+        normalized.includes('fb_pixel_lead')
+      ) return 1000;
+      break;
+    case 'landing_page_views':
+      if (normalized.includes('landing_page_view')) return 1000;
+      break;
+    case 'followers':
+      if (normalized.includes('follow')) return 1000;
+      break;
+    case 'video_views':
+      if (normalized.includes('thruplay')) return 1000;
+      if (normalized.includes('video_view')) return 990;
+      break;
+  }
+
+  return scoreResultIndicator(normalized);
+};
+
+const extractPreferredResultEntry = (results: any[] | undefined, nativeType?: NativeResultType) => {
   if (!Array.isArray(results) || results.length === 0) return null;
   return [...results]
     .map((entry) => ({
       entry,
       indicator: asString(entry?.indicator).toLowerCase(),
       value: getResultEntryValue(entry),
-      score: scoreResultIndicator(asString(entry?.indicator)),
+      score: scoreResultIndicatorForNativeType(asString(entry?.indicator), nativeType),
     }))
     .sort((a, b) => b.score - a.score || b.value - a.value)[0]?.entry ?? null;
 };
 
-const extractResultIndicator = (results: any[] | undefined) => {
-  const preferred = extractPreferredResultEntry(results);
+const extractResultIndicator = (results: any[] | undefined, nativeType?: NativeResultType) => {
+  const preferred = extractPreferredResultEntry(results, nativeType);
   return asString(preferred?.indicator).toLowerCase();
 };
 
-const extractResultValue = (results: any[] | undefined) => {
-  const preferred = extractPreferredResultEntry(results);
+const extractResultValue = (results: any[] | undefined, nativeType?: NativeResultType) => {
+  const preferred = extractPreferredResultEntry(results, nativeType);
   return preferred ? getResultEntryValue(preferred) : 0;
 };
 
@@ -2410,19 +2471,6 @@ const inferNativeTypeFromContext = (input: {
   }
 
   if (
-    destinationType.includes('WHATSAPP') ||
-    destinationType.includes('MESSENGER') ||
-    destinationType.includes('MESSAGING') ||
-    optimizationGoal.includes('MESSAGING') ||
-    optimizationGoal.includes('CONVERSATION') ||
-    optimizationGoal.includes('REPLIES') ||
-    promotedJson.includes('WHATSAPP') ||
-    promotedJson.includes('MESSENGER')
-  ) {
-    return 'messages_started';
-  }
-
-  if (
     nameHint.includes('CONTATO') ||
     nameHint.includes('CHAMADA') ||
     nameHint.includes('LIGACAO') ||
@@ -2435,9 +2483,25 @@ const inferNativeTypeFromContext = (input: {
   if (
     nameHint.includes('LEAD') ||
     nameHint.includes('CADASTRO') ||
-    nameHint.includes('CAPTACAO')
+    nameHint.includes('CAPTACAO') ||
+    nameHint.includes('FORMS') ||
+    nameHint.includes('FORMULAR') ||
+    nameHint.includes('NATIVO')
   ) {
     return 'lead_forms';
+  }
+
+  if (
+    destinationType.includes('WHATSAPP') ||
+    destinationType.includes('MESSENGER') ||
+    destinationType.includes('MESSAGING') ||
+    optimizationGoal.includes('MESSAGING') ||
+    optimizationGoal.includes('CONVERSATION') ||
+    optimizationGoal.includes('REPLIES') ||
+    promotedJson.includes('WHATSAPP') ||
+    promotedJson.includes('MESSENGER')
+  ) {
+    return 'messages_started';
   }
 
   if (
@@ -2562,9 +2626,9 @@ const valueForNativeType = (
     case 'profile_visits':
       return computed.profileVisits ?? 0;
     case 'lead_forms':
-      return computed.leadForms ?? 0;
+      return (computed.leadForms ?? 0) + (computed.siteLeads ?? 0);
     case 'site_leads':
-      return computed.siteLeads ?? 0;
+      return (computed.siteLeads ?? 0) + (computed.leadForms ?? 0);
     case 'landing_page_views':
       return computed.landingPageViews ?? 0;
     case 'video_views':
@@ -2642,6 +2706,7 @@ const inferNativeResultFromIndicator = (input: {
 }) => {
   const indicator = asString(input.indicator).toLowerCase();
   const label = mapNativeResultLabel(indicator);
+  const indicatorCompatibility = scoreResultIndicatorForNativeType(indicator, input.nativeType);
   if (input.nativeType !== 'unknown') {
     const nativeValue = valueForNativeType(input.nativeType, input);
     if (nativeValue > 0) {
@@ -2651,7 +2716,7 @@ const inferNativeResultFromIndicator = (input: {
         nativeResultValue: nativeValue,
       };
     }
-    if (input.payloadValue > 0) {
+    if (input.payloadValue > 0 && (indicatorCompatibility >= 1000 || !indicator)) {
       return {
         nativeResultType: input.nativeType,
         nativeResultLabel: labelForNativeType(input.nativeType, (input.thruplays ?? 0) > 0),
@@ -2785,8 +2850,6 @@ const buildPortalWeeklyTrafficLikeReport = async (
         const frequency = asNumber(row?.frequency);
         const actions = Array.isArray(row?.actions) ? row.actions : [];
         const resultsPayload = Array.isArray(row?.results) ? row.results : [];
-        const resultIndicator = extractResultIndicator(resultsPayload);
-        const resultValue = extractResultValue(resultsPayload);
         const adsetMeta = adsetMetaMap.get(asString(row?.adset_id));
         const campaignMeta = campaignMetaMap.get(campaign.id);
         const nativeType = inferNativeTypeFromContext({
@@ -2796,6 +2859,8 @@ const buildPortalWeeklyTrafficLikeReport = async (
           promotedObject: adsetMeta?.promotedObject,
           nameHint: `${campaign.name} ${asString(row?.ad_name)}`,
         });
+        const resultIndicator = extractResultIndicator(resultsPayload, nativeType);
+        const resultValue = extractResultValue(resultsPayload, nativeType);
         const isProfileVisitCampaign = resultIndicator === 'profile_visit_view';
         const costPerActionType = Array.isArray(row?.cost_per_action_type) ? row.cost_per_action_type : [];
         const videoThruplayActions = Array.isArray(row?.video_thruplay_watched_actions) ? row.video_thruplay_watched_actions : [];
@@ -2855,6 +2920,7 @@ const buildPortalWeeklyTrafficLikeReport = async (
           thruplays: 0,
           hookRate: 0,
           holdRate: 0,
+          contextNativeType: '',
           nativeResultType: '',
           nativeResultLabel: '',
           nativeResultValue: 0,
@@ -2880,6 +2946,7 @@ const buildPortalWeeklyTrafficLikeReport = async (
         previous.frequency = previous.reach > 0 ? previous.impressions / previous.reach : frequency;
         previous.hookRate = previous.impressions > 0 ? previous.videoViews / previous.impressions : 0;
         previous.holdRate = previous.videoViews > 0 ? previous.thruplays / previous.videoViews : 0;
+        previous.contextNativeType = nativeType;
         if (nativeResult.nativeResultLabel) {
           previous.nativeResultType = nativeResult.nativeResultType;
           previous.nativeResultLabel = nativeResult.nativeResultLabel;
@@ -2971,6 +3038,11 @@ const buildPortalWeeklyTrafficLikeReport = async (
     const described =
       ad.nativeResultLabel && ad.nativeResultValue > 0
         ? { resultLabel: ad.nativeResultLabel, resultValue: ad.nativeResultValue }
+        : (ad as any).contextNativeType && (ad as any).contextNativeType !== 'unknown'
+          ? {
+              resultLabel: labelForNativeType((ad as any).contextNativeType, (ad.thruplays ?? 0) > 0),
+              resultValue: valueForNativeType((ad as any).contextNativeType, ad),
+            }
         : describeResult(ad);
     return {
       name: ad.name,
@@ -3023,6 +3095,11 @@ const buildPortalWeeklyTrafficLikeReport = async (
       const described =
         ad.nativeResultLabel && ad.nativeResultValue > 0
           ? { resultLabel: ad.nativeResultLabel, resultValue: ad.nativeResultValue }
+          : (ad as any).contextNativeType && (ad as any).contextNativeType !== 'unknown'
+            ? {
+                resultLabel: labelForNativeType((ad as any).contextNativeType, (ad.thruplays ?? 0) > 0),
+                resultValue: valueForNativeType((ad as any).contextNativeType, ad),
+              }
           : describeResult(ad);
       return {
         id: ad.id,
