@@ -44,6 +44,7 @@ serve(async (req) => {
         token,
         typeof body?.date_from === 'string' ? body.date_from : undefined,
         typeof body?.date_to === 'string' ? body.date_to : undefined,
+        Array.isArray(body?.campaign_ids) ? body.campaign_ids.map((x: unknown) => String(x)) : [],
       );
       return jsonResponse(200, { ok: true, ...data });
     }

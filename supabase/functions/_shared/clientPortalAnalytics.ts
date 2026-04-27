@@ -2906,6 +2906,7 @@ const buildPortalWeeklyTrafficLikeReport = async (
   periodStart: string,
   periodEnd: string,
   weeklyNarrative: { summary: string | null; highlights: string[] | null; risks: string[] | null; next_week: string[] | null },
+  campaignIds: string[] = [],
 ) => {
   const metaToken = asString(companyRow?.meta_access_token);
   if (!metaToken || !link.meta_ad_account_id) return null;
@@ -2915,8 +2916,8 @@ const buildPortalWeeklyTrafficLikeReport = async (
   const prevStart = shiftUtcDate(new Date(`${periodStart}T00:00:00.000Z`), -days).toISOString().slice(0, 10);
 
   const [currentMeta, previousMeta, currentBusiness, previousBusiness, metaAccountName] = await Promise.all([
-    aggregateMetaOverview(metaToken, link.meta_ad_account_id, periodStart, periodEnd, []),
-    aggregateMetaOverview(metaToken, link.meta_ad_account_id, prevStart, prevEnd, []),
+    aggregateMetaOverview(metaToken, link.meta_ad_account_id, periodStart, periodEnd, campaignIds),
+    aggregateMetaOverview(metaToken, link.meta_ad_account_id, prevStart, prevEnd, campaignIds),
     loadBusinessOverview(supabaseAdmin, link.company_id, `${periodStart}T00:00:00.000Z`, `${nextDateIso(periodEnd)}T00:00:00.000Z`),
     loadBusinessOverview(supabaseAdmin, link.company_id, `${prevStart}T00:00:00.000Z`, `${nextDateIso(prevEnd)}T00:00:00.000Z`),
     getMetaAccountName(metaToken, link.meta_ad_account_id).catch(() => link.meta_ad_account_name || link.meta_ad_account_id),
@@ -3342,8 +3343,10 @@ export const loadDashboardWeekly = async (
   token: string,
   requestedDateFrom?: string,
   requestedDateTo?: string,
+  campaignIds?: string[],
 ) => {
   const link = await getPortalLinkRow(supabaseAdmin, token);
+  const { metaCampaignIds } = splitCampaignIds(campaignIds ?? []);
   const { data: companyTokens, error: companyTokensError } = await supabaseAdmin
     .from('companies')
     .select('meta_access_token,meta_token_expires_at,instagram_access_token,instagram_token_expires_at')
@@ -3375,7 +3378,7 @@ export const loadDashboardWeekly = async (
 
   const [meta, instagram] = await Promise.all([
     metaToken
-      ? aggregateMetaOverview(metaToken, link.meta_ad_account_id, periodStartStr, periodEndStr, [])
+      ? aggregateMetaOverview(metaToken, link.meta_ad_account_id, periodStartStr, periodEndStr, metaCampaignIds)
       : Promise.resolve(buildEmptyMetaOverview('Meta Ads nao configurado para esta empresa.')),
     link.instagram_business_account_id && igToken
       ? buildInstagramOverview(igToken, link.instagram_business_account_id, periodStartStr, periodEndStr)
@@ -3397,6 +3400,7 @@ export const loadDashboardWeekly = async (
     periodStartStr,
     periodEndStr,
     narrative,
+    metaCampaignIds,
   ).catch((error) => {
     console.error('loadDashboardWeekly trafficLikeReport error', {
       token,

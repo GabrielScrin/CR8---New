@@ -19,6 +19,7 @@ import {
   ChevronRight,
   ChevronDown,
   ExternalLink,
+  FileDown,
   FileText,
   Filter,
   Grid3X3,
@@ -589,6 +590,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const [draftDateFrom, setDraftDateFrom] = useState('');
   const [draftDateTo, setDraftDateTo] = useState('');
   const [campaignIds, setCampaignIds] = useState<string[]>([]);
+  const [availableCampaignOptions, setAvailableCampaignOptions] = useState<Array<{ id: string; label: string }>>([]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [campaignSortKey, setCampaignSortKey] = useState<CampaignSortKey>('spend');
   const [adSortKey, setAdSortKey] = useState<AdSortKey>('spend');
@@ -671,11 +673,11 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
     if (tab !== 'relatorio' || !dateFrom || !dateTo) return;
 
     setLoadingWeekly(true);
-    fetchDashboardWeekly({ token, dateFrom, dateTo })
+    fetchDashboardWeekly({ token, dateFrom, dateTo, campaignIds })
       .then(setWeekly)
       .catch((error) => setErrorMsg(error?.message ?? 'Erro ao carregar relatório.'))
       .finally(() => setLoadingWeekly(false));
-  }, [dateFrom, dateTo, tab, token]);
+  }, [campaignIds, dateFrom, dateTo, tab, token]);
 
   const meta = data?.meta;
   const prevMeta = data?.prevMeta;
@@ -717,10 +719,17 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
 
   const maxSpend = useMemo(() => Math.max(...campaigns.map((item) => item.spend), 1), [campaigns]);
   const maxAdSpend = useMemo(() => Math.max(...sortedCampaignAds.map((item) => item.spend), 1), [sortedCampaignAds]);
-  const campaignOptions = useMemo(
-    () => (meta?.campaigns ?? []).map((item) => ({ id: `meta:${item.id}`, label: item.name })),
-    [meta?.campaigns],
-  );
+  useEffect(() => {
+    const nextOptions = (meta?.campaigns ?? []).map((item) => ({ id: `meta:${item.id}`, label: item.name }));
+    if (nextOptions.length === 0) return;
+    setAvailableCampaignOptions((current) => {
+      const map = new Map(current.map((item) => [item.id, item]));
+      for (const option of nextOptions) map.set(option.id, option);
+      return Array.from(map.values()).sort((a, b) => a.label.localeCompare(b.label));
+    });
+  }, [meta?.campaigns]);
+
+  const campaignOptions = availableCampaignOptions;
 
   const toggleCampaign = (id: string) =>
     setCampaignIds((current) => (current.includes(id) ? current.filter((item) => item !== id) : [...current, id]));
@@ -1634,6 +1643,17 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
 
   const RelatorioTab = () => (
     <div className="space-y-6">
+      <div className="no-print flex justify-end">
+        <button
+          type="button"
+          onClick={() => window.print()}
+          disabled={!weekly || loadingWeekly}
+          className="inline-flex items-center gap-2 rounded-lg bg-blue-500 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-blue-500/20 transition-colors hover:bg-blue-400 disabled:cursor-not-allowed disabled:opacity-45"
+        >
+          <FileDown className="h-4 w-4" />
+          Baixar PDF
+        </button>
+      </div>
       {loadingWeekly ? (
         <div className="flex h-40 items-center justify-center text-white/40">
           <Loader2 className="mr-2 h-5 w-5 animate-spin" /> Gerando relatório...
@@ -1753,7 +1773,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
         <div className="absolute top-0 right-0 h-64 w-64 rounded-full bg-violet-600/8 blur-3xl" />
       </div>
 
-      <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#070810]/80 backdrop-blur-xl">
+      <header className="no-print sticky top-0 z-30 border-b border-white/[0.06] bg-[#070810]/80 backdrop-blur-xl">
         <div className="mx-auto max-w-7xl px-4 sm:px-6">
           <div className="flex h-14 items-center justify-between gap-4">
             <div className="flex min-w-0 items-center gap-3">
