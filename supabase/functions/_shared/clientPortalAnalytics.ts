@@ -2660,6 +2660,7 @@ const buildPortalWeeklyTrafficLikeReport = async (
       holdRate: ad.holdRate,
       idc: (ad as any).idc,
       classification: (ad as any).classification,
+      thumbnailUrl: ad.thumbnailUrl,
     };
   });
 
