@@ -772,8 +772,14 @@ const scoreResultIndicatorForNativeType = (indicator: string, nativeType?: Nativ
     case 'lead_forms':
       if (
         (normalized.includes('lead') && normalized.includes('omni')) ||
+        (normalized.includes('offsite_conversion') && (normalized.includes('lead') || normalized.includes('contact') || normalized.includes('complete_registration') || normalized.includes('custom'))) ||
         normalized.includes('lead_form') ||
         normalized.includes('onsite_conversion.lead_grouped') ||
+        normalized.includes('custom_conversion') ||
+        normalized.includes('custom_event') ||
+        normalized.includes('contact') ||
+        normalized.includes('complete_registration') ||
+        normalized.includes('fb_pixel_lead') ||
         normalized.includes('submit_application') ||
         normalized === 'lead'
       ) return 1000;
@@ -827,6 +833,37 @@ const extractResultIndicator = (results: any[] | undefined, nativeType?: NativeR
 const extractResultValue = (results: any[] | undefined, nativeType?: NativeResultType) => {
   const preferred = extractPreferredResultEntry(results, nativeType);
   return preferred ? getResultEntryValue(preferred) : 0;
+};
+
+const nativeTypeFromResultIndicator = (indicator: string): NativeResultType => {
+  const normalized = asString(indicator).toLowerCase();
+  if (!normalized) return 'unknown';
+  if (normalized.includes('profile_visit')) return 'profile_visits';
+  if (normalized.includes('messaging') || normalized.includes('onsite_conversion.messaging_conversation_started')) return 'messages_started';
+  if (
+    normalized.includes('lead_form') ||
+    normalized.includes('onsite_conversion.lead_grouped') ||
+    normalized === 'lead' ||
+    (normalized.includes('lead') && normalized.includes('omni'))
+  ) return 'lead_forms';
+  if (
+    normalized.includes('custom_conversion') ||
+    normalized.includes('custom_event') ||
+    normalized.includes('fb_pixel_lead') ||
+    normalized.includes('contact') ||
+    normalized.includes('complete_registration') ||
+    normalized.includes('submit_application') ||
+    (normalized.includes('offsite_conversion') && (
+      normalized.includes('lead') ||
+      normalized.includes('contact') ||
+      normalized.includes('complete_registration') ||
+      normalized.includes('custom')
+    ))
+  ) return 'site_leads';
+  if (normalized.includes('landing_page_view')) return 'landing_page_views';
+  if (normalized.includes('follow')) return 'followers';
+  if (normalized.includes('thruplay') || normalized.includes('video_view')) return 'video_views';
+  return 'unknown';
 };
 
 const fetchMetaAdThumbnails = async (
@@ -939,17 +976,25 @@ const aggregateMetaOverview = async (
       const frequency = asNumber(row?.frequency);
       const actions = Array.isArray(row?.actions) ? row.actions : [];
       const resultsPayload = Array.isArray(row?.results) ? row.results : [];
-      const resultIndicator = extractResultIndicator(resultsPayload);
+      const contextNativeType = inferNativeTypeFromContext({ nameHint: campaignName });
+      const resultIndicator = extractResultIndicator(resultsPayload, contextNativeType);
+      const resultValue = extractResultValue(resultsPayload, contextNativeType);
+      const resultNativeType = nativeTypeFromResultIndicator(resultIndicator);
+      const effectiveNativeType = contextNativeType === 'messages_started'
+        ? contextNativeType
+        : resultNativeType !== 'unknown'
+          ? resultNativeType
+          : contextNativeType;
       const isProfileVisitCampaign = resultIndicator === 'profile_visit_view';
       const costPerActionType = Array.isArray(row?.cost_per_action_type) ? row.cost_per_action_type : [];
       const videoThruplayActions = Array.isArray(row?.video_thruplay_watched_actions) ? row.video_thruplay_watched_actions : [];
-      const leadForms = isProfileVisitCampaign ? 0 : extractLeadForms(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLeadForms);
-      const messagesStarted = isProfileVisitCampaign ? 0 : extractMessagingStarted(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractMessagingStarted);
-      const siteLeads = isProfileVisitCampaign ? 0 : extractSiteLeads(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractSiteLeads);
+      const rawLeadForms = isProfileVisitCampaign ? 0 : extractLeadForms(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLeadForms);
+      const rawMessagesStarted = isProfileVisitCampaign ? 0 : extractMessagingStarted(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractMessagingStarted);
+      const rawSiteLeads = isProfileVisitCampaign ? 0 : extractSiteLeads(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractSiteLeads);
       const landingPageViews = extractLandingPageViews(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLandingPageViews);
       const profileVisits =
         asNumber(row?.instagram_profile_visits) ||
-        (isProfileVisitCampaign ? extractResultValue(resultsPayload) : 0) ||
+        (isProfileVisitCampaign ? resultValue : 0) ||
         extractProfileVisits(actions) ||
         deriveCountFromCostPerAction(spend, costPerActionType, extractProfileVisits);
       const followers = 0;
@@ -960,6 +1005,19 @@ const aggregateMetaOverview = async (
         deriveCountFromCostPerAction(spend, costPerActionType, extractThruplays);
       const hookRate = impressions > 0 ? videoViews / impressions : 0;
       const holdRate = videoViews > 0 ? thruplays / videoViews : 0;
+      let leadForms = rawLeadForms;
+      let messagesStarted = rawMessagesStarted;
+      let siteLeads = rawSiteLeads;
+
+      if (effectiveNativeType !== 'unknown') {
+        leadForms = 0;
+        messagesStarted = 0;
+        siteLeads = 0;
+        if (effectiveNativeType === 'lead_forms') leadForms = resultValue || rawLeadForms || rawSiteLeads;
+        if (effectiveNativeType === 'site_leads') siteLeads = resultValue || rawSiteLeads || rawLeadForms;
+        if (effectiveNativeType === 'messages_started') messagesStarted = resultValue || rawMessagesStarted;
+      }
+
       const results = leadForms + messagesStarted + siteLeads;
 
       if (campaignId) {
@@ -2356,17 +2414,25 @@ export const loadDashboardCampaignAds = async (
     const frequency = asNumber(row?.frequency);
     const actions = Array.isArray(row?.actions) ? row.actions : [];
     const resultsPayload = Array.isArray(row?.results) ? row.results : [];
-    const resultIndicator = extractResultIndicator(resultsPayload);
+    const contextNativeType = inferNativeTypeFromContext({ nameHint: `${currentCampaignName} ${adName}` });
+    const resultIndicator = extractResultIndicator(resultsPayload, contextNativeType);
+    const resultValue = extractResultValue(resultsPayload, contextNativeType);
+    const resultNativeType = nativeTypeFromResultIndicator(resultIndicator);
+    const effectiveNativeType = contextNativeType === 'messages_started'
+      ? contextNativeType
+      : resultNativeType !== 'unknown'
+        ? resultNativeType
+        : contextNativeType;
     const isProfileVisitCampaign = resultIndicator === 'profile_visit_view';
     const costPerActionType = Array.isArray(row?.cost_per_action_type) ? row.cost_per_action_type : [];
     const videoThruplayActions = Array.isArray(row?.video_thruplay_watched_actions) ? row.video_thruplay_watched_actions : [];
-    const leadForms = isProfileVisitCampaign ? 0 : extractLeadForms(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLeadForms);
-    const messagesStarted = isProfileVisitCampaign ? 0 : extractMessagingStarted(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractMessagingStarted);
-    const siteLeads = isProfileVisitCampaign ? 0 : extractSiteLeads(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractSiteLeads);
+    const rawLeadForms = isProfileVisitCampaign ? 0 : extractLeadForms(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLeadForms);
+    const rawMessagesStarted = isProfileVisitCampaign ? 0 : extractMessagingStarted(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractMessagingStarted);
+    const rawSiteLeads = isProfileVisitCampaign ? 0 : extractSiteLeads(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractSiteLeads);
     const landingPageViews = extractLandingPageViews(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLandingPageViews);
     const profileVisits =
       asNumber(row?.instagram_profile_visits) ||
-      (isProfileVisitCampaign ? extractResultValue(resultsPayload) : 0) ||
+      (isProfileVisitCampaign ? resultValue : 0) ||
       extractProfileVisits(actions) ||
       deriveCountFromCostPerAction(spend, costPerActionType, extractProfileVisits);
     const followers = 0;
@@ -2375,6 +2441,19 @@ export const loadDashboardCampaignAds = async (
       extractThruplays(actions) ||
       extractActionTotal(videoThruplayActions) ||
       deriveCountFromCostPerAction(spend, costPerActionType, extractThruplays);
+    let leadForms = rawLeadForms;
+    let messagesStarted = rawMessagesStarted;
+    let siteLeads = rawSiteLeads;
+
+    if (effectiveNativeType !== 'unknown') {
+      leadForms = 0;
+      messagesStarted = 0;
+      siteLeads = 0;
+      if (effectiveNativeType === 'lead_forms') leadForms = resultValue || rawLeadForms || rawSiteLeads;
+      if (effectiveNativeType === 'site_leads') siteLeads = resultValue || rawSiteLeads || rawLeadForms;
+      if (effectiveNativeType === 'messages_started') messagesStarted = resultValue || rawMessagesStarted;
+    }
+
     const results = leadForms + messagesStarted + siteLeads;
 
     const previous = adMap.get(adId) ?? {
@@ -2490,6 +2569,13 @@ const inferNativeTypeFromContext = (input: {
     nameHint.includes('CALL')
   ) {
     return 'site_leads';
+  }
+
+  if (
+    /\bPF\b/.test(nameHint) &&
+    (nameHint.includes('WHATSAPP') || nameHint.includes('WHATS'))
+  ) {
+    return 'messages_started';
   }
 
   if (
