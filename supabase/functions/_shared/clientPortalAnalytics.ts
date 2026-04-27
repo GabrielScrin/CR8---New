@@ -2963,9 +2963,9 @@ const buildPortalWeeklyTrafficLikeReport = async (
         const isProfileVisitCampaign = resultIndicator === 'profile_visit_view';
         const costPerActionType = Array.isArray(row?.cost_per_action_type) ? row.cost_per_action_type : [];
         const videoThruplayActions = Array.isArray(row?.video_thruplay_watched_actions) ? row.video_thruplay_watched_actions : [];
-        const leadForms = isProfileVisitCampaign ? 0 : extractLeadForms(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLeadForms);
-        const messagesStarted = isProfileVisitCampaign ? 0 : extractMessagingStarted(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractMessagingStarted);
-        const siteLeads = isProfileVisitCampaign ? 0 : extractSiteLeads(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractSiteLeads);
+        const rawLeadForms = isProfileVisitCampaign ? 0 : extractLeadForms(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLeadForms);
+        const rawMessagesStarted = isProfileVisitCampaign ? 0 : extractMessagingStarted(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractMessagingStarted);
+        const rawSiteLeads = isProfileVisitCampaign ? 0 : extractSiteLeads(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractSiteLeads);
         const landingPageViews = extractLandingPageViews(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLandingPageViews);
         const profileVisits =
           asNumber(row?.instagram_profile_visits) ||
@@ -2978,6 +2978,16 @@ const buildPortalWeeklyTrafficLikeReport = async (
           extractThruplays(actions) ||
           extractActionTotal(videoThruplayActions) ||
           deriveCountFromCostPerAction(spend, costPerActionType, extractThruplays);
+        let leadForms = rawLeadForms;
+        let messagesStarted = rawMessagesStarted;
+        let siteLeads = rawSiteLeads;
+
+        if (nativeType === 'messages_started' && messagesStarted === 0 && (siteLeads > 0 || leadForms > 0)) {
+          messagesStarted = siteLeads + leadForms;
+          leadForms = 0;
+          siteLeads = 0;
+        }
+
         const results = leadForms + messagesStarted + siteLeads;
         const nativeResult = inferNativeResultFromIndicator({
           indicator: resultIndicator,
