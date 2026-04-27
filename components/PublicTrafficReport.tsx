@@ -190,6 +190,13 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [topAdsSort, setTopAdsSort] = useState<'results' | 'idc'>('results');
+  const [topAdsFilter, setTopAdsFilter] = useState<string>('all');
+  const [topAdsVisible, setTopAdsVisible] = useState(12);
+  const [detailSearch, setDetailSearch] = useState('');
+  const [detailFilter, setDetailFilter] = useState<string>('all');
+  const [detailSort, setDetailSort] = useState<'results' | 'spend' | 'idc'>('results');
+  const [detailVisible, setDetailVisible] = useState(25);
 
   useEffect(() => {
     if (reportDataOverride) {
@@ -258,6 +265,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
   const hasVideo = topAds.some((ad) => ad.hookRate > 0);
   const levelLabel = d.level === 'campaign' ? 'Campanha' : d.level === 'adset' ? 'Conjunto' : 'Anuncio';
   const agencyInitials = (d.agencyName || 'CR').substring(0, 2).toUpperCase();
+  const resultTypeOptions = Array.from(new Set([...topAds.map((ad) => ad.resultLabel), ...campaigns.map((camp) => camp.resultLabel)].filter(Boolean))).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 
   const activeObjectives = (() => {
     if (Array.isArray(d.activeObjectives) && d.activeObjectives.length) return d.activeObjectives;
@@ -298,6 +306,60 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
     { label: 'Leads no CRM', current: currentBusiness.crmLeads, previous: previousBusiness?.crmLeads ?? 0, format: 'integer', color: 'green' },
     { label: 'Receita', current: currentBusiness.revenue, previous: previousBusiness?.revenue ?? 0, format: 'currency', color: 'purple' },
   ];
+
+  const filteredTopAds = [...topAds]
+    .filter((ad) => topAdsFilter === 'all' || ad.resultLabel === topAdsFilter)
+    .sort((a, b) => (topAdsSort === 'results' ? b.results - a.results || b.idc - a.idc || b.spend - a.spend : b.idc - a.idc || b.results - a.results || b.spend - a.spend));
+  const visibleTopAds = filteredTopAds.slice(0, topAdsVisible);
+  const groupedVisibleTopAds = (() => {
+    const grouped = new Map<string, TopAd[]>();
+    for (const ad of visibleTopAds) {
+      const key = ad.campaign || 'Sem campanha';
+      if (!grouped.has(key)) grouped.set(key, []);
+      grouped.get(key)!.push(ad);
+    }
+    return Array.from(grouped.entries());
+  })();
+
+  const normalizedDetailSearch = detailSearch.trim().toLowerCase();
+  const filteredCampaignRows = [...campaigns]
+    .filter((camp) => detailFilter === 'all' || camp.resultLabel === detailFilter)
+    .filter((camp) => !normalizedDetailSearch || camp.name.toLowerCase().includes(normalizedDetailSearch))
+    .sort((a, b) => {
+      if (detailSort === 'spend') return b.spend - a.spend || b.results - a.results || (b.idc ?? 0) - (a.idc ?? 0);
+      if (detailSort === 'idc') return (b.idc ?? 0) - (a.idc ?? 0) || b.results - a.results || b.spend - a.spend;
+      return b.results - a.results || b.spend - a.spend || (b.idc ?? 0) - (a.idc ?? 0);
+    });
+  const visibleCampaignRows = filteredCampaignRows.slice(0, detailVisible);
+  const controlButtonStyle = (active: boolean): React.CSSProperties => ({
+    padding: '7px 12px',
+    borderRadius: 999,
+    border: `1px solid ${active ? '#3b82f6' : '#253040'}`,
+    background: active ? 'rgba(59,130,246,0.12)' : 'transparent',
+    color: active ? '#cfe0ff' : '#8a95a8',
+    fontSize: 11,
+    fontWeight: 700,
+    cursor: 'pointer',
+  });
+  const selectStyle: React.CSSProperties = {
+    padding: '8px 10px',
+    borderRadius: 10,
+    background: '#0d1117',
+    border: '1px solid #253040',
+    color: '#c5d0de',
+    fontSize: 12,
+    outline: 'none',
+  };
+  const inputStyle: React.CSSProperties = {
+    padding: '8px 10px',
+    borderRadius: 10,
+    background: '#0d1117',
+    border: '1px solid #253040',
+    color: '#e8edf5',
+    fontSize: 12,
+    outline: 'none',
+    minWidth: 220,
+  };
 
   return (
     <div style={{ background: embedded ? 'transparent' : '#06080d', color: '#e8edf5', minHeight: embedded ? 'auto' : '100vh', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -367,15 +429,19 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
         {topAds.length > 0 && (
           <div style={{ marginBottom: 40 }}>
             <SectionTitle label="Melhores criativos" />
-            {(() => {
-              const grouped = new Map<string, TopAd[]>();
-              for (const ad of topAds) {
-                const key = ad.campaign || 'Sem campanha';
-                if (!grouped.has(key)) grouped.set(key, []);
-                grouped.get(key)!.push(ad);
-              }
-              return Array.from(grouped.entries()).map(([campaignName, ads]) => {
-                const rankedAds = [...ads].sort((a, b) => b.results - a.results || b.idc - a.idc || b.spend - a.spend);
+            <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <button type="button" onClick={() => setTopAdsSort('results')} style={controlButtonStyle(topAdsSort === 'results')}>Top por resultado</button>
+                <button type="button" onClick={() => setTopAdsSort('idc')} style={controlButtonStyle(topAdsSort === 'idc')}>Top por IDC</button>
+                <select value={topAdsFilter} onChange={(e) => { setTopAdsFilter(e.target.value); setTopAdsVisible(12); }} style={selectStyle}>
+                  <option value="all">Todos os resultados</option>
+                  {resultTypeOptions.map((label) => <option key={label} value={label}>{label}</option>)}
+                </select>
+              </div>
+              <div style={{ fontSize: 11, color: '#8a95a8', fontFamily: 'DM Mono, monospace' }}>Exibindo {Math.min(visibleTopAds.length, filteredTopAds.length)} de {filteredTopAds.length} criativos</div>
+            </div>
+            {groupedVisibleTopAds.map(([campaignName, ads]) => {
+                const rankedAds = [...ads].sort((a, b) => (topAdsSort === 'results' ? b.results - a.results || b.idc - a.idc || b.spend - a.spend : b.idc - a.idc || b.results - a.results || b.spend - a.spend));
                 const champion = rankedAds[0];
                 const runners = rankedAds.slice(1);
                 const champColor = IDC_COLORS[champion.idcClass] ?? '#8a95a8';
@@ -401,20 +467,39 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
                     {runners.length > 0 && <div style={{ display: 'grid', gridTemplateColumns: `repeat(${runners.length}, 1fr)`, gap: 8 }}>{runners.map((ad, index) => { const color = IDC_COLORS[ad.idcClass] ?? '#8a95a8'; return <div key={ad.id} style={{ background: '#0d1117', border: '1px solid #1e2733', borderRadius: 12, padding: '14px 16px', display: 'flex', gap: 12, alignItems: 'flex-start' }}><div style={{ width: 52, height: 52, background: '#141921', borderRadius: 8, border: '1px solid #1e2733', overflow: 'hidden', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>{hasThumb(ad) ? <img src={ad.thumbnailUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} /> : 'AD'}</div><div style={{ flex: 1, minWidth: 0 }}><div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}><span style={{ width: 18, height: 18, borderRadius: 5, background: '#141921', border: '1px solid #253040', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 800, color: '#8a95a8', flexShrink: 0 }}>{index + 2}</span><span style={{ fontSize: 9, fontWeight: 700, color, fontFamily: 'DM Mono, monospace' }}>IDC {ad.idc}</span></div><div style={{ fontWeight: 600, color: '#c5d0de', fontSize: 12, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ad.name}</div><div style={{ fontSize: 11, color: '#8a95a8' }}>{brl(ad.spend)} &bull; <span style={{ color: '#22c55e' }}>{ad.results} {ad.resultLabel}</span></div><div style={{ fontSize: 10, color: '#4d5a6e', marginTop: 3 }}>CTR {pct(ad.ctr, 1)} &bull; CPC {brl(ad.cpc)}{ad.hookRate > 0 ? ` - Hook ${pct(ad.hookRate * 100, 1)}` : ''}</div></div></div>; })}</div>}
                   </div>
                 );
-              });
-            })()}
+              })}
+            {filteredTopAds.length > visibleTopAds.length && (
+              <div className="no-print" style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
+                <button type="button" onClick={() => setTopAdsVisible((current) => current + 12)} style={controlButtonStyle(false)}>Ver mais criativos</button>
+              </div>
+            )}
           </div>
         )}
 
         {campaigns.length > 0 && (
           <div className="page-break" style={{ marginBottom: 40 }}>
             <SectionTitle label={`Detalhamento por ${levelLabel}`} />
+            <div className="no-print" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <input value={detailSearch} onChange={(e) => { setDetailSearch(e.target.value); setDetailVisible(25); }} placeholder="Buscar anúncio..." style={inputStyle} />
+                <select value={detailFilter} onChange={(e) => { setDetailFilter(e.target.value); setDetailVisible(25); }} style={selectStyle}>
+                  <option value="all">Todos os resultados</option>
+                  {resultTypeOptions.map((label) => <option key={label} value={label}>{label}</option>)}
+                </select>
+                <select value={detailSort} onChange={(e) => { setDetailSort(e.target.value as 'results' | 'spend' | 'idc'); setDetailVisible(25); }} style={selectStyle}>
+                  <option value="results">Ordenar por resultado</option>
+                  <option value="spend">Ordenar por gasto</option>
+                  <option value="idc">Ordenar por IDC</option>
+                </select>
+              </div>
+              <div style={{ fontSize: 11, color: '#8a95a8', fontFamily: 'DM Mono, monospace' }}>Exibindo {Math.min(visibleCampaignRows.length, filteredCampaignRows.length)} de {filteredCampaignRows.length} anúncios</div>
+            </div>
             <div style={{ background: '#0d1117', border: '1px solid #1e2733', borderRadius: 14, overflow: 'hidden' }}>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
                   <thead><tr style={{ background: '#141921' }}>{['Nome', 'Status', 'Gasto', 'Alcance', 'Resultado nativo', 'Custo/Res', 'CTR', 'CPM', 'Freq.', ...(hasVideo ? ['Hook', 'Hold'] : []), 'IDC'].map((h) => <th key={h} style={{ padding: '10px 14px', textAlign: 'left', fontSize: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#4d5a6e', borderBottom: '1px solid #1e2733', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
                   <tbody>
-                    {campaigns.map((camp, i) => {
+                    {visibleCampaignRows.map((camp, i) => {
                       const idcColor = IDC_COLORS[camp.classification === 'otimo' ? 'great' : camp.classification === 'bom' ? 'good' : camp.classification === 'regular' ? 'ok' : 'bad'] ?? '#4d5a6e';
                       return <tr key={i} style={{ borderBottom: '1px solid #1e2733' }}><td style={{ padding: '13px 14px', maxWidth: 200 }}><div style={{ fontWeight: 600, color: '#e8edf5', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{camp.name}</div></td><td style={{ padding: '13px 14px' }}><span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '3px 8px', borderRadius: 20, fontSize: 10, fontWeight: 600, background: camp.status === 'active' ? 'rgba(34,197,94,0.12)' : 'rgba(138,149,168,0.12)', color: camp.status === 'active' ? '#22c55e' : '#8a95a8' }}><span style={{ width: 5, height: 5, borderRadius: '50%', background: 'currentColor', display: 'inline-block' }} />{camp.status === 'active' ? 'Ativo' : 'Pausado'}</span></td><td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: '#8a95a8', whiteSpace: 'nowrap' }}>{brl(camp.spend)}</td><td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: '#8a95a8', whiteSpace: 'nowrap' }}>{nInt(camp.reach)}</td><td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: '#8a95a8' }}><div>{camp.results}</div><div style={{ fontSize: 10, color: '#4d5a6e' }}>{camp.resultLabel}</div></td><td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: '#8a95a8', whiteSpace: 'nowrap' }}>{camp.costPerResult > 0 ? brl(camp.costPerResult) : '-'}</td><td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: camp.ctr >= 5 ? '#22c55e' : '#8a95a8', whiteSpace: 'nowrap' }}>{pct(camp.ctr)}</td><td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: '#8a95a8', whiteSpace: 'nowrap' }}>{brl(camp.cpm)}</td><td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: camp.frequency > 3 ? '#f59e0b' : '#8a95a8', whiteSpace: 'nowrap' }}>{camp.frequency > 0 ? camp.frequency.toFixed(2) : '-'}</td>{hasVideo && <td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: camp.hookRate != null && camp.hookRate * 100 >= 20 ? '#22c55e' : '#8a95a8', whiteSpace: 'nowrap' }}>{camp.hookRate != null ? pct(camp.hookRate * 100) : '-'}</td>}{hasVideo && <td style={{ padding: '13px 14px', fontFamily: 'DM Mono, monospace', fontSize: 12, color: camp.holdRate != null && camp.holdRate * 100 >= 8 ? '#22c55e' : '#8a95a8', whiteSpace: 'nowrap' }}>{camp.holdRate != null ? pct(camp.holdRate * 100) : '-'}</td>}<td style={{ padding: '13px 14px' }}>{camp.idc != null ? <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ width: 40, height: 5, background: '#141921', borderRadius: 3, overflow: 'hidden' }}><div style={{ height: '100%', width: `${Math.min(camp.idc, 100)}%`, background: idcColor, borderRadius: 3 }} /></div><span style={{ fontSize: 11, fontWeight: 800, color: idcColor, fontFamily: 'DM Mono, monospace' }}>{camp.idc}</span></div> : '-'}</td></tr>;
                     })}
@@ -422,6 +507,11 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
                 </table>
               </div>
             </div>
+            {filteredCampaignRows.length > visibleCampaignRows.length && (
+              <div className="no-print" style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
+                <button type="button" onClick={() => setDetailVisible((current) => current + 25)} style={controlButtonStyle(false)}>Ver mais anúncios</button>
+              </div>
+            )}
           </div>
         )}
 
