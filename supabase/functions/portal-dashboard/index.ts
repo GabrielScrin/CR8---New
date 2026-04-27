@@ -39,7 +39,12 @@ serve(async (req) => {
     }
 
     if (section === 'weekly') {
-      const data = await loadDashboardWeekly(supabaseAdmin, token);
+      const data = await loadDashboardWeekly(
+        supabaseAdmin,
+        token,
+        typeof body?.date_from === 'string' ? body.date_from : undefined,
+        typeof body?.date_to === 'string' ? body.date_to : undefined,
+      );
       return jsonResponse(200, { ok: true, ...data });
     }
 

@@ -156,8 +156,13 @@ export const fetchDashboardData = (params: {
     campaign_ids: params.campaignIds ?? [],
   });
 
-export const fetchDashboardWeekly = (token: string) =>
-  post<DashboardWeekly & { ok: true }>({ section: 'weekly', token });
+export const fetchDashboardWeekly = (params: { token: string; dateFrom?: string; dateTo?: string }) =>
+  post<DashboardWeekly & { ok: true }>({
+    section: 'weekly',
+    token: params.token,
+    date_from: params.dateFrom,
+    date_to: params.dateTo,
+  });
 
 export const fetchDashboardCampaignAds = (params: {
   token: string;

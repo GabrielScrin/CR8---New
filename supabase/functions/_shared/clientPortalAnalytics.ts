@@ -2721,7 +2721,12 @@ const loadLatestTrafficReport = async (
   return scored[0]?.score > 0 ? scored[0].row : null;
 };
 
-export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: string) => {
+export const loadDashboardWeekly = async (
+  supabaseAdmin: SupabaseClient,
+  token: string,
+  requestedDateFrom?: string,
+  requestedDateTo?: string,
+) => {
   const link = await getPortalLinkRow(supabaseAdmin, token);
   const { data: companyTokens, error: companyTokensError } = await supabaseAdmin
     .from('companies')
@@ -2734,12 +2739,16 @@ export const loadDashboardWeekly = async (supabaseAdmin: SupabaseClient, token: 
   const metaToken = asString((companyTokens as any)?.meta_access_token);
 
   const today = new Date();
-  const periodEnd = new Date(today);
-  periodEnd.setUTCDate(periodEnd.getUTCDate() - 1);
-  const periodStart = new Date(periodEnd);
-  periodStart.setUTCDate(periodStart.getUTCDate() - 6);
-  const periodStartStr = periodStart.toISOString().slice(0, 10);
-  const periodEndStr = periodEnd.toISOString().slice(0, 10);
+  const defaultPeriodEnd = new Date(today);
+  defaultPeriodEnd.setUTCDate(defaultPeriodEnd.getUTCDate() - 1);
+  const defaultPeriodStart = new Date(defaultPeriodEnd);
+  defaultPeriodStart.setUTCDate(defaultPeriodStart.getUTCDate() - 6);
+  const defaultPeriodStartStr = defaultPeriodStart.toISOString().slice(0, 10);
+  const defaultPeriodEndStr = defaultPeriodEnd.toISOString().slice(0, 10);
+  const parsedDateFrom = parseDateInput(requestedDateFrom, defaultPeriodStartStr);
+  const parsedDateTo = parseDateInput(requestedDateTo, defaultPeriodEndStr);
+  const periodStartStr = parsedDateFrom <= parsedDateTo ? parsedDateFrom : parsedDateTo;
+  const periodEndStr = parsedDateFrom <= parsedDateTo ? parsedDateTo : parsedDateFrom;
 
   const igResolvedWeekly = resolveInstagramApiToken(companyTokens);
   const igToken = igResolvedWeekly?.token ?? null;

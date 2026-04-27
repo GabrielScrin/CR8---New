@@ -662,14 +662,14 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   }, [dateFrom, dateTo, loadData]);
 
   useEffect(() => {
-    if (tab !== 'relatorio' || weekly || loadingWeekly) return;
+    if (tab !== 'relatorio' || !dateFrom || !dateTo) return;
 
     setLoadingWeekly(true);
-    fetchDashboardWeekly(token)
+    fetchDashboardWeekly({ token, dateFrom, dateTo })
       .then(setWeekly)
       .catch((error) => setErrorMsg(error?.message ?? 'Erro ao carregar relatório.'))
       .finally(() => setLoadingWeekly(false));
-  }, [loadingWeekly, tab, token, weekly]);
+  }, [dateFrom, dateTo, tab, token]);
 
   const meta = data?.meta;
   const prevMeta = data?.prevMeta;
