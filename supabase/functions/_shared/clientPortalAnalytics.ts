@@ -2374,6 +2374,20 @@ const inferNativeResultFromIndicator = (input: {
 }) => {
   const indicator = asString(input.indicator).toLowerCase();
   const label = mapNativeResultLabel(indicator);
+  const indicatorScore = scoreResultIndicator(indicator);
+  const preferredBusinessResult =
+    [
+      input.leadForms > 0 ? { nativeResultType: 'omni_lead', nativeResultLabel: 'Lead Forms', nativeResultValue: input.leadForms } : null,
+      input.messagesStarted > 0 ? { nativeResultType: 'messaging', nativeResultLabel: 'Mensagens iniciadas', nativeResultValue: input.messagesStarted } : null,
+      input.siteLeads > 0 ? { nativeResultType: 'website_lead', nativeResultLabel: 'Leads no site', nativeResultValue: input.siteLeads } : null,
+      input.profileVisits > 0 ? { nativeResultType: 'profile_visit_view', nativeResultLabel: 'Visitas ao perfil', nativeResultValue: input.profileVisits } : null,
+      input.followers > 0 ? { nativeResultType: 'follow', nativeResultLabel: 'Seguidores', nativeResultValue: input.followers } : null,
+      input.landingPageViews > 0 ? { nativeResultType: 'landing_page_view', nativeResultLabel: 'Vis. pag. destino', nativeResultValue: input.landingPageViews } : null,
+    ].filter(Boolean)[0] ?? null;
+
+  if (preferredBusinessResult && indicatorScore < 70) {
+    return preferredBusinessResult;
+  }
 
   if (indicator.includes('profile_visit')) {
     return { nativeResultType: indicator, nativeResultLabel: label || 'Visitas ao perfil', nativeResultValue: input.profileVisits || input.payloadValue };
