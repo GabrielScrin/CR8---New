@@ -483,13 +483,13 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
               <div className="no-print" style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {hasMoreTopCampaignGroups && (
-                    <button type="button" onClick={() => setTopCampaignGroupsVisible((current) => current + 4)} style={controlButtonStyle(false)}>Ver mais anuncios</button>
+                    <button type="button" onClick={() => setTopCampaignGroupsVisible((current) => current + 4)} style={controlButtonStyle(false)}>Ver mais campanhas</button>
                   )}
                   {hasMoreTopAds && (
                     <button type="button" onClick={() => setTopAdsVisible((current) => current + 4)} style={controlButtonStyle(false)}>Ver mais classificados</button>
                   )}
                   {(topAdsVisible > 4 || topCampaignGroupsVisible > 4) && (
-                    <button type="button" onClick={() => { setTopAdsVisible(4); setTopCampaignGroupsVisible(4); }} style={controlButtonStyle(false)}>Ver menos anuncios</button>
+                    <button type="button" onClick={() => { setTopAdsVisible(4); setTopCampaignGroupsVisible(4); }} style={controlButtonStyle(false)}>Ver menos</button>
                   )}
                 </div>
               </div>

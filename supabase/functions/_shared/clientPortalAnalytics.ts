@@ -105,6 +105,16 @@ type MetaAdRow = {
   nativeResultValue: number;
 };
 
+type NativeResultType =
+  | 'unknown'
+  | 'messages_started'
+  | 'profile_visits'
+  | 'lead_forms'
+  | 'site_leads'
+  | 'landing_page_views'
+  | 'video_views'
+  | 'followers';
+
 type GoogleCampaignRow = {
   id: string;
   name: string;
@@ -2309,6 +2319,185 @@ const normalizeLoose = (value: string | null | undefined) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const normalizeObjective = (objective: unknown) => String(objective ?? '').trim().toUpperCase();
+const normalizeMetaSignal = (value: unknown) => String(value ?? '').trim().toUpperCase();
+
+const isGenericObjective = (objective: string) =>
+  objective === '' ||
+  objective === 'OUTCOME_AWARENESS' ||
+  objective === 'OUTCOME_ENGAGEMENT' ||
+  objective === 'OUTCOME_TRAFFIC' ||
+  objective === 'AWARENESS' ||
+  objective === 'ENGAGEMENT' ||
+  objective === 'TRAFFIC';
+
+const inferNativeTypeFromContext = (input: {
+  objective?: unknown;
+  destinationType?: unknown;
+  optimizationGoal?: unknown;
+  promotedObject?: Record<string, unknown> | null;
+  nameHint?: unknown;
+}): NativeResultType => {
+  const destinationType = normalizeMetaSignal(input.destinationType);
+  const optimizationGoal = normalizeMetaSignal(input.optimizationGoal);
+  const objective = normalizeObjective(input.objective);
+  const promotedJson = JSON.stringify(input.promotedObject ?? {}).toUpperCase();
+  const nameHint = normalizeMetaSignal(input.nameHint);
+
+  if (
+    optimizationGoal.includes('THRUPLAY') ||
+    optimizationGoal.includes('VIDEO') ||
+    objective.includes('VIDEO') ||
+    objective.includes('OUTCOME_VIDEO')
+  ) {
+    return 'video_views';
+  }
+
+  if (
+    optimizationGoal.includes('LANDING_PAGE') ||
+    promotedJson.includes('LANDING_PAGE_VIEW')
+  ) {
+    return 'landing_page_views';
+  }
+
+  if (
+    destinationType.includes('WHATSAPP') ||
+    destinationType.includes('MESSENGER') ||
+    destinationType.includes('MESSAGING') ||
+    optimizationGoal.includes('MESSAGING') ||
+    optimizationGoal.includes('CONVERSATION') ||
+    optimizationGoal.includes('REPLIES') ||
+    promotedJson.includes('WHATSAPP') ||
+    promotedJson.includes('MESSENGER')
+  ) {
+    return 'messages_started';
+  }
+
+  if (
+    nameHint.includes('WHATSAPP') ||
+    nameHint.includes('WHATS') ||
+    nameHint.includes(' MENSA') ||
+    nameHint.includes('MSG') ||
+    nameHint.includes('DIRECT') ||
+    nameHint.includes('DM')
+  ) {
+    return 'messages_started';
+  }
+
+  if (
+    destinationType.includes('PROFILE') ||
+    destinationType.includes('INSTAGRAM') ||
+    optimizationGoal.includes('PROFILE') ||
+    promotedJson.includes('INSTAGRAM_PROFILE')
+  ) {
+    return 'profile_visits';
+  }
+
+  if (
+    optimizationGoal.includes('OFFSITE') ||
+    optimizationGoal.includes('CONVERSION') ||
+    optimizationGoal.includes('VALUE') ||
+    optimizationGoal.includes('PURCHASE') ||
+    promotedJson.includes('FB_PIXEL_LEAD') ||
+    promotedJson.includes('COMPLETE_REGISTRATION') ||
+    promotedJson.includes('CUSTOM_EVENT') ||
+    objective.includes('OUTCOME_SALES') ||
+    objective.includes('CONVERS')
+  ) {
+    return 'site_leads';
+  }
+
+  if (
+    destinationType.includes('INSTANT_FORM') ||
+    destinationType.includes('ON_AD') ||
+    optimizationGoal.includes('LEAD') ||
+    promotedJson.includes('LEAD') ||
+    objective.includes('OUTCOME_LEADS') ||
+    objective === 'LEAD_GENERATION' ||
+    objective === 'LEADS' ||
+    nameHint.includes('FORMS') ||
+    nameHint.includes('FORMULAR')
+  ) {
+    return 'lead_forms';
+  }
+
+  if (
+    optimizationGoal.includes('FOLLOW') ||
+    destinationType.includes('FOLLOW') ||
+    promotedJson.includes('FOLLOW') ||
+    promotedJson.includes('PAGE_LIKE')
+  ) {
+    return 'followers';
+  }
+
+  if (!isGenericObjective(objective)) {
+    if (objective.includes('MESSAGE')) return 'messages_started';
+    if (objective.includes('LEAD')) return 'lead_forms';
+    if (objective.includes('VIDEO')) return 'video_views';
+  }
+
+  if (nameHint.includes('PERFIL') || nameHint.includes('PROFILE') || nameHint.includes('INSTAGRAM')) return 'profile_visits';
+  if (nameHint.includes('SITE') || nameHint.includes('LPV') || nameHint.includes('LANDING')) return 'landing_page_views';
+  if (nameHint.includes('LEAD')) return 'lead_forms';
+  if (nameHint.includes('VIDEO') || nameHint.includes('THRUPLAY')) return 'video_views';
+
+  return 'unknown';
+};
+
+const labelForNativeType = (nativeType: NativeResultType, hasThruplays = false) => {
+  switch (nativeType) {
+    case 'messages_started':
+      return 'Mensagens iniciadas';
+    case 'profile_visits':
+      return 'Visitas ao perfil';
+    case 'lead_forms':
+      return 'Lead Forms';
+    case 'site_leads':
+      return 'Leads no site';
+    case 'landing_page_views':
+      return 'Vis. pag. destino';
+    case 'video_views':
+      return hasThruplays ? 'ThruPlays' : 'Views 3s';
+    case 'followers':
+      return 'Seguidores';
+    default:
+      return 'Resultados';
+  }
+};
+
+const valueForNativeType = (
+  nativeType: NativeResultType,
+  computed: {
+    leadForms?: number;
+    siteLeads?: number;
+    landingPageViews?: number;
+    messagesStarted?: number;
+    profileVisits?: number;
+    followers?: number;
+    videoViews?: number;
+    thruplays?: number;
+  },
+) => {
+  switch (nativeType) {
+    case 'messages_started':
+      return computed.messagesStarted ?? 0;
+    case 'profile_visits':
+      return computed.profileVisits ?? 0;
+    case 'lead_forms':
+      return computed.leadForms ?? 0;
+    case 'site_leads':
+      return computed.siteLeads ?? 0;
+    case 'landing_page_views':
+      return computed.landingPageViews ?? 0;
+    case 'video_views':
+      return (computed.thruplays ?? 0) > 0 ? computed.thruplays ?? 0 : computed.videoViews ?? 0;
+    case 'followers':
+      return computed.followers ?? 0;
+    default:
+      return 0;
+  }
+};
+
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 
 const normalizeHigherBetter = (value: number, min: number, max: number) => {
@@ -2363,6 +2552,7 @@ const mapNativeResultLabel = (indicator: string) => {
 const inferNativeResultFromIndicator = (input: {
   indicator: string;
   payloadValue: number;
+  nativeType: NativeResultType;
   messagesStarted: number;
   leadForms: number;
   siteLeads: number;
@@ -2374,19 +2564,15 @@ const inferNativeResultFromIndicator = (input: {
 }) => {
   const indicator = asString(input.indicator).toLowerCase();
   const label = mapNativeResultLabel(indicator);
-  const indicatorScore = scoreResultIndicator(indicator);
-  const preferredBusinessResult =
-    [
-      input.leadForms > 0 ? { nativeResultType: 'omni_lead', nativeResultLabel: 'Lead Forms', nativeResultValue: input.leadForms } : null,
-      input.messagesStarted > 0 ? { nativeResultType: 'messaging', nativeResultLabel: 'Mensagens iniciadas', nativeResultValue: input.messagesStarted } : null,
-      input.siteLeads > 0 ? { nativeResultType: 'website_lead', nativeResultLabel: 'Leads no site', nativeResultValue: input.siteLeads } : null,
-      input.profileVisits > 0 ? { nativeResultType: 'profile_visit_view', nativeResultLabel: 'Visitas ao perfil', nativeResultValue: input.profileVisits } : null,
-      input.followers > 0 ? { nativeResultType: 'follow', nativeResultLabel: 'Seguidores', nativeResultValue: input.followers } : null,
-      input.landingPageViews > 0 ? { nativeResultType: 'landing_page_view', nativeResultLabel: 'Vis. pag. destino', nativeResultValue: input.landingPageViews } : null,
-    ].filter(Boolean)[0] ?? null;
-
-  if (preferredBusinessResult && indicatorScore < 70) {
-    return preferredBusinessResult;
+  if (input.nativeType !== 'unknown') {
+    const nativeValue = valueForNativeType(input.nativeType, input);
+    if (nativeValue > 0) {
+      return {
+        nativeResultType: input.nativeType,
+        nativeResultLabel: labelForNativeType(input.nativeType, (input.thruplays ?? 0) > 0),
+        nativeResultValue: nativeValue,
+      };
+    }
   }
 
   if (indicator.includes('profile_visit')) {
@@ -2511,6 +2697,9 @@ const buildPortalWeeklyTrafficLikeReport = async (
         const resultsPayload = Array.isArray(row?.results) ? row.results : [];
         const resultIndicator = extractResultIndicator(resultsPayload);
         const resultValue = extractResultValue(resultsPayload);
+        const nativeType = inferNativeTypeFromContext({
+          nameHint: `${campaign.name} ${asString(row?.ad_name)}`,
+        });
         const isProfileVisitCampaign = resultIndicator === 'profile_visit_view';
         const costPerActionType = Array.isArray(row?.cost_per_action_type) ? row.cost_per_action_type : [];
         const videoThruplayActions = Array.isArray(row?.video_thruplay_watched_actions) ? row.video_thruplay_watched_actions : [];
@@ -2533,6 +2722,7 @@ const buildPortalWeeklyTrafficLikeReport = async (
         const nativeResult = inferNativeResultFromIndicator({
           indicator: resultIndicator,
           payloadValue: resultValue,
+          nativeType,
           messagesStarted,
           leadForms,
           siteLeads,
