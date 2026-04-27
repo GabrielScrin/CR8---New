@@ -2457,6 +2457,9 @@ const inferNativeTypeFromContext = (input: {
     optimizationGoal.includes('VALUE') ||
     optimizationGoal.includes('PURCHASE') ||
     promotedJson.includes('FB_PIXEL_LEAD') ||
+    promotedJson.includes('CONTACT') ||
+    promotedJson.includes('CALL') ||
+    promotedJson.includes('PHONE') ||
     promotedJson.includes('COMPLETE_REGISTRATION') ||
     promotedJson.includes('CUSTOM_EVENT') ||
     objective.includes('OUTCOME_SALES') ||
@@ -2495,6 +2498,7 @@ const inferNativeTypeFromContext = (input: {
   }
 
   if (nameHint.includes('PERFIL') || nameHint.includes('PROFILE') || nameHint.includes('INSTAGRAM')) return 'profile_visits';
+  if (nameHint.includes('CONTATO') || nameHint.includes('CHAMADA') || nameHint.includes('LIGACAO') || nameHint.includes('TELEFONE') || nameHint.includes('CALL')) return 'site_leads';
   if (nameHint.includes('SITE') || nameHint.includes('LPV') || nameHint.includes('LANDING')) return 'landing_page_views';
   if (nameHint.includes('LEAD')) return 'lead_forms';
   if (nameHint.includes('VIDEO') || nameHint.includes('THRUPLAY')) return 'video_views';
@@ -2509,9 +2513,9 @@ const labelForNativeType = (nativeType: NativeResultType, hasThruplays = false) 
     case 'profile_visits':
       return 'Visitas ao perfil';
     case 'lead_forms':
-      return 'Lead Forms';
+      return 'Lead';
     case 'site_leads':
-      return 'Leads no site';
+      return 'Lead';
     case 'landing_page_views':
       return 'Vis. pag. destino';
     case 'video_views':

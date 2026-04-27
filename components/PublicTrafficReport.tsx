@@ -202,6 +202,9 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
 
   useEffect(() => {
     if (reportDataOverride) {
+      setTopAdsVisible(4);
+      setTopCampaignGroupsVisible(4);
+      setDetailVisible(25);
       setReport({
         id: 'embedded',
         public_id: publicId ?? 'embedded',
@@ -233,7 +236,12 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
       .then((json: any) => {
         const rows = Array.isArray(json) ? json : [];
         if (!rows.length) setError('Relatorio nao encontrado.');
-        else setReport(rows[0] as TrafficReport);
+        else {
+          setTopAdsVisible(4);
+          setTopCampaignGroupsVisible(4);
+          setDetailVisible(25);
+          setReport(rows[0] as TrafficReport);
+        }
       })
       .catch(() => setError('Erro ao carregar relatorio.'))
       .finally(() => setLoading(false));
