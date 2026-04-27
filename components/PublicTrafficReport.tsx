@@ -193,7 +193,7 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
   const [copied, setCopied] = useState(false);
   const [topAdsSort, setTopAdsSort] = useState<'results' | 'idc'>('results');
   const [topAdsFilter, setTopAdsFilter] = useState<string>('all');
-  const [topAdsVisible, setTopAdsVisible] = useState(12);
+  const [topCampaignsExpanded, setTopCampaignsExpanded] = useState(false);
   const [detailSearch, setDetailSearch] = useState('');
   const [detailFilter, setDetailFilter] = useState<string>('all');
   const [detailSort, setDetailSort] = useState<'results' | 'spend' | 'idc'>('results');
@@ -312,16 +312,16 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
   const filteredTopAds = [...topAds]
     .filter((ad) => topAdsFilter === 'all' || ad.resultLabel === topAdsFilter)
     .sort((a, b) => (topAdsSort === 'results' ? b.results - a.results || b.idc - a.idc || b.spend - a.spend : b.idc - a.idc || b.results - a.results || b.spend - a.spend));
-  const visibleTopAds = filteredTopAds.slice(0, topAdsVisible);
-  const groupedVisibleTopAds = (() => {
+  const groupedTopAds = (() => {
     const grouped = new Map<string, TopAd[]>();
-    for (const ad of visibleTopAds) {
+    for (const ad of filteredTopAds) {
       const key = ad.campaign || 'Sem campanha';
       if (!grouped.has(key)) grouped.set(key, []);
       grouped.get(key)!.push(ad);
     }
     return Array.from(grouped.entries());
   })();
+  const visibleTopCampaignGroups = topCampaignsExpanded ? groupedTopAds : groupedTopAds.slice(0, 4);
 
   const normalizedDetailSearch = detailSearch.trim().toLowerCase();
   const filteredCampaignRows = [...campaigns]
@@ -439,14 +439,14 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" onClick={() => setTopAdsSort('results')} style={controlButtonStyle(topAdsSort === 'results')}>Top por resultado</button>
                 <button type="button" onClick={() => setTopAdsSort('idc')} style={controlButtonStyle(topAdsSort === 'idc')}>Top por IDC</button>
-                <select value={topAdsFilter} onChange={(e) => { setTopAdsFilter(e.target.value); setTopAdsVisible(12); }} style={selectStyle}>
+                <select value={topAdsFilter} onChange={(e) => { setTopAdsFilter(e.target.value); setTopCampaignsExpanded(false); }} style={selectStyle}>
                   <option value="all">Todos os resultados</option>
                   {resultTypeOptions.map((label) => <option key={label} value={label}>{label}</option>)}
                 </select>
               </div>
-              <div style={{ fontSize: 11, color: '#8a95a8', fontFamily: 'DM Mono, monospace' }}>Exibindo {Math.min(visibleTopAds.length, filteredTopAds.length)} de {filteredTopAds.length} criativos</div>
+              <div style={{ fontSize: 11, color: '#8a95a8', fontFamily: 'DM Mono, monospace' }}>Exibindo {visibleTopCampaignGroups.length} de {groupedTopAds.length} campanhas</div>
             </div>
-            {groupedVisibleTopAds.map(([campaignName, ads]) => {
+            {visibleTopCampaignGroups.map(([campaignName, ads]) => {
                 const rankedAds = [...ads].sort((a, b) => (topAdsSort === 'results' ? b.results - a.results || b.idc - a.idc || b.spend - a.spend : b.idc - a.idc || b.results - a.results || b.spend - a.spend));
                 const champion = rankedAds[0];
                 const runners = rankedAds.slice(1);
@@ -476,9 +476,13 @@ export const PublicTrafficReport: React.FC<PublicTrafficReportProps> = ({ public
             <div style={{ marginTop: 10, fontSize: 11, color: '#8a95a8', lineHeight: 1.5 }}>
               <strong style={{ color: '#c5d0de' }}>IDC:</strong> indice interno que compara a qualidade do criativo combinando resposta do publico e eficiencia de custo. Quanto maior o IDC, melhor tende a ser o criativo no periodo.
             </div>
-            {filteredTopAds.length > visibleTopAds.length && (
+            {groupedTopAds.length > 4 && (
               <div className="no-print" style={{ display: 'flex', justifyContent: 'center', marginTop: 8 }}>
-                <button type="button" onClick={() => setTopAdsVisible((current) => current + 12)} style={controlButtonStyle(false)}>Ver mais criativos</button>
+                {!topCampaignsExpanded ? (
+                  <button type="button" onClick={() => setTopCampaignsExpanded(true)} style={controlButtonStyle(false)}>Ver mais campanhas</button>
+                ) : (
+                  <button type="button" onClick={() => setTopCampaignsExpanded(false)} style={controlButtonStyle(false)}>Ver menos campanhas</button>
+                )}
               </div>
             )}
           </div>
