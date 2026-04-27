@@ -197,7 +197,8 @@ export const PublicClientPortal: React.FC<PublicClientPortalProps> = ({ token })
         setSelectedCompanyId(payload.selectedCompanyId);
 
         const end = new Date();
-        const start = new Date();
+        end.setDate(end.getDate() - 1);
+        const start = new Date(end);
         start.setDate(start.getDate() - 6);
         setDateFrom(start.toISOString().slice(0, 10));
         setDateTo(end.toISOString().slice(0, 10));
