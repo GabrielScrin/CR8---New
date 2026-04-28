@@ -15,11 +15,22 @@ type PortalLink = {
   public_token: string;
   name: string;
   client_name: string | null;
+  project_context_text?: string | null;
   meta_ad_account_id: string;
   meta_ad_account_name: string | null;
   instagram_business_account_id: string | null;
   instagram_username: string | null;
   status: string;
+  created_at: string;
+};
+
+type PortalContextFileRow = {
+  id: string;
+  name: string;
+  mime_type: string;
+  size_bytes: number;
+  storage_path: string;
+  indexing_status: string;
   created_at: string;
 };
 
@@ -62,6 +73,13 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
   // Modal state
   const [showModal, setShowModal] = useState(false);
   const [modalStep, setModalStep] = useState<'form' | 'done'>('form');
+  const [showContextModal, setShowContextModal] = useState(false);
+  const [editingContextLink, setEditingContextLink] = useState<PortalLink | null>(null);
+  const [contextModalLoading, setContextModalLoading] = useState(false);
+  const [contextModalSaving, setContextModalSaving] = useState(false);
+  const [contextModalText, setContextModalText] = useState('');
+  const [existingContextFiles, setExistingContextFiles] = useState<PortalContextFileRow[]>([]);
+  const [newContextFiles, setNewContextFiles] = useState<File[]>([]);
 
   // Form state
   const [formName, setFormName] = useState('');
@@ -149,6 +167,41 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
       setError(err?.message ?? 'Erro ao carregar contas.');
     } finally {
       setLoadingAccounts(false);
+    }
+  };
+
+  const closeContextModal = () => {
+    setShowContextModal(false);
+    setEditingContextLink(null);
+    setContextModalText('');
+    setExistingContextFiles([]);
+    setNewContextFiles([]);
+    setError(null);
+    setContextModalLoading(false);
+    setContextModalSaving(false);
+  };
+
+  const openContextModal = async (link: PortalLink) => {
+    setShowContextModal(true);
+    setEditingContextLink(link);
+    setContextModalText(String(link.project_context_text ?? ''));
+    setExistingContextFiles([]);
+    setNewContextFiles([]);
+    setContextModalLoading(true);
+    setError(null);
+
+    try {
+      const { data, error: filesError } = await supabase
+        .from('portal_link_context_files')
+        .select('id,name,mime_type,size_bytes,storage_path,indexing_status,created_at')
+        .eq('portal_link_id', link.id)
+        .order('created_at', { ascending: false });
+      if (filesError) throw filesError;
+      setExistingContextFiles((data ?? []) as PortalContextFileRow[]);
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao carregar contexto do projeto.');
+    } finally {
+      setContextModalLoading(false);
     }
   };
 
@@ -279,6 +332,24 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
     void loadLinks();
   };
 
+  const addFilesToQueue = (
+    incoming: FileList | File[] | null,
+    setter: React.Dispatch<React.SetStateAction<File[]>>,
+    setErrorMessage?: (value: string | null) => void,
+  ) => {
+    if (!incoming) return;
+    const files = Array.from(incoming);
+    const validFiles = files.filter(isSupportedContextFile);
+    if (validFiles.length !== files.length) {
+      setErrorMessage?.('Use apenas arquivos PDF, DOCX ou TXT.');
+    }
+    setter((current) => {
+      const map = new Map(current.map((file) => [`${file.name}:${file.size}`, file]));
+      for (const file of validFiles) map.set(`${file.name}:${file.size}`, file);
+      return Array.from(map.values());
+    });
+  };
+
   const filteredAdAccounts = adAccounts.filter((a) => {
     const q = adAccountSearch.toLowerCase();
     return !q || (a.name ?? '').toLowerCase().includes(q) || a.id.toLowerCase().includes(q);
@@ -290,21 +361,109 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
   });
 
   const addContextFiles = (incoming: FileList | File[] | null) => {
-    if (!incoming) return;
-    const files = Array.from(incoming);
-    const validFiles = files.filter(isSupportedContextFile);
-    if (validFiles.length !== files.length) {
-      setError('Use apenas arquivos PDF, DOCX ou TXT.');
-    }
-    setContextFiles((current) => {
-      const map = new Map(current.map((file) => [`${file.name}:${file.size}`, file]));
-      for (const file of validFiles) map.set(`${file.name}:${file.size}`, file);
-      return Array.from(map.values());
-    });
+    addFilesToQueue(incoming, setContextFiles, setError);
   };
 
   const removeContextFile = (targetName: string, targetSize: number) => {
     setContextFiles((current) => current.filter((file) => !(file.name === targetName && file.size === targetSize)));
+  };
+
+  const addNewContextFiles = (incoming: FileList | File[] | null) => {
+    addFilesToQueue(incoming, setNewContextFiles, setError);
+  };
+
+  const removeNewContextFile = (targetName: string, targetSize: number) => {
+    setNewContextFiles((current) => current.filter((file) => !(file.name === targetName && file.size === targetSize)));
+  };
+
+  const removeExistingContextFile = (fileId: string) => {
+    setExistingContextFiles((current) => current.filter((file) => file.id !== fileId));
+  };
+
+  const saveContextModal = async () => {
+    if (!companyId || !editingContextLink) return;
+    setContextModalSaving(true);
+    setError(null);
+
+    try {
+      const { data: authData } = await supabase.auth.getUser();
+
+      const { data: latestFiles, error: currentFilesError } = await supabase
+        .from('portal_link_context_files')
+        .select('id,storage_path')
+        .eq('portal_link_id', editingContextLink.id);
+      if (currentFilesError) throw currentFilesError;
+
+      const keptFileIds = new Set(existingContextFiles.map((file) => file.id));
+      const removedFiles = ((latestFiles ?? []) as Array<{ id: string; storage_path: string }>).filter((file) => !keptFileIds.has(file.id));
+      const removedPaths = removedFiles.map((file) => String(file.storage_path ?? '')).filter(Boolean);
+
+      const { error: updateError } = await supabase
+        .from('portal_links')
+        .update({ project_context_text: contextModalText.trim() || null })
+        .eq('id', editingContextLink.id);
+      if (updateError) throw updateError;
+
+      await supabase.functions.invoke('portal-link-context-processor', {
+        body: {
+          mode: 'reindex_manual_context',
+          portal_link_id: editingContextLink.id,
+        },
+      }).catch(() => {});
+
+      if (removedPaths.length > 0) {
+        await supabase.storage.from(CONTEXT_BUCKET).remove(removedPaths).catch(() => {});
+      }
+
+      if (removedFiles.length > 0) {
+        const { error: deleteFilesError } = await supabase
+          .from('portal_link_context_files')
+          .delete()
+          .in('id', removedFiles.map((file) => file.id));
+        if (deleteFilesError) throw deleteFilesError;
+      }
+
+      for (const file of newContextFiles) {
+        const mimeType = inferContextMimeType(file);
+        const path = `${companyId}/${editingContextLink.id}/${Date.now()}_${sanitizeFileName(file.name)}`;
+        const { error: uploadError } = await supabase.storage.from(CONTEXT_BUCKET).upload(path, file, {
+          upsert: false,
+          contentType: mimeType,
+        });
+        if (uploadError) throw uploadError;
+
+        const { data: fileRow, error: fileInsertError } = await supabase
+          .from('portal_link_context_files')
+          .insert({
+            portal_link_id: editingContextLink.id,
+            uploaded_by: authData?.user?.id ?? null,
+            name: file.name,
+            mime_type: mimeType,
+            size_bytes: file.size,
+            storage_path: path,
+            indexing_status: 'pending',
+          })
+          .select('id')
+          .single();
+        if (fileInsertError) throw fileInsertError;
+
+        await supabase.functions.invoke('portal-link-context-processor', {
+          body: {
+            mode: 'index_file',
+            context_file_id: (fileRow as any).id,
+          },
+        }).catch(() => {});
+      }
+
+      setLinks((current) => current.map((link) => (link.id === editingContextLink.id
+        ? { ...link, project_context_text: contextModalText.trim() || null }
+        : link)));
+      closeContextModal();
+    } catch (err: any) {
+      setError(err?.message ?? 'Erro ao salvar contexto do projeto.');
+    } finally {
+      setContextModalSaving(false);
+    }
   };
 
   return (
@@ -374,6 +533,14 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
                 <div className="flex items-center gap-2 shrink-0">
                   <button
                     type="button"
+                    onClick={() => void openContextModal(link)}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[hsl(var(--border))] text-xs font-semibold text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-all"
+                  >
+                    <FileText className="h-3.5 w-3.5" />
+                    Contexto IA
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => void copyLink(link.public_token, link.id)}
                     className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[hsl(var(--border))] text-xs font-semibold text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-all"
                   >
@@ -399,6 +566,156 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
               </div>
             );
           })}
+        </div>
+      )}
+
+      {showContextModal && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/60 backdrop-blur-sm sm:items-center">
+          <div className="flex w-full max-w-lg max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-5 border-b border-[hsl(var(--border))]">
+              <div>
+                <h2 className="text-base font-bold text-[hsl(var(--foreground))]">Contexto do projeto para a IA</h2>
+                <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
+                  {editingContextLink?.client_name || editingContextLink?.name || 'Link do cliente'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={closeContextModal}
+                className="p-1.5 rounded-xl hover:bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] transition-all"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              {error && (
+                <div className="rounded-xl border border-red-500/20 bg-red-500/8 px-4 py-3 text-xs text-red-300">{error}</div>
+              )}
+
+              {contextModalLoading ? (
+                <div className="flex items-center justify-center h-36 text-[hsl(var(--muted-foreground))]">
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" /> Carregando contexto...
+                </div>
+              ) : (
+                <div className="space-y-3 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]/50 p-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1.5">
+                      Contexto do projeto para a IA
+                    </label>
+                    <p className="text-[11px] leading-5 text-[hsl(var(--muted-foreground))] mb-2">
+                      {CONTEXT_GUIDANCE}
+                    </p>
+                    <textarea
+                      value={contextModalText}
+                      onChange={(e) => setContextModalText(e.target.value)}
+                      placeholder="Cole aqui o contexto do projeto para personalizar a analise semanal."
+                      rows={7}
+                      className="w-full resize-y px-3 py-2.5 rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]/60 outline-none focus:border-indigo-500/50"
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Arquivos de apoio</div>
+                        <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">Formatos aceitos: PDF, DOCX e TXT.</div>
+                      </div>
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[hsl(var(--border))] px-3 py-2 text-xs font-semibold text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-all">
+                        <Plus className="h-3.5 w-3.5" />
+                        Adicionar arquivos
+                        <input
+                          type="file"
+                          accept=".pdf,.docx,.txt"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => {
+                            addNewContextFiles(e.target.files);
+                            e.currentTarget.value = '';
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    {existingContextFiles.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--muted-foreground))]">Arquivos atuais</div>
+                        {existingContextFiles.map((file) => (
+                          <div
+                            key={file.id}
+                            className="flex items-center justify-between gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))]/70 px-3 py-2"
+                          >
+                            <div className="min-w-0 flex items-center gap-2">
+                              <FileText className="h-4 w-4 shrink-0 text-indigo-300" />
+                              <div className="min-w-0">
+                                <div className="truncate text-sm text-[hsl(var(--foreground))]">{file.name}</div>
+                                <div className="text-[11px] text-[hsl(var(--muted-foreground))]">
+                                  {(file.size_bytes / 1024 / 1024).toFixed(2)} MB · {file.indexing_status}
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeExistingContextFile(file.id)}
+                              className="rounded-lg p-1.5 text-[hsl(var(--muted-foreground))] hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+
+                    {newContextFiles.length > 0 ? (
+                      <div className="space-y-2">
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[hsl(var(--muted-foreground))]">Novos arquivos</div>
+                        {newContextFiles.map((file) => (
+                          <div
+                            key={`${file.name}:${file.size}`}
+                            className="flex items-center justify-between gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))]/70 px-3 py-2"
+                          >
+                            <div className="min-w-0 flex items-center gap-2">
+                              <FileText className="h-4 w-4 shrink-0 text-indigo-300" />
+                              <div className="min-w-0">
+                                <div className="truncate text-sm text-[hsl(var(--foreground))]">{file.name}</div>
+                                <div className="text-[11px] text-[hsl(var(--muted-foreground))]">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeNewContextFile(file.name, file.size)}
+                              className="rounded-lg p-1.5 text-[hsl(var(--muted-foreground))] hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-3 border-t border-[hsl(var(--border))] bg-[hsl(var(--background))] px-6 py-4">
+              <button
+                type="button"
+                onClick={closeContextModal}
+                className="flex-1 py-2.5 rounded-xl border border-[hsl(var(--border))] text-sm font-semibold text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--secondary))] transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={saveContextModal}
+                disabled={contextModalSaving || contextModalLoading || !editingContextLink}
+                className="flex-1 flex items-center justify-center gap-2 py-2.5 rounded-xl bg-indigo-500 text-white text-sm font-semibold hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {contextModalSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                {contextModalSaving ? 'Salvando...' : 'Salvar contexto'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
