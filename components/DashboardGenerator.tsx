@@ -404,8 +404,8 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-2xl">
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 bg-black/60 backdrop-blur-sm sm:items-center">
+          <div className="flex w-full max-w-lg max-h-[calc(100vh-2rem)] flex-col overflow-hidden rounded-3xl border border-[hsl(var(--border))] bg-[hsl(var(--background))] shadow-2xl">
             <div className="flex items-center justify-between px-6 py-5 border-b border-[hsl(var(--border))]">
               <div>
                 <h2 className="text-base font-bold text-[hsl(var(--foreground))]">
@@ -421,7 +421,7 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
             </div>
 
             {modalStep === 'done' ? (
-              <div className="p-6 space-y-4">
+              <div className="overflow-y-auto p-6 space-y-4">
                 <div className="rounded-2xl bg-emerald-500/8 border border-emerald-500/20 p-4">
                   <p className="text-xs font-semibold text-emerald-400 uppercase tracking-wider mb-2">Link do cliente</p>
                   <div className="flex items-center gap-2">
@@ -452,13 +452,14 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
                 </button>
               </div>
             ) : (
-              <div className="p-6 space-y-4">
+              <>
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
                 {error && (
                   <div className="rounded-xl border border-red-500/20 bg-red-500/8 px-4 py-3 text-xs text-red-300">{error}</div>
                 )}
 
                 {/* Name fields */}
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <div>
                     <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1.5">Nome do link</label>
                     <input
@@ -677,9 +678,9 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
                     </div>
                   )}
                 </div>
+              </div>
 
-                {/* Actions */}
-                <div className="flex gap-3 pt-2">
+                <div className="flex gap-3 border-t border-[hsl(var(--border))] bg-[hsl(var(--background))] px-6 py-4">
                   <button
                     type="button"
                     onClick={() => setShowModal(false)}
@@ -697,7 +698,7 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
                     {saving ? 'Gerando...' : 'Gerar link'}
                   </button>
                 </div>
-              </div>
+              </>
             )}
           </div>
         </div>
