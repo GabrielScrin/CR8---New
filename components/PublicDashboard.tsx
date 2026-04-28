@@ -1198,15 +1198,26 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                     return (
                       <div key={ad.id} className="px-5 py-4 transition-colors hover:bg-white/[0.02]">
                         <div className="mb-2.5 flex items-start gap-3">
-                          {ad.thumbnailUrl ? (
-                            <img
-                              src={ad.thumbnailUrl}
-                              alt={ad.name}
-                              className="h-14 w-14 shrink-0 rounded-lg object-cover bg-white/[0.05]"
-                            />
-                          ) : (
-                            <div className="h-14 w-14 shrink-0 rounded-lg bg-white/[0.05]" />
-                          )}
+                          <a
+                            href={`https://www.facebook.com/ads/library/?id=${ad.id}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Ver anúncio na Biblioteca de Anúncios"
+                            className="group relative shrink-0"
+                          >
+                            {ad.thumbnailUrl ? (
+                              <img
+                                src={ad.thumbnailUrl}
+                                alt={ad.name}
+                                className="h-14 w-14 rounded-lg object-cover bg-white/[0.05]"
+                              />
+                            ) : (
+                              <div className="h-14 w-14 rounded-lg bg-white/[0.05]" />
+                            )}
+                            <div className="absolute inset-0 flex items-center justify-center rounded-lg bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <ExternalLink className="h-4 w-4 text-white" />
+                            </div>
+                          </a>
                           <div className="flex min-w-0 flex-1 items-start justify-between gap-4">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
@@ -1215,10 +1226,9 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                                 href={`https://www.facebook.com/ads/library/?id=${ad.id}`}
                                 target="_blank"
                                 rel="noopener noreferrer"
-                                title="Ver anúncio na Biblioteca de Anúncios"
-                                className="shrink-0 text-white/30 hover:text-white/70 transition-colors"
+                                className="shrink-0 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold text-white/50 hover:text-white/90 hover:bg-white/[0.06] transition-colors"
                               >
-                                <ExternalLink className="h-3.5 w-3.5" />
+                                Abrir <ExternalLink className="h-2.5 w-2.5" />
                               </a>
                             </div>
                           </div>

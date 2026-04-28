@@ -3229,9 +3229,9 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 title="Ver anúncio na Biblioteca de Anúncios"
-                                className="ml-1 inline-flex items-center hover:text-[hsl(var(--primary))]"
+                                className="ml-2 inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold bg-[hsl(var(--secondary))] text-[hsl(var(--muted-foreground))] hover:text-[hsl(var(--primary))] hover:bg-[hsl(var(--secondary))] transition-colors"
                               >
-                                <Link2 className="w-3 h-3" />
+                                Ver anúncio <ExternalLink className="w-2.5 h-2.5" />
                               </a>
                             )}
                             {selectedLevel === 'ad' && !demoMode && row.imageUrl ? (
