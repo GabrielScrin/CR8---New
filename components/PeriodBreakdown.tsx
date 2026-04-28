@@ -81,7 +81,7 @@ export function PeriodBreakdown({ companyId, adAccountId, demoMode }: PeriodBrea
   const [expanded, setExpanded] = useState(false);
 
   const loadData = useCallback(async () => {
-    if (!adAccountId || demoMode) return;
+    if (!adAccountId || demoMode) { setLoading(false); return; }
     setLoading(true);
     setRawData([]);
     try {
@@ -265,11 +265,11 @@ export function PeriodBreakdown({ companyId, adAccountId, demoMode }: PeriodBrea
     return out;
   }, [rawData, view, expanded]);
 
-  if (!adAccountId || demoMode) return null;
-
   const maxSpend = Math.max(...slots.map(s => s.spend), 0.01);
 
   const TAB_LABELS: Record<PeriodView, string> = { month: 'Mês', week: 'Semana', day: 'Dia' };
+
+  const noAccount = !adAccountId;
 
   return (
     <div
@@ -313,7 +313,11 @@ export function PeriodBreakdown({ companyId, adAccountId, demoMode }: PeriodBrea
 
       {/* ── Body ───────────────────────────────────────────────── */}
       <div className="p-5">
-        {loading && slots.length === 0 ? (
+        {noAccount || demoMode ? (
+          <div className="py-8 text-center text-sm text-[hsl(var(--muted-foreground))]">
+            Selecione uma conta Meta Ads para ver os resultados por período.
+          </div>
+        ) : loading && slots.length === 0 ? (
           /* Skeleton */
           <div className="flex gap-3">
             {[0, 1, 2, 3].map(i => (
