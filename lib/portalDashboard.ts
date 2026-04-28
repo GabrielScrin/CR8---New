@@ -65,6 +65,7 @@ export type PerformanceTimelineBucket = {
   end: string;
   spend: number;
   results: number;
+  cpl: number | null;
   ctr: number;
   cpm: number;
   roas: number | null;

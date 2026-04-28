@@ -165,6 +165,7 @@ type PerformanceTimelineBucket = {
   end: string;
   spend: number;
   results: number;
+  cpl: number | null;
   ctr: number;
   cpm: number;
   roas: number | null;
@@ -3098,6 +3099,18 @@ const loadRevenueDaySeries = async (
 const sumRevenueInRange = (revenueByDay: Map<string, number>, startIso: string, endIso: string) =>
   daySeries(startIso, endIso).reduce((sum, date) => sum + (revenueByDay.get(date) ?? 0), 0);
 
+const PERFORMANCE_TIMELINE_PRIORITY: Array<{
+  key: string;
+  label: string;
+  pickValue: (row: ReturnType<typeof normalizeMetaInsightRow>) => number;
+}> = [
+  { key: 'messagesStarted', label: 'Mensagens iniciadas', pickValue: (row) => row.messagesStarted },
+  { key: 'leadForms', label: 'Lead Forms', pickValue: (row) => row.leadForms },
+  { key: 'siteLeads', label: 'Leads no site', pickValue: (row) => row.siteLeads },
+  { key: 'profileVisits', label: 'Visitas ao perfil', pickValue: (row) => row.profileVisits },
+  { key: 'thruplays', label: 'ThruPlays', pickValue: (row) => row.thruplays },
+];
+
 const buildPerformanceTimelineBucket = (
   input: {
     key: string;
@@ -3109,33 +3122,41 @@ const buildPerformanceTimelineBucket = (
   rows: Array<ReturnType<typeof normalizeMetaInsightRow>>,
   revenueByDay: Map<string, number>,
 ): PerformanceTimelineBucket => {
-  const nativeMap = new Map<string, { key: string; label: string; value: number; spend: number }>();
+  const metricMap = new Map<string, { key: string; label: string; value: number; spend: number; priority: number }>();
   let spend = 0;
   let impressions = 0;
   let clicks = 0;
-  let results = 0;
+  let primaryResults = 0;
+  let fallbackResults = 0;
 
   for (const row of rows) {
     spend += row.spend;
     impressions += row.impressions;
     clicks += row.clicks;
-    results += row.results;
 
-    if (row.nativeResultValue > 0) {
-      const nativeKey = row.nativeResultType || row.nativeResultLabel || 'results';
-      const previous = nativeMap.get(nativeKey) ?? {
-        key: nativeKey,
-        label: row.nativeResultLabel || 'Resultados',
+    for (let index = 0; index < PERFORMANCE_TIMELINE_PRIORITY.length; index += 1) {
+      const metric = PERFORMANCE_TIMELINE_PRIORITY[index];
+      const metricValue = metric.pickValue(row);
+      if (metricValue <= 0) continue;
+
+      const previous = metricMap.get(metric.key) ?? {
+        key: metric.key,
+        label: metric.label,
         value: 0,
         spend: 0,
+        priority: index,
       };
-      previous.value += row.nativeResultValue;
+      previous.value += metricValue;
       previous.spend += row.spend;
-      nativeMap.set(nativeKey, previous);
+      metricMap.set(metric.key, previous);
+
+      if (index <= 2) primaryResults += metricValue;
+      if (index >= 3) fallbackResults += metricValue;
     }
   }
 
   const revenue = sumRevenueInRange(revenueByDay, input.start, input.end);
+  const results = primaryResults > 0 ? primaryResults : fallbackResults;
   return {
     key: input.key,
     label: input.label,
@@ -3144,11 +3165,12 @@ const buildPerformanceTimelineBucket = (
     end: input.end,
     spend,
     results,
+    cpl: results > 0 ? spend / results : null,
     ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
     cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
     roas: revenue > 0 && spend > 0 ? revenue / spend : null,
-    metrics: Array.from(nativeMap.values())
-      .sort((a, b) => b.value - a.value || b.spend - a.spend)
+    metrics: Array.from(metricMap.values())
+      .sort((a, b) => a.priority - b.priority || b.value - a.value || b.spend - a.spend)
       .slice(0, 3)
       .map((item) => ({
         key: item.key,
@@ -3171,7 +3193,7 @@ const buildMetaPerformanceTimeline = async (
   const currentMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
   const monthlyStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 11, 1));
   const currentWeekStartIso = getSundayWeekStartIso(today);
-  const weeklyStartIso = shiftUtcDate(new Date(`${currentWeekStartIso}T00:00:00.000Z`), -21).toISOString().slice(0, 10);
+  const weeklyStartIso = shiftUtcDate(new Date(`${currentWeekStartIso}T00:00:00.000Z`), -77).toISOString().slice(0, 10);
   const dailyStartIso = shiftUtcDate(today, -14).toISOString().slice(0, 10);
   const shortRangeStartIso = weeklyStartIso < dailyStartIso ? weeklyStartIso : dailyStartIso;
   const revenueByDay = await loadRevenueDaySeries(supabaseAdmin, companyId, monthlyStart.toISOString().slice(0, 10), nextDateIso(todayIso));
@@ -3204,7 +3226,7 @@ const buildMetaPerformanceTimeline = async (
   }
 
   const weekly: PerformanceTimelineBucket[] = [];
-  for (let offset = 0; offset < 4; offset += 1) {
+  for (let offset = 0; offset < 12; offset += 1) {
     const startIso = shiftUtcDate(new Date(`${currentWeekStartIso}T00:00:00.000Z`), -7 * offset).toISOString().slice(0, 10);
     const endIso = clampRangeEndIso(getSaturdayWeekEndIso(startIso), todayIso);
     weekly.push(

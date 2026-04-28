@@ -509,36 +509,37 @@ const PerformanceTimelineTable: React.FC<{
   title: string;
   description: string;
   buckets: PerformanceTimelineBucket[];
-  monthly?: boolean;
-  visibleMonthlyCount?: number;
-  onExpandMonthly?: () => void;
-  onResetMonthly?: () => void;
-  hasMoreMonthly?: boolean;
-}> = ({ title, description, buckets, monthly, visibleMonthlyCount, onExpandMonthly, onResetMonthly, hasMoreMonthly }) => (
+  expandable?: boolean;
+  expandLabel?: string;
+  visibleCount?: number;
+  onExpand?: () => void;
+  onReset?: () => void;
+  hasMore?: boolean;
+}> = ({ title, description, buckets, expandable, expandLabel, visibleCount, onExpand, onReset, hasMore }) => (
   <div>
     <div className="mb-4 flex items-center justify-between gap-3">
       <div>
         <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/30">{title}</div>
         <div className="mt-1 text-sm text-white/55">{description}</div>
       </div>
-      {monthly ? (
+      {expandable ? (
         <div className="flex items-center gap-2">
-          {(visibleMonthlyCount ?? 4) > 4 ? (
+          {(visibleCount ?? 4) > 4 ? (
             <button
               type="button"
-              onClick={onResetMonthly}
+              onClick={onReset}
               className="rounded-xl border border-white/[0.08] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/65 transition-colors hover:text-white"
             >
               Ver menos
             </button>
           ) : null}
-          {hasMoreMonthly ? (
+          {hasMore ? (
             <button
               type="button"
-              onClick={onExpandMonthly}
+              onClick={onExpand}
               className="rounded-xl bg-indigo-600 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_10px_28px_rgba(79,70,229,0.32)]"
             >
-              Ver +4 meses
+              {expandLabel ?? 'Ver mais'}
             </button>
           ) : null}
         </div>
@@ -548,10 +549,11 @@ const PerformanceTimelineTable: React.FC<{
     <div className="overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#090d17]/90">
       <div className="overflow-x-auto">
         <div className="min-w-[1320px]">
-          <div className="grid grid-cols-[160px_140px_110px_170px_170px_170px_96px_112px_88px] border-b border-white/[0.08] bg-white/[0.03] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-white/30">
+          <div className="grid grid-cols-[160px_140px_110px_110px_170px_170px_170px_96px_112px_88px] border-b border-white/[0.08] bg-white/[0.03] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-white/30">
             <div>Periodo</div>
             <div>Invest.</div>
             <div>Consol.</div>
+            <div>CPL</div>
             <div>Resultado 1</div>
             <div>Resultado 2</div>
             <div>Resultado 3</div>
@@ -564,7 +566,7 @@ const PerformanceTimelineTable: React.FC<{
             {buckets.map((bucket, index) => (
               <div
                 key={bucket.key}
-                className={`grid grid-cols-[160px_140px_110px_170px_170px_170px_96px_112px_88px] items-center px-4 py-3 transition-colors hover:bg-white/[0.025] ${
+                className={`grid grid-cols-[160px_140px_110px_110px_170px_170px_170px_96px_112px_88px] items-center px-4 py-3 transition-colors hover:bg-white/[0.025] ${
                   index % 2 === 0 ? 'bg-transparent' : 'bg-white/[0.012]'
                 }`}
               >
@@ -579,6 +581,7 @@ const PerformanceTimelineTable: React.FC<{
                   <div className="text-sm font-black text-emerald-300">{compactNum(bucket.results)}</div>
                   <div className="mt-0.5 text-[10px] text-white/35">Consolidadas</div>
                 </div>
+                <div className="text-sm font-bold text-white">{bucket.cpl !== null ? brl(bucket.cpl) : '—'}</div>
                 <TimelineMetricCell metric={bucket.metrics[0]} accent="#6366f1" />
                 <TimelineMetricCell metric={bucket.metrics[1]} accent="#10b981" />
                 <TimelineMetricCell metric={bucket.metrics[2]} accent="#f59e0b" />
@@ -596,11 +599,14 @@ const PerformanceTimelineTable: React.FC<{
 
 const PerformanceTimelineSection: React.FC<{ timeline: MetaPerformanceTimeline }> = ({ timeline }) => {
   const [visibleMonthlyCount, setVisibleMonthlyCount] = useState(4);
+  const [visibleWeeklyCount, setVisibleWeeklyCount] = useState(4);
   const monthlyBuckets = timeline.monthly ?? [];
   const weeklyBuckets = timeline.weekly ?? [];
   const dailyBuckets = timeline.daily ?? [];
   const hasMoreMonthly = monthlyBuckets.slice(visibleMonthlyCount).some((bucket) => bucket.spend > 0);
+  const hasMoreWeekly = weeklyBuckets.slice(visibleWeeklyCount).some((bucket) => bucket.spend > 0);
   const visibleMonthlyBuckets = monthlyBuckets.slice(0, Math.min(visibleMonthlyCount, monthlyBuckets.length));
+  const visibleWeeklyBuckets = weeklyBuckets.slice(0, Math.min(visibleWeeklyCount, weeklyBuckets.length));
 
   return (
     <div className="overflow-hidden rounded-[30px] border border-white/[0.08] bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.10),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.10),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.02))] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.26)] sm:p-6">
@@ -620,17 +626,24 @@ const PerformanceTimelineSection: React.FC<{ timeline: MetaPerformanceTimeline }
           title="Mes"
           description="Ultimos 4 meses, com expansao para historico adicional com gasto."
           buckets={visibleMonthlyBuckets}
-          monthly
-          visibleMonthlyCount={visibleMonthlyCount}
-          hasMoreMonthly={hasMoreMonthly}
-          onExpandMonthly={() => setVisibleMonthlyCount((current) => Math.min(current + 4, monthlyBuckets.length))}
-          onResetMonthly={() => setVisibleMonthlyCount(4)}
+          expandable
+          visibleCount={visibleMonthlyCount}
+          hasMore={hasMoreMonthly}
+          expandLabel="Ver +4 meses"
+          onExpand={() => setVisibleMonthlyCount((current) => Math.min(current + 4, monthlyBuckets.length))}
+          onReset={() => setVisibleMonthlyCount(4)}
         />
 
         <PerformanceTimelineTable
           title="Semana"
-          description="4 semanas retroativas, de domingo a sabado, incluindo a semana atual."
-          buckets={weeklyBuckets}
+          description="4 semanas retroativas, de domingo a sabado, com expansao em blocos de 4 quando houver gasto."
+          buckets={visibleWeeklyBuckets}
+          expandable
+          visibleCount={visibleWeeklyCount}
+          hasMore={hasMoreWeekly}
+          expandLabel="Ver +4 semanas"
+          onExpand={() => setVisibleWeeklyCount((current) => Math.min(current + 4, weeklyBuckets.length))}
+          onReset={() => setVisibleWeeklyCount(4)}
         />
 
         <PerformanceTimelineTable
@@ -702,11 +715,15 @@ const useCampaignMetrics = (summary: MetaSummary | undefined, prevSummary: MetaS
     const s = summary;
     const p = prevSummary;
     const totalLeads = s.leadForms + s.siteLeads;
+    const primaryResults = s.messagesStarted + s.leadForms + s.siteLeads;
+    const prevPrimaryResults = (p?.messagesStarted ?? 0) + (p?.leadForms ?? 0) + (p?.siteLeads ?? 0);
 
     return {
       ...s,
       totalLeads,
       cpl: totalLeads > 0 ? s.spend / totalLeads : 0,
+      primaryResults,
+      primaryCostPerResult: primaryResults > 0 ? s.spend / primaryResults : 0,
       connectRate: s.linkClicks > 0 ? (s.landingPageViews / s.linkClicks) * 100 : 0,
       hasLeads: totalLeads > 0,
       hasMsgs: s.messagesStarted > 0,
@@ -716,6 +733,8 @@ const useCampaignMetrics = (summary: MetaSummary | undefined, prevSummary: MetaS
       prevSpend: p?.spend ?? 0,
       prevReach: p?.reach ?? 0,
       prevImpressions: p?.impressions ?? 0,
+      prevPrimaryResults,
+      prevPrimaryCostPerResult: prevPrimaryResults > 0 ? (p?.spend ?? 0) / prevPrimaryResults : 0,
       prevLeadForms: p?.leadForms ?? 0,
       prevMsgs: p?.messagesStarted ?? 0,
       prevLinkClicks: p?.linkClicks ?? 0,
@@ -1046,11 +1065,12 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
           <>
             <div>
               <SectionLabel>Investimento &amp; Alcance</SectionLabel>
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
+              <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-5">
                 <KpiCard label="Valor Investido" value={brl(metrics?.spend ?? 0)} delta={delta(metrics?.spend ?? 0, metrics?.prevSpend ?? 0)} accent="#6366f1" hint="vs período anterior" />
                 <KpiCard label="Alcance" value={num(metrics?.reach ?? 0)} delta={delta(metrics?.reach ?? 0, metrics?.prevReach ?? 0)} accent="#a855f7" />
                 <KpiCard label="Impressões" value={num(metrics?.impressions ?? 0)} delta={delta(metrics?.impressions ?? 0, metrics?.prevImpressions ?? 0)} accent="#8b5cf6" />
                 <KpiCard label="Frequência" value={(metrics?.frequency ?? 0).toFixed(2)} accent="#64748b" />
+                <KpiCard label="CPL" value={brl(metrics?.primaryCostPerResult ?? 0)} delta={delta(metrics?.primaryCostPerResult ?? 0, metrics?.prevPrimaryCostPerResult ?? 0)} accent="#10b981" invertDelta />
               </div>
             </div>
 
