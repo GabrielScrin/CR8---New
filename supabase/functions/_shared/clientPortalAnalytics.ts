@@ -150,6 +150,33 @@ type DailyPoint = {
   thruplays: number;
 };
 
+type PerformanceTimelineMetric = {
+  key: string;
+  label: string;
+  value: number;
+  costPerResult: number | null;
+};
+
+type PerformanceTimelineBucket = {
+  key: string;
+  label: string;
+  shortLabel: string;
+  start: string;
+  end: string;
+  spend: number;
+  results: number;
+  ctr: number;
+  cpm: number;
+  roas: number | null;
+  metrics: PerformanceTimelineMetric[];
+};
+
+type MetaPerformanceTimeline = {
+  monthly: PerformanceTimelineBucket[];
+  weekly: PerformanceTimelineBucket[];
+  daily: PerformanceTimelineBucket[];
+};
+
 type MetaOverview = {
   available: boolean;
   reason?: string;
@@ -179,6 +206,7 @@ type MetaOverview = {
   };
   timeseries: DailyPoint[];
   campaigns: MetaCampaignRow[];
+  performanceTimeline: MetaPerformanceTimeline;
 };
 
 type GoogleOverview = {
@@ -347,6 +375,30 @@ const daySeries = (startIso: string, endIso: string) => {
   return points;
 };
 
+const getMonthStartIso = (value: Date) => new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth(), 1)).toISOString().slice(0, 10);
+
+const getMonthEndIso = (value: Date) => new Date(Date.UTC(value.getUTCFullYear(), value.getUTCMonth() + 1, 0)).toISOString().slice(0, 10);
+
+const getSundayWeekStartIso = (value: Date) => {
+  const weekday = value.getUTCDay();
+  return shiftUtcDate(value, -weekday).toISOString().slice(0, 10);
+};
+
+const getSaturdayWeekEndIso = (weekStartIso: string) =>
+  shiftUtcDate(new Date(`${weekStartIso}T00:00:00.000Z`), 6).toISOString().slice(0, 10);
+
+const formatMonthShortPt = (dateIso: string) =>
+  new Intl.DateTimeFormat('pt-BR', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+    .format(new Date(`${dateIso}T00:00:00.000Z`))
+    .replace('.', '');
+
+const formatDayShortPt = (dateIso: string) =>
+  new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: 'short', timeZone: 'UTC' })
+    .format(new Date(`${dateIso}T00:00:00.000Z`))
+    .replace('.', '');
+
+const clampRangeEndIso = (endIso: string, maxIso: string) => (endIso <= maxIso ? endIso : maxIso);
+
 const normalizeActionType = (actionType: unknown) => String(actionType ?? '').trim().toLowerCase();
 
 const extractActionSum = (actions: any[] | undefined, matcher: (actionType: string) => boolean) => {
@@ -493,6 +545,11 @@ const buildEmptyMetaOverview = (reason: string): MetaOverview => ({
   },
   timeseries: [],
   campaigns: [],
+  performanceTimeline: {
+    monthly: [],
+    weekly: [],
+    daily: [],
+  },
 });
 
 const buildEmptyGoogleOverview = (reason: string): GoogleOverview => ({
@@ -671,6 +728,7 @@ const fetchMetaInsights = async (
   dateFrom: string,
   dateTo: string,
   campaignIds: string[],
+  timeIncrement = '1',
 ) => {
   const rows: any[] = [];
   let nextUrl: string | null = null;
@@ -682,9 +740,9 @@ const fetchMetaInsights = async (
       'campaign_id,campaign_name,date_start,spend,impressions,reach,clicks,inline_link_clicks,ctr,cpc,cpm,frequency,actions,results,cost_per_result,cost_per_action_type,instagram_profile_visits,video_thruplay_watched_actions',
     );
     url.searchParams.set('level', 'campaign');
-    url.searchParams.set('time_increment', '1');
+    url.searchParams.set('time_increment', timeIncrement);
     url.searchParams.set('time_range', JSON.stringify({ since: dateFrom, until: dateTo }));
-    url.searchParams.set('limit', '100');
+    url.searchParams.set('limit', '500');
     url.searchParams.set('access_token', metaAccessToken);
     if (campaignIds.length > 0) {
       url.searchParams.set('filtering', JSON.stringify([{ field: 'campaign.id', operator: 'IN', value: campaignIds }]));
@@ -692,7 +750,7 @@ const fetchMetaInsights = async (
     return url.toString();
   };
 
-  for (let page = 0; page < 8; page += 1) {
+  for (let page = 0; page < 25; page += 1) {
     const json = await fetchJson(nextUrl ?? makeFirstUrl());
     const pageRows = Array.isArray(json?.data) ? json.data : [];
     rows.push(...pageRows);
@@ -962,63 +1020,32 @@ const aggregateMetaOverview = async (
     const dailyMap = new Map<string, DailyPoint>();
 
     for (const row of rows) {
-      const campaignId = asString(row?.campaign_id);
-      const campaignName = asString(row?.campaign_name) || campaignId || 'Campanha';
-      const date = asString(row?.date_start);
-      const spend = asNumber(row?.spend);
-      const impressions = asNumber(row?.impressions);
-      const reach = asNumber(row?.reach);
-      const clicks = asNumber(row?.clicks);
-      const linkClicks = asNumber(row?.inline_link_clicks);
-      const ctr = asNumber(row?.ctr);
-      const cpc = asNumber(row?.cpc);
-      const cpm = asNumber(row?.cpm);
-      const frequency = asNumber(row?.frequency);
-      const actions = Array.isArray(row?.actions) ? row.actions : [];
-      const resultsPayload = Array.isArray(row?.results) ? row.results : [];
-      const contextNativeType = inferNativeTypeFromContext({ nameHint: campaignName });
-      const resultIndicator = extractResultIndicator(resultsPayload, contextNativeType);
-      const resultValue = extractResultValue(resultsPayload, contextNativeType);
-      const resultNativeType = nativeTypeFromResultIndicator(resultIndicator);
-      const effectiveNativeType = contextNativeType === 'messages_started'
-        ? contextNativeType
-        : resultNativeType !== 'unknown'
-          ? resultNativeType
-          : contextNativeType;
-      const isProfileVisitCampaign = resultIndicator === 'profile_visit_view';
-      const costPerActionType = Array.isArray(row?.cost_per_action_type) ? row.cost_per_action_type : [];
-      const videoThruplayActions = Array.isArray(row?.video_thruplay_watched_actions) ? row.video_thruplay_watched_actions : [];
-      const rawLeadForms = isProfileVisitCampaign ? 0 : extractLeadForms(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLeadForms);
-      const rawMessagesStarted = isProfileVisitCampaign ? 0 : extractMessagingStarted(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractMessagingStarted);
-      const rawSiteLeads = isProfileVisitCampaign ? 0 : extractSiteLeads(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractSiteLeads);
-      const landingPageViews = extractLandingPageViews(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLandingPageViews);
-      const profileVisits =
-        asNumber(row?.instagram_profile_visits) ||
-        (isProfileVisitCampaign ? resultValue : 0) ||
-        extractProfileVisits(actions) ||
-        deriveCountFromCostPerAction(spend, costPerActionType, extractProfileVisits);
-      const followers = 0;
-      const videoViews = extractVideoViews(actions);
-      const thruplays =
-        extractThruplays(actions) ||
-        extractActionTotal(videoThruplayActions) ||
-        deriveCountFromCostPerAction(spend, costPerActionType, extractThruplays);
-      const hookRate = impressions > 0 ? videoViews / impressions : 0;
-      const holdRate = videoViews > 0 ? thruplays / videoViews : 0;
-      let leadForms = rawLeadForms;
-      let messagesStarted = rawMessagesStarted;
-      let siteLeads = rawSiteLeads;
-
-      if (effectiveNativeType !== 'unknown') {
-        leadForms = 0;
-        messagesStarted = 0;
-        siteLeads = 0;
-        if (effectiveNativeType === 'lead_forms') leadForms = resultValue || rawLeadForms || rawSiteLeads;
-        if (effectiveNativeType === 'site_leads') siteLeads = resultValue || rawSiteLeads || rawLeadForms;
-        if (effectiveNativeType === 'messages_started') messagesStarted = resultValue || rawMessagesStarted;
-      }
-
-      const results = leadForms + messagesStarted + siteLeads;
+      const normalized = normalizeMetaInsightRow(row);
+      const {
+        campaignId,
+        campaignName,
+        date,
+        spend,
+        impressions,
+        reach,
+        clicks,
+        linkClicks,
+        ctr,
+        cpc,
+        cpm,
+        frequency,
+        results,
+        messagesStarted,
+        leadForms,
+        siteLeads,
+        landingPageViews,
+        profileVisits,
+        followers,
+        videoViews,
+        thruplays,
+        hookRate,
+        holdRate,
+      } = normalized;
 
       if (campaignId) {
         const previous = campaignMap.get(campaignId) ?? {
@@ -1140,6 +1167,11 @@ const aggregateMetaOverview = async (
       summary,
       timeseries,
       campaigns,
+      performanceTimeline: {
+        monthly: [],
+        weekly: [],
+        daily: [],
+      },
     };
   } catch (error: any) {
     return buildEmptyMetaOverview(error?.message ?? 'failed to load meta overview');
@@ -2330,14 +2362,27 @@ export const loadDashboardData = async (
     refreshInstagramTokenIfNeeded(supabaseAdmin, link.company_id, igResolved.token, igResolved.expiresAtMs).catch(() => {});
   }
 
-  const [meta, instagram] = await Promise.all([
+  const [meta, instagram, performanceTimeline] = await Promise.all([
     metaToken
       ? aggregateMetaOverview(metaToken, link.meta_ad_account_id, window.dateFrom, window.dateTo, metaCampaignIds)
       : Promise.resolve(buildEmptyMetaOverview('Meta Ads nao configurado para esta empresa.')),
     link.instagram_business_account_id && igToken
       ? buildInstagramOverview(igToken, link.instagram_business_account_id, window.dateFrom, window.dateTo)
       : Promise.resolve(buildEmptyInstagramOverview('Instagram não configurado para este portal')),
+    metaToken
+      ? buildMetaPerformanceTimeline(supabaseAdmin, link.company_id, metaToken, link.meta_ad_account_id, metaCampaignIds).catch(() => ({
+          monthly: [],
+          weekly: [],
+          daily: [],
+        }))
+      : Promise.resolve({
+          monthly: [],
+          weekly: [],
+          daily: [],
+        }),
   ]);
+
+  meta.performanceTimeline = performanceTimeline;
 
   // also compute previous period for delta
   const prevDays = dateDiffDays(window.dateFrom, window.dateTo) + 1;
@@ -2849,6 +2894,291 @@ const inferNativeResultFromIndicator = (input: {
   }
 
   return { nativeResultType: '', nativeResultLabel: '', nativeResultValue: 0 };
+};
+
+const normalizeMetaInsightRow = (row: any) => {
+  const campaignId = asString(row?.campaign_id);
+  const campaignName = asString(row?.campaign_name) || campaignId || 'Campanha';
+  const date = asString(row?.date_start);
+  const spend = asNumber(row?.spend);
+  const impressions = asNumber(row?.impressions);
+  const reach = asNumber(row?.reach);
+  const clicks = asNumber(row?.clicks);
+  const linkClicks = asNumber(row?.inline_link_clicks);
+  const ctr = asNumber(row?.ctr);
+  const cpc = asNumber(row?.cpc);
+  const cpm = asNumber(row?.cpm);
+  const frequency = asNumber(row?.frequency);
+  const actions = Array.isArray(row?.actions) ? row.actions : [];
+  const resultsPayload = Array.isArray(row?.results) ? row.results : [];
+  const contextNativeType = inferNativeTypeFromContext({ nameHint: campaignName });
+  const resultIndicator = extractResultIndicator(resultsPayload, contextNativeType);
+  const resultValue = extractResultValue(resultsPayload, contextNativeType);
+  const resultNativeType = nativeTypeFromResultIndicator(resultIndicator);
+  const effectiveNativeType =
+    contextNativeType === 'messages_started'
+      ? contextNativeType
+      : resultNativeType !== 'unknown'
+        ? resultNativeType
+        : contextNativeType;
+  const isProfileVisitCampaign = resultIndicator === 'profile_visit_view';
+  const costPerActionType = Array.isArray(row?.cost_per_action_type) ? row.cost_per_action_type : [];
+  const videoThruplayActions = Array.isArray(row?.video_thruplay_watched_actions) ? row.video_thruplay_watched_actions : [];
+  const rawLeadForms = isProfileVisitCampaign ? 0 : extractLeadForms(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLeadForms);
+  const rawMessagesStarted =
+    isProfileVisitCampaign ? 0 : extractMessagingStarted(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractMessagingStarted);
+  const rawSiteLeads = isProfileVisitCampaign ? 0 : extractSiteLeads(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractSiteLeads);
+  const landingPageViews = extractLandingPageViews(actions) || deriveCountFromCostPerAction(spend, costPerActionType, extractLandingPageViews);
+  const profileVisits =
+    asNumber(row?.instagram_profile_visits) ||
+    (isProfileVisitCampaign ? resultValue : 0) ||
+    extractProfileVisits(actions) ||
+    deriveCountFromCostPerAction(spend, costPerActionType, extractProfileVisits);
+  const followers = 0;
+  const videoViews = extractVideoViews(actions);
+  const thruplays =
+    extractThruplays(actions) ||
+    extractActionTotal(videoThruplayActions) ||
+    deriveCountFromCostPerAction(spend, costPerActionType, extractThruplays);
+  let leadForms = rawLeadForms;
+  let messagesStarted = rawMessagesStarted;
+  let siteLeads = rawSiteLeads;
+
+  if (effectiveNativeType !== 'unknown') {
+    leadForms = 0;
+    messagesStarted = 0;
+    siteLeads = 0;
+    if (effectiveNativeType === 'lead_forms') leadForms = resultValue || rawLeadForms || rawSiteLeads;
+    if (effectiveNativeType === 'site_leads') siteLeads = resultValue || rawSiteLeads || rawLeadForms;
+    if (effectiveNativeType === 'messages_started') messagesStarted = resultValue || rawMessagesStarted;
+  }
+
+  const results = leadForms + messagesStarted + siteLeads;
+  const nativeResult = inferNativeResultFromIndicator({
+    indicator: resultIndicator,
+    payloadValue: resultValue,
+    nativeType: effectiveNativeType,
+    messagesStarted,
+    leadForms,
+    siteLeads,
+    landingPageViews,
+    profileVisits,
+    followers,
+    videoViews,
+    thruplays,
+  });
+
+  return {
+    campaignId,
+    campaignName,
+    date,
+    spend,
+    impressions,
+    reach,
+    clicks,
+    linkClicks,
+    ctr,
+    cpc,
+    cpm,
+    frequency,
+    results,
+    messagesStarted,
+    leadForms,
+    siteLeads,
+    landingPageViews,
+    profileVisits,
+    followers,
+    videoViews,
+    thruplays,
+    hookRate: impressions > 0 ? videoViews / impressions : 0,
+    holdRate: videoViews > 0 ? thruplays / videoViews : 0,
+    nativeResultType: nativeResult.nativeResultType || effectiveNativeType,
+    nativeResultLabel: nativeResult.nativeResultLabel || labelForNativeType(effectiveNativeType, thruplays > 0),
+    nativeResultValue: nativeResult.nativeResultValue || valueForNativeType(effectiveNativeType, {
+      messagesStarted,
+      leadForms,
+      siteLeads,
+      landingPageViews,
+      profileVisits,
+      followers,
+      videoViews,
+      thruplays,
+    }),
+  };
+};
+
+const loadRevenueDaySeries = async (
+  supabaseAdmin: SupabaseClient,
+  companyId: string,
+  startIso: string,
+  endExclusiveIso: string,
+) => {
+  const revenueByDay = new Map<string, number>();
+  const { data, error } = await supabaseAdmin
+    .from('leads')
+    .select('updated_at,value')
+    .eq('company_id', companyId)
+    .eq('status', 'won')
+    .gte('updated_at', `${startIso}T00:00:00.000Z`)
+    .lt('updated_at', `${endExclusiveIso}T00:00:00.000Z`);
+
+  if (error) throw error;
+
+  for (const row of (data ?? []) as Array<{ updated_at?: string | null; value?: number | null }>) {
+    const date = asString(row?.updated_at).slice(0, 10);
+    if (!date) continue;
+    revenueByDay.set(date, (revenueByDay.get(date) ?? 0) + asNumber(row?.value));
+  }
+
+  return revenueByDay;
+};
+
+const sumRevenueInRange = (revenueByDay: Map<string, number>, startIso: string, endIso: string) =>
+  daySeries(startIso, endIso).reduce((sum, date) => sum + (revenueByDay.get(date) ?? 0), 0);
+
+const buildPerformanceTimelineBucket = (
+  input: {
+    key: string;
+    label: string;
+    shortLabel: string;
+    start: string;
+    end: string;
+  },
+  rows: Array<ReturnType<typeof normalizeMetaInsightRow>>,
+  revenueByDay: Map<string, number>,
+): PerformanceTimelineBucket => {
+  const nativeMap = new Map<string, { key: string; label: string; value: number; spend: number }>();
+  let spend = 0;
+  let impressions = 0;
+  let clicks = 0;
+  let results = 0;
+
+  for (const row of rows) {
+    spend += row.spend;
+    impressions += row.impressions;
+    clicks += row.clicks;
+    results += row.results;
+
+    if (row.nativeResultValue > 0) {
+      const nativeKey = row.nativeResultType || row.nativeResultLabel || 'results';
+      const previous = nativeMap.get(nativeKey) ?? {
+        key: nativeKey,
+        label: row.nativeResultLabel || 'Resultados',
+        value: 0,
+        spend: 0,
+      };
+      previous.value += row.nativeResultValue;
+      previous.spend += row.spend;
+      nativeMap.set(nativeKey, previous);
+    }
+  }
+
+  const revenue = sumRevenueInRange(revenueByDay, input.start, input.end);
+  return {
+    key: input.key,
+    label: input.label,
+    shortLabel: input.shortLabel,
+    start: input.start,
+    end: input.end,
+    spend,
+    results,
+    ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
+    cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
+    roas: revenue > 0 && spend > 0 ? revenue / spend : null,
+    metrics: Array.from(nativeMap.values())
+      .sort((a, b) => b.value - a.value || b.spend - a.spend)
+      .slice(0, 3)
+      .map((item) => ({
+        key: item.key,
+        label: item.label,
+        value: item.value,
+        costPerResult: item.value > 0 ? item.spend / item.value : null,
+      })),
+  };
+};
+
+const buildMetaPerformanceTimeline = async (
+  supabaseAdmin: SupabaseClient,
+  companyId: string,
+  metaAccessToken: string,
+  adAccountId: string,
+  campaignIds: string[],
+) => {
+  const todayIso = getSaoPauloDateString();
+  const today = new Date(`${todayIso}T00:00:00.000Z`);
+  const currentMonthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+  const monthlyStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth() - 11, 1));
+  const currentWeekStartIso = getSundayWeekStartIso(today);
+  const weeklyStartIso = shiftUtcDate(new Date(`${currentWeekStartIso}T00:00:00.000Z`), -21).toISOString().slice(0, 10);
+  const dailyStartIso = shiftUtcDate(today, -14).toISOString().slice(0, 10);
+  const shortRangeStartIso = weeklyStartIso < dailyStartIso ? weeklyStartIso : dailyStartIso;
+  const revenueByDay = await loadRevenueDaySeries(supabaseAdmin, companyId, monthlyStart.toISOString().slice(0, 10), nextDateIso(todayIso));
+  const [monthlyRows, dailyRows] = await Promise.all([
+    fetchMetaInsights(metaAccessToken, adAccountId, monthlyStart.toISOString().slice(0, 10), todayIso, campaignIds, 'monthly'),
+    fetchMetaInsights(metaAccessToken, adAccountId, shortRangeStartIso, todayIso, campaignIds, '1'),
+  ]);
+
+  const monthlyNormalized = monthlyRows.map(normalizeMetaInsightRow);
+  const dailyNormalized = dailyRows.map(normalizeMetaInsightRow);
+
+  const monthly: PerformanceTimelineBucket[] = [];
+  for (let offset = 0; offset < 12; offset += 1) {
+    const cursor = new Date(Date.UTC(currentMonthStart.getUTCFullYear(), currentMonthStart.getUTCMonth() - offset, 1));
+    const monthStartIso = getMonthStartIso(cursor);
+    const monthEndIso = clampRangeEndIso(getMonthEndIso(cursor), todayIso);
+    monthly.push(
+      buildPerformanceTimelineBucket(
+        {
+          key: `month:${monthStartIso}`,
+          label: formatMonthShortPt(monthStartIso),
+          shortLabel: formatMonthShortPt(monthStartIso),
+          start: monthStartIso,
+          end: monthEndIso,
+        },
+        monthlyNormalized.filter((row) => row.date === monthStartIso),
+        revenueByDay,
+      ),
+    );
+  }
+
+  const weekly: PerformanceTimelineBucket[] = [];
+  for (let offset = 0; offset < 4; offset += 1) {
+    const startIso = shiftUtcDate(new Date(`${currentWeekStartIso}T00:00:00.000Z`), -7 * offset).toISOString().slice(0, 10);
+    const endIso = clampRangeEndIso(getSaturdayWeekEndIso(startIso), todayIso);
+    weekly.push(
+      buildPerformanceTimelineBucket(
+        {
+          key: `week:${startIso}`,
+          label: `${formatDayShortPt(startIso)} - ${formatDayShortPt(getSaturdayWeekEndIso(startIso))}`,
+          shortLabel: offset === 0 ? 'Semana atual' : `Sem -${offset}`,
+          start: startIso,
+          end: endIso,
+        },
+        dailyNormalized.filter((row) => row.date >= startIso && row.date <= endIso),
+        revenueByDay,
+      ),
+    );
+  }
+
+  const daily: PerformanceTimelineBucket[] = [];
+  for (let offset = 0; offset < 15; offset += 1) {
+    const dateIso = shiftUtcDate(today, -offset).toISOString().slice(0, 10);
+    daily.push(
+      buildPerformanceTimelineBucket(
+        {
+          key: `day:${dateIso}`,
+          label: formatDayShortPt(dateIso),
+          shortLabel: formatDayShortPt(dateIso),
+          start: dateIso,
+          end: dateIso,
+        },
+        dailyNormalized.filter((row) => row.date === dateIso),
+        revenueByDay,
+      ),
+    );
+  }
+
+  return { monthly, weekly, daily };
 };
 
 const classifyAdsByIdc = <T extends { impressions: number; hookRate: number; holdRate: number; ctr: number; cpc: number }>(

@@ -50,6 +50,33 @@ export type DailyPoint = {
   thruplays: number;
 };
 
+export type PerformanceTimelineMetric = {
+  key: string;
+  label: string;
+  value: number;
+  costPerResult: number | null;
+};
+
+export type PerformanceTimelineBucket = {
+  key: string;
+  label: string;
+  shortLabel: string;
+  start: string;
+  end: string;
+  spend: number;
+  results: number;
+  ctr: number;
+  cpm: number;
+  roas: number | null;
+  metrics: PerformanceTimelineMetric[];
+};
+
+export type MetaPerformanceTimeline = {
+  monthly: PerformanceTimelineBucket[];
+  weekly: PerformanceTimelineBucket[];
+  daily: PerformanceTimelineBucket[];
+};
+
 export type Campaign = {
   id: string; name: string; spend: number; impressions: number; reach: number;
   clicks: number; linkClicks: number; ctr: number; cpc: number; cpm: number;
@@ -107,6 +134,7 @@ export type DashboardData = {
     summary: MetaSummary;
     timeseries: DailyPoint[];
     campaigns: Campaign[];
+    performanceTimeline: MetaPerformanceTimeline;
   };
   prevMeta: { available: boolean; summary: MetaSummary };
   instagram: {

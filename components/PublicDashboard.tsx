@@ -34,7 +34,9 @@ import {
   AdBreakdownRow,
   DashboardData,
   DashboardWeekly,
+  MetaPerformanceTimeline,
   MetaSummary,
+  PerformanceTimelineBucket,
   fetchDashboardCampaignAds,
   fetchDashboardBootstrap,
   fetchDashboardData,
@@ -478,6 +480,163 @@ const CampaignPerformanceFunnel: React.FC<{
           ))}
           <MiniMetricPill label="Imp. > Clique" value={pct(impressionToClickRate)} delta={null} />
           <MiniMetricPill label="Imp./Alcance" value={`${reachToImpressionRate.toFixed(2)}x`} delta={null} />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const PeriodMetricChip: React.FC<{ label: string; value: string; accent: string; sub?: string }> = ({ label, value, accent, sub }) => (
+  <div className="rounded-2xl border border-white/[0.07] bg-[#0b1020]/75 px-3 py-2.5">
+    <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/30">{label}</div>
+    <div className="mt-1 text-sm font-black text-white">{value}</div>
+    {sub ? <div className="mt-0.5 text-[10px] text-white/40">{sub}</div> : null}
+    <div className="mt-2 h-1.5 rounded-full bg-white/[0.04]">
+      <div className="h-1.5 rounded-full" style={{ width: '100%', background: accent, opacity: 0.85 }} />
+    </div>
+  </div>
+);
+
+const PerformanceTimelineCard: React.FC<{ bucket: PerformanceTimelineBucket }> = ({ bucket }) => (
+  <div className="relative overflow-hidden rounded-[26px] border border-white/[0.08] bg-[radial-gradient(circle_at_top_right,rgba(99,102,241,0.16),transparent_30%),linear-gradient(180deg,rgba(255,255,255,0.04),rgba(255,255,255,0.02))] p-4 shadow-[0_18px_60px_rgba(0,0,0,0.28)]">
+    <div className="pointer-events-none absolute inset-x-6 top-0 h-px bg-white/12" />
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/28">{bucket.shortLabel}</div>
+        <div className="mt-1 text-sm font-black text-white">{bucket.label}</div>
+        <div className="mt-1 text-[11px] text-white/40">
+          {formatDateBr(bucket.start)} {bucket.start !== bucket.end ? `- ${formatDateBr(bucket.end)}` : ''}
+        </div>
+      </div>
+      <div className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">
+        Consolidadas {compactNum(bucket.results)}
+      </div>
+    </div>
+
+    <div className="mt-4 grid grid-cols-2 gap-3">
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3">
+        <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/28">Investimento</div>
+        <div className="mt-1 text-lg font-black text-white">{brl(bucket.spend)}</div>
+      </div>
+      <div className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-3">
+        <div className="text-[9px] font-bold uppercase tracking-[0.18em] text-white/28">ROAS</div>
+        <div className="mt-1 text-lg font-black text-white">{bucket.roas !== null ? `${bucket.roas.toFixed(2)}x` : '—'}</div>
+      </div>
+    </div>
+
+    <div className="mt-3 grid gap-2">
+      {bucket.metrics.length > 0 ? (
+        bucket.metrics.map((metric, index) => (
+          <PeriodMetricChip
+            key={metric.key}
+            label={metric.label}
+            value={compactNum(metric.value)}
+            sub={metric.costPerResult !== null ? `Custo/resultado ${brl(metric.costPerResult)}` : undefined}
+            accent={['#6366f1', '#10b981', '#f59e0b'][index % 3]}
+          />
+        ))
+      ) : (
+        <div className="rounded-2xl border border-dashed border-white/[0.08] px-3 py-4 text-center text-xs text-white/35">
+          Sem resultado nativo no periodo.
+        </div>
+      )}
+    </div>
+
+    <div className="mt-4 grid grid-cols-3 gap-2">
+      <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2">
+        <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/28">CTR</div>
+        <div className="mt-1 text-sm font-bold text-white">{pct(bucket.ctr)}</div>
+      </div>
+      <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2">
+        <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/28">CPM</div>
+        <div className="mt-1 text-sm font-bold text-white">{brl(bucket.cpm)}</div>
+      </div>
+      <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] px-3 py-2">
+        <div className="text-[9px] font-bold uppercase tracking-[0.16em] text-white/28">Resultados</div>
+        <div className="mt-1 text-sm font-bold text-white">{compactNum(bucket.results)}</div>
+      </div>
+    </div>
+  </div>
+);
+
+const PerformanceTimelineSection: React.FC<{ timeline: MetaPerformanceTimeline }> = ({ timeline }) => {
+  const [visibleMonthlyCount, setVisibleMonthlyCount] = useState(4);
+  const monthlyBuckets = timeline.monthly ?? [];
+  const weeklyBuckets = timeline.weekly ?? [];
+  const dailyBuckets = timeline.daily ?? [];
+  const hasMoreMonthly = monthlyBuckets.slice(visibleMonthlyCount).some((bucket) => bucket.spend > 0);
+  const visibleMonthlyBuckets = monthlyBuckets.slice(0, Math.min(visibleMonthlyCount, monthlyBuckets.length));
+
+  return (
+    <div className="overflow-hidden rounded-[30px] border border-white/[0.08] bg-[radial-gradient(circle_at_top_left,rgba(59,130,246,0.10),transparent_24%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.10),transparent_28%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.02))] p-5 shadow-[0_24px_90px_rgba(0,0,0,0.26)] sm:p-6">
+      <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <SectionLabel>Resultados por Periodo</SectionLabel>
+          <div className="text-lg font-black text-white">Leitura executiva por mes, semana e dia</div>
+          <div className="mt-1 text-sm text-white/50">
+            Consolidado de investimento, resultados nativos, custo por resultado, CTR, CPM e ROAS.
+          </div>
+        </div>
+        <div className="text-xs text-white/35">Janela mensal expansivel em blocos de 4.</div>
+      </div>
+
+      <div className="space-y-8">
+        <div>
+          <div className="mb-4 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/30">Mes</div>
+              <div className="mt-1 text-sm text-white/55">Ultimos 4 meses, com expansao para historico adicional com gasto.</div>
+            </div>
+            <div className="flex items-center gap-2">
+              {visibleMonthlyCount > 4 ? (
+                <button
+                  type="button"
+                  onClick={() => setVisibleMonthlyCount(4)}
+                  className="rounded-xl border border-white/[0.08] px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white/65 transition-colors hover:text-white"
+                >
+                  Ver menos
+                </button>
+              ) : null}
+              {hasMoreMonthly ? (
+                <button
+                  type="button"
+                  onClick={() => setVisibleMonthlyCount((current) => Math.min(current + 4, monthlyBuckets.length))}
+                  className="rounded-xl bg-indigo-600 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.14em] text-white shadow-[0_10px_28px_rgba(79,70,229,0.32)]"
+                >
+                  Ver +4 meses
+                </button>
+              ) : null}
+            </div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {visibleMonthlyBuckets.map((bucket) => (
+              <PerformanceTimelineCard key={bucket.key} bucket={bucket} />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-4">
+            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/30">Semana</div>
+            <div className="mt-1 text-sm text-white/55">4 semanas retroativas, de domingo a sabado, incluindo a semana atual.</div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            {weeklyBuckets.map((bucket) => (
+              <PerformanceTimelineCard key={bucket.key} bucket={bucket} />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <div className="mb-4">
+            <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/30">Dia</div>
+            <div className="mt-1 text-sm text-white/55">15 ultimos dias, incluindo hoje.</div>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+            {dailyBuckets.map((bucket) => (
+              <PerformanceTimelineCard key={bucket.key} bucket={bucket} />
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -1081,6 +1240,10 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
             visibleProfileVisitsCurrent={visibleProfileVisitsCurrent}
             visibleProfileVisitsPrevious={visibleProfileVisitsPrevious}
           />
+        ) : null}
+
+        {isPerf && (meta?.performanceTimeline?.monthly?.length ?? 0) > 0 ? (
+          <PerformanceTimelineSection timeline={meta!.performanceTimeline} />
         ) : null}
 
         <div className="flex items-center justify-between gap-4">
