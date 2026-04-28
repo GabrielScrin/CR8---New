@@ -549,14 +549,14 @@ const PerformanceTimelineTable: React.FC<{
     <div className="overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#090d17]/90">
       <div className="overflow-x-auto">
         <div className="min-w-[1320px]">
-          <div className="grid grid-cols-[160px_140px_110px_110px_170px_170px_170px_96px_112px_88px] border-b border-white/[0.08] bg-white/[0.03] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-white/30">
+          <div className="grid grid-cols-[160px_140px_110px_170px_170px_170px_110px_96px_112px_88px] border-b border-white/[0.08] bg-white/[0.03] px-4 py-3 text-[10px] font-bold uppercase tracking-[0.18em] text-white/30">
             <div>Periodo</div>
             <div>Invest.</div>
             <div>Consol.</div>
-            <div>CPL</div>
             <div>Resultado 1</div>
             <div>Resultado 2</div>
             <div>Resultado 3</div>
+            <div>CPL</div>
             <div>CTR</div>
             <div>CPM</div>
             <div>ROAS</div>
@@ -566,7 +566,7 @@ const PerformanceTimelineTable: React.FC<{
             {buckets.map((bucket, index) => (
               <div
                 key={bucket.key}
-                className={`grid grid-cols-[160px_140px_110px_110px_170px_170px_170px_96px_112px_88px] items-center px-4 py-3 transition-colors hover:bg-white/[0.025] ${
+                className={`grid grid-cols-[160px_140px_110px_170px_170px_170px_110px_96px_112px_88px] items-center px-4 py-3 transition-colors hover:bg-white/[0.025] ${
                   index % 2 === 0 ? 'bg-transparent' : 'bg-white/[0.012]'
                 }`}
               >
@@ -581,10 +581,10 @@ const PerformanceTimelineTable: React.FC<{
                   <div className="text-sm font-black text-emerald-300">{num(bucket.results)}</div>
                   <div className="mt-0.5 text-[10px] text-white/35">Consolidadas</div>
                 </div>
-                <div className="text-sm font-bold text-white">{bucket.cpl !== null ? brl(bucket.cpl) : '—'}</div>
                 <TimelineMetricCell metric={bucket.metrics[0]} accent="#6366f1" />
                 <TimelineMetricCell metric={bucket.metrics[1]} accent="#10b981" />
                 <TimelineMetricCell metric={bucket.metrics[2]} accent="#f59e0b" />
+                <div className="text-sm font-bold text-white">{bucket.cpl !== null ? brl(bucket.cpl) : '—'}</div>
                 <div className="text-sm font-bold text-white">{pct(bucket.ctr)}</div>
                 <div className="text-sm font-bold text-white">{brl(bucket.cpm)}</div>
                 <div className="text-sm font-bold text-white">{bucket.roas !== null ? `${bucket.roas.toFixed(2)}x` : '—'}</div>
