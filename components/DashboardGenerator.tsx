@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  Check, ChevronDown, Copy, ExternalLink, Instagram, Loader2,
+  Check, ChevronDown, Copy, ExternalLink, FileText, Instagram, Loader2,
   MonitorSmartphone, Plus, Search, Trash2, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
@@ -27,6 +27,24 @@ type AdAccount = { id: string; name: string };
 type IgAccount = { id: string; username: string; name: string; profile_picture_url?: string; page_id: string; page_name: string };
 
 const GRAPH = 'https://graph.facebook.com/v19.0';
+const CONTEXT_BUCKET = 'portal-link-context';
+const CONTEXT_GUIDANCE =
+  'Descreva o projeto para a IA analisar melhor os dados: objetivo principal, publico-alvo, oferta/produto, ticket, diferenciais, regiao de atuacao, restricoes, metas, principais objecoes e historico do que ja funcionou ou nao funcionou.';
+
+const sanitizeFileName = (value: string) => value.replace(/[^\w.\-]+/g, '_');
+
+const inferContextMimeType = (file: File) => {
+  if (file.type) return file.type;
+  const lower = file.name.toLowerCase();
+  if (lower.endsWith('.pdf')) return 'application/pdf';
+  if (lower.endsWith('.docx')) return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+  return 'text/plain';
+};
+
+const isSupportedContextFile = (file: File) => {
+  const lower = file.name.toLowerCase();
+  return lower.endsWith('.pdf') || lower.endsWith('.docx') || lower.endsWith('.txt');
+};
 
 const fetchJson = async (url: string) => {
   const res = await fetch(url);
@@ -60,6 +78,8 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
   const [saving, setSaving] = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
   const [metaToken, setMetaToken] = useState('');
+  const [projectContextText, setProjectContextText] = useState('');
+  const [contextFiles, setContextFiles] = useState<File[]>([]);
 
   const loadLinks = useCallback(async () => {
     if (!companyId) { setLoading(false); return; }
@@ -83,6 +103,8 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
     setFormClientName('');
     setSelectedAdAccount(null);
     setSelectedIg(null);
+    setProjectContextText('');
+    setContextFiles([]);
     setAdAccounts([]);
     setIgAccounts([]);
     setGeneratedLink('');
@@ -171,16 +193,60 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
           created_by: authData?.user?.id ?? null,
           name: formName.trim() || selectedAdAccount.name || 'Dashboard',
           client_name: formClientName.trim() || null,
+          project_context_text: projectContextText.trim() || null,
           meta_ad_account_id: selectedAdAccount.id,
           meta_ad_account_name: selectedAdAccount.name,
           instagram_business_account_id: selectedIg?.id ?? null,
           instagram_username: selectedIg?.username ?? null,
           status: 'active',
         })
-        .select('public_token')
+        .select('id,public_token')
         .single();
 
       if (err) throw err;
+      const portalLinkId = String((data as any).id);
+
+      if (projectContextText.trim()) {
+        await supabase.functions.invoke('portal-link-context-processor', {
+          body: {
+            mode: 'reindex_manual_context',
+            portal_link_id: portalLinkId,
+          },
+        }).catch(() => {});
+      }
+
+      for (const file of contextFiles) {
+        const mimeType = inferContextMimeType(file);
+        const path = `${companyId}/${portalLinkId}/${Date.now()}_${sanitizeFileName(file.name)}`;
+        const { error: uploadError } = await supabase.storage.from(CONTEXT_BUCKET).upload(path, file, {
+          upsert: false,
+          contentType: mimeType,
+        });
+        if (uploadError) throw uploadError;
+
+        const { data: fileRow, error: fileInsertError } = await supabase
+          .from('portal_link_context_files')
+          .insert({
+            portal_link_id: portalLinkId,
+            uploaded_by: authData?.user?.id ?? null,
+            name: file.name,
+            mime_type: mimeType,
+            size_bytes: file.size,
+            storage_path: path,
+            indexing_status: 'pending',
+          })
+          .select('id')
+          .single();
+        if (fileInsertError) throw fileInsertError;
+
+        await supabase.functions.invoke('portal-link-context-processor', {
+          body: {
+            mode: 'index_file',
+            context_file_id: (fileRow as any).id,
+          },
+        }).catch(() => {});
+      }
+
       const link = `${window.location.origin}/d/${data.public_token}`;
       setGeneratedLink(link);
       setModalStep('done');
@@ -201,6 +267,14 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
 
   const deleteLink = async (id: string) => {
     if (!confirm('Remover este link? Clientes com o link perderão acesso.')) return;
+    const { data: files } = await supabase
+      .from('portal_link_context_files')
+      .select('storage_path')
+      .eq('portal_link_id', id);
+    const paths = ((files ?? []) as Array<{ storage_path?: string | null }>).map((row) => String(row.storage_path ?? '')).filter(Boolean);
+    if (paths.length > 0) {
+      await supabase.storage.from(CONTEXT_BUCKET).remove(paths).catch(() => {});
+    }
     await supabase.from('portal_links').delete().eq('id', id);
     void loadLinks();
   };
@@ -214,6 +288,24 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
     const q = igSearch.toLowerCase();
     return !q || a.username.toLowerCase().includes(q) || a.name.toLowerCase().includes(q) || a.page_name.toLowerCase().includes(q);
   });
+
+  const addContextFiles = (incoming: FileList | File[] | null) => {
+    if (!incoming) return;
+    const files = Array.from(incoming);
+    const validFiles = files.filter(isSupportedContextFile);
+    if (validFiles.length !== files.length) {
+      setError('Use apenas arquivos PDF, DOCX ou TXT.');
+    }
+    setContextFiles((current) => {
+      const map = new Map(current.map((file) => [`${file.name}:${file.size}`, file]));
+      for (const file of validFiles) map.set(`${file.name}:${file.size}`, file);
+      return Array.from(map.values());
+    });
+  };
+
+  const removeContextFile = (targetName: string, targetSize: number) => {
+    setContextFiles((current) => current.filter((file) => !(file.name === targetName && file.size === targetSize)));
+  };
 
   return (
     <div className="p-6 space-y-6">
@@ -346,6 +438,11 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
                 <p className="text-xs text-[hsl(var(--muted-foreground))]">
                   O cliente acessa sem precisar de login. O link é permanente e pode ser revogado a qualquer momento.
                 </p>
+                {(projectContextText.trim() || contextFiles.length > 0) ? (
+                  <p className="text-xs text-indigo-300/80">
+                    O contexto do projeto foi enviado para indexacao e vai alimentar a analise do relatorio semanal.
+                  </p>
+                ) : null}
                 <button
                   type="button"
                   onClick={() => setShowModal(false)}
@@ -381,6 +478,73 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
                       placeholder="Ex: Clínica XYZ"
                       className="w-full px-3 py-2.5 rounded-xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]/60 outline-none focus:border-indigo-500/50"
                     />
+                  </div>
+                </div>
+
+                <div className="space-y-3 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))]/50 p-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1.5">
+                      Contexto do projeto para a IA
+                    </label>
+                    <p className="text-[11px] leading-5 text-[hsl(var(--muted-foreground))] mb-2">
+                      {CONTEXT_GUIDANCE}
+                    </p>
+                    <textarea
+                      value={projectContextText}
+                      onChange={(e) => setProjectContextText(e.target.value)}
+                      placeholder="Cole aqui o contexto do projeto para personalizar a analise semanal."
+                      rows={6}
+                      className="w-full resize-y px-3 py-2.5 rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))] text-sm text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]/60 outline-none focus:border-indigo-500/50"
+                    />
+                  </div>
+
+                  <div>
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider">Arquivos de apoio</div>
+                        <div className="mt-1 text-[11px] text-[hsl(var(--muted-foreground))]">Formatos aceitos: PDF, DOCX e TXT.</div>
+                      </div>
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-[hsl(var(--border))] px-3 py-2 text-xs font-semibold text-[hsl(var(--foreground))] hover:bg-[hsl(var(--secondary))] transition-all">
+                        <Plus className="h-3.5 w-3.5" />
+                        Adicionar arquivos
+                        <input
+                          type="file"
+                          accept=".pdf,.docx,.txt"
+                          multiple
+                          className="hidden"
+                          onChange={(e) => {
+                            addContextFiles(e.target.files);
+                            e.currentTarget.value = '';
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                    {contextFiles.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        {contextFiles.map((file) => (
+                          <div
+                            key={`${file.name}:${file.size}`}
+                            className="flex items-center justify-between gap-3 rounded-xl border border-[hsl(var(--border))] bg-[hsl(var(--background))]/70 px-3 py-2"
+                          >
+                            <div className="min-w-0 flex items-center gap-2">
+                              <FileText className="h-4 w-4 shrink-0 text-indigo-300" />
+                              <div className="min-w-0">
+                                <div className="truncate text-sm text-[hsl(var(--foreground))]">{file.name}</div>
+                                <div className="text-[11px] text-[hsl(var(--muted-foreground))]">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeContextFile(file.name, file.size)}
+                              className="rounded-lg p-1.5 text-[hsl(var(--muted-foreground))] hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
 

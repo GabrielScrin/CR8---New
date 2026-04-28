@@ -606,6 +606,25 @@ const fetchJson = async (url: string, init?: RequestInit) => {
   return json;
 };
 
+const generateOpenAiEmbedding = async (text: string, model = 'text-embedding-3-small') => {
+  if (!OPENAI_API_KEY) throw new Error('OPENAI_API_KEY not configured');
+  const response = await fetch('https://api.openai.com/v1/embeddings', {
+    method: 'POST',
+    headers: {
+      authorization: `Bearer ${OPENAI_API_KEY}`,
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ model, input: text }),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(String((payload as any)?.error?.message ?? `embedding failed (${response.status})`));
+  }
+  const embedding = (payload as any)?.data?.[0]?.embedding;
+  if (!Array.isArray(embedding) || embedding.length === 0) throw new Error('empty embedding');
+  return embedding as number[];
+};
+
 const getPortalContext = async (supabaseAdmin: SupabaseClient, token: string): Promise<PortalContext> => {
   const cleanToken = asString(token);
   if (!cleanToken || cleanToken.length < 16) throw new Error('invalid portal token');
@@ -1985,12 +2004,16 @@ const generateWeeklyNarrative = async (input: {
   periodStart: string;
   periodEnd: string;
   metrics: Json;
+  projectContextText?: string | null;
+  retrievedProjectContext?: string[];
 }) => {
   if (!OPENAI_API_KEY) {
     return buildFallbackWeeklyNarrative(input);
   }
 
   const fallback = buildFallbackWeeklyNarrative(input);
+  const baseProjectContext = asString(input.projectContextText).slice(0, 4000);
+  const retrievedProjectContext = (input.retrievedProjectContext ?? []).map((item) => asString(item)).filter(Boolean).slice(0, 6);
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -2009,8 +2032,22 @@ const generateWeeklyNarrative = async (input: {
               'Você gera resumos semanais de marketing em JSON. Responda APENAS com JSON válido contendo: summary (string), highlights (string[]), risks (string[]), next_week (string[]). Seja objetivo e em português do Brasil.',
           },
           {
+            role: 'system',
+            content:
+              'Baseie-se somente nas metricas recebidas e no contexto do projeto enviado no payload. Nao invente produto, publico, promessa, meta ou benchmark externo. Quando faltar base suficiente, explicite a limitacao no proprio insight ou risco.',
+          },
+          {
             role: 'user',
-            content: JSON.stringify(input),
+            content: JSON.stringify({
+              companyName: input.companyName,
+              periodStart: input.periodStart,
+              periodEnd: input.periodEnd,
+              metrics: input.metrics,
+              projectContext: {
+                manualContext: baseProjectContext,
+                retrievedChunks: retrievedProjectContext,
+              },
+            }),
           },
         ],
       }),
@@ -2177,6 +2214,7 @@ type PortalLinkRow = {
   public_token: string;
   name: string;
   client_name: string | null;
+  project_context_text: string | null;
   meta_ad_account_id: string;
   meta_ad_account_name: string | null;
   instagram_business_account_id: string | null;
@@ -2190,7 +2228,7 @@ const getPortalLinkRow = async (supabaseAdmin: SupabaseClient, token: string): P
 
   const { data, error } = await supabaseAdmin
     .from('portal_links')
-    .select('id,company_id,public_token,name,client_name,meta_ad_account_id,meta_ad_account_name,instagram_business_account_id,instagram_username,status')
+    .select('id,company_id,public_token,name,client_name,project_context_text,meta_ad_account_id,meta_ad_account_name,instagram_business_account_id,instagram_username,status')
     .eq('public_token', clean)
     .maybeSingle();
 
@@ -2198,6 +2236,30 @@ const getPortalLinkRow = async (supabaseAdmin: SupabaseClient, token: string): P
   if (!data) throw new Error('dashboard não encontrado');
   if ((data as any).status !== 'active') throw new Error('dashboard inativo');
   return data as PortalLinkRow;
+};
+
+const retrievePortalLinkProjectContext = async (
+  supabaseAdmin: SupabaseClient,
+  portalLinkId: string,
+  queryText: string,
+) => {
+  if (!OPENAI_API_KEY) return [] as string[];
+  const cleanQuery = asString(queryText);
+  if (!cleanQuery) return [] as string[];
+
+  try {
+    const queryEmbedding = await generateOpenAiEmbedding(cleanQuery);
+    const { data, error } = await supabaseAdmin.rpc('match_portal_link_context', {
+      query_embedding: queryEmbedding,
+      match_threshold: 0.45,
+      match_count: 6,
+      filter_portal_link_id: portalLinkId,
+    });
+    if (error) throw error;
+    return ((data ?? []) as Array<{ chunk_content?: string | null }>).map((row) => asString(row?.chunk_content)).filter(Boolean);
+  } catch {
+    return [] as string[];
+  }
 };
 
 const getCompanyMetaToken = async (supabaseAdmin: SupabaseClient, companyId: string): Promise<string> => {
@@ -3733,7 +3795,26 @@ export const loadDashboardWeekly = async (
     instagram,
   };
 
-  const narrative = await generateWeeklyNarrative({ companyName, periodStart: periodStartStr, periodEnd: periodEndStr, metrics });
+  const projectContextQuery = [
+    `Projeto ${companyName}`,
+    `Periodo ${periodStartStr} a ${periodEndStr}`,
+    `Investimento ${meta.summary.spend}`,
+    `Resultados ${meta.summary.results}`,
+    `Mensagens ${meta.summary.messagesStarted}`,
+    `Lead forms ${meta.summary.leadForms}`,
+    `Leads no site ${meta.summary.siteLeads}`,
+    `Visitas ao perfil ${instagram.summary.totalProfileViews || meta.summary.profileVisits}`,
+  ].join('\n');
+  const retrievedProjectContext = await retrievePortalLinkProjectContext(supabaseAdmin, link.id, projectContextQuery);
+
+  const narrative = await generateWeeklyNarrative({
+    companyName,
+    periodStart: periodStartStr,
+    periodEnd: periodEndStr,
+    metrics,
+    projectContextText: link.project_context_text,
+    retrievedProjectContext,
+  });
   const trafficLikeReport = await buildPortalWeeklyTrafficLikeReport(
     supabaseAdmin,
     link,
