@@ -3223,6 +3223,17 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
                             >
                               <ExternalLink className="w-3 h-3" />
                             </button>
+                            {selectedLevel === 'ad' && row.adId && (
+                              <a
+                                href={`https://www.facebook.com/ads/library/?id=${row.adId}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Ver anúncio na Biblioteca de Anúncios"
+                                className="ml-1 inline-flex items-center hover:text-[hsl(var(--primary))]"
+                              >
+                                <Link2 className="w-3 h-3" />
+                              </a>
+                            )}
                             {selectedLevel === 'ad' && !demoMode && row.imageUrl ? (
                               <button
                                 type="button"

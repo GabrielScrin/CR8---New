@@ -3154,6 +3154,7 @@ const buildPortalWeeklyTrafficLikeReport = async (
             }
         : describeResult(ad);
     return {
+      id: ad.id,
       name: ad.name,
       status: 'active',
       spend: ad.spend,

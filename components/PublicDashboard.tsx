@@ -1209,7 +1209,18 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                           )}
                           <div className="flex min-w-0 flex-1 items-start justify-between gap-4">
                           <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-semibold text-white/90">{ad.name}</div>
+                            <div className="flex items-center gap-2">
+                              <div className="truncate text-sm font-semibold text-white/90">{ad.name}</div>
+                              <a
+                                href={`https://www.facebook.com/ads/library/?id=${ad.id}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                title="Ver anúncio na Biblioteca de Anúncios"
+                                className="shrink-0 text-white/30 hover:text-white/70 transition-colors"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                              </a>
+                            </div>
                           </div>
                           <div className="flex shrink-0 flex-wrap items-center justify-end gap-4 text-xs">
                             <div className="text-right">
