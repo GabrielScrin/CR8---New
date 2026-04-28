@@ -494,7 +494,7 @@ const TimelineMetricCell: React.FC<{ metric?: PerformanceTimelineBucket['metrics
           <span className="h-2 w-2 rounded-full" style={{ backgroundColor: accent }} />
           <span className="text-xs font-semibold text-white/88">{metric.label}</span>
         </div>
-        <div className="mt-1 text-sm font-black text-white">{compactNum(metric.value)}</div>
+        <div className="mt-1 text-sm font-black text-white">{num(metric.value)}</div>
         <div className="mt-0.5 text-[10px] text-white/38">
           {metric.costPerResult !== null ? `Custo/res ${brl(metric.costPerResult)}` : '—'}
         </div>
@@ -578,7 +578,7 @@ const PerformanceTimelineTable: React.FC<{
                 </div>
                 <div className="text-sm font-black text-white">{brl(bucket.spend)}</div>
                 <div>
-                  <div className="text-sm font-black text-emerald-300">{compactNum(bucket.results)}</div>
+                  <div className="text-sm font-black text-emerald-300">{num(bucket.results)}</div>
                   <div className="mt-0.5 text-[10px] text-white/35">Consolidadas</div>
                 </div>
                 <div className="text-sm font-bold text-white">{bucket.cpl !== null ? brl(bucket.cpl) : '—'}</div>
