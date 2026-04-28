@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ArrowDown, ArrowUp, CalendarRange, Download, ExternalLink, FileBarChart2, Filter, Link2, RefreshCw, Send, Sparkles, X } from 'lucide-react';
 import { TrafficDashboard } from './TrafficDashboard';
+import { PeriodBreakdown } from './PeriodBreakdown';
 import { AdMetric, NativeResultContext, NativeResultType } from '../types';
 import { loadLocalAiSettings } from '../lib/aiLocal';
 import { resolveMetaToken } from '../lib/metaToken';
@@ -2940,6 +2941,12 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
         dateSince={dateSince}
         dateUntil={dateUntil}
         loading={loading}
+        demoMode={demoMode}
+      />
+
+      <PeriodBreakdown
+        companyId={companyId}
+        adAccountId={selectedAdAccountId}
         demoMode={demoMode}
       />
 
