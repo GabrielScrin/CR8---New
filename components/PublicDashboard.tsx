@@ -323,10 +323,11 @@ const CampaignPerformanceFunnel: React.FC<{
 }> = ({ metrics, goal, onGoalChange, visibleProfileVisitsCurrent, visibleProfileVisitsPrevious }) => {
   if (!metrics) return null;
 
+  const siteGoalUsesLandingPageViews = (metrics.siteLeads ?? 0) <= 0 && (metrics.landingPageViews ?? 0) > 0;
   const goalOptions: Array<{ id: FunnelGoal; label: string; available: boolean }> = [
     { id: 'messagesStarted', label: 'Mensagens', available: (metrics.messagesStarted ?? 0) > 0 },
     { id: 'leadForms', label: 'Leads / Formulários', available: (metrics.leadForms ?? 0) > 0 },
-    { id: 'siteLeads', label: 'Leads no Site', available: (metrics.siteLeads ?? 0) > 0 || (metrics.landingPageViews ?? 0) > 0 },
+    { id: 'siteLeads', label: siteGoalUsesLandingPageViews ? 'Vis. PÃ¡gina Destino' : 'Leads no Site', available: (metrics.siteLeads ?? 0) > 0 || (metrics.landingPageViews ?? 0) > 0 },
     { id: 'profileVisits', label: 'Visitas ao Perfil', available: visibleProfileVisitsCurrent > 0 },
   ];
 
@@ -334,13 +335,13 @@ const CampaignPerformanceFunnel: React.FC<{
   const goalCurrentMap: Record<FunnelGoal, number> = {
     messagesStarted: metrics.messagesStarted ?? 0,
     leadForms: metrics.leadForms ?? 0,
-    siteLeads: metrics.siteLeads ?? 0,
+    siteLeads: siteGoalUsesLandingPageViews ? (metrics.landingPageViews ?? 0) : (metrics.siteLeads ?? 0),
     profileVisits: visibleProfileVisitsCurrent,
   };
   const goalPreviousMap: Record<FunnelGoal, number> = {
     messagesStarted: metrics.prevMsgs ?? 0,
     leadForms: metrics.prevLeadForms ?? 0,
-    siteLeads: 0,
+    siteLeads: siteGoalUsesLandingPageViews ? (metrics.prevLandingPageViews ?? 0) : 0,
     profileVisits: visibleProfileVisitsPrevious,
   };
   const goalAccentMap: Record<FunnelGoal, string> = {
@@ -729,6 +730,7 @@ const useCampaignMetrics = (summary: MetaSummary | undefined, prevSummary: MetaS
       hasMsgs: s.messagesStarted > 0,
       hasLeadForms: s.leadForms > 0,
       hasSiteLeads: s.siteLeads > 0,
+      hasLandingPageViews: s.landingPageViews > 0,
       hasConversions: totalLeads > 0 || s.messagesStarted > 0,
       prevSpend: p?.spend ?? 0,
       prevReach: p?.reach ?? 0,
@@ -867,9 +869,15 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const visibleProfileVisitsCurrent = paidProfileVisitsCurrent;
   const visibleProfileVisitsPrevious = paidProfileVisitsPrevious;
   const profileVisitsHint = 'Fonte atual: Meta Ads';
+  const showLandingPageViewsAsNativeResult = (metrics?.landingPageViews ?? 0) > 0 && !(metrics?.hasConversions ?? false);
   const resultsBreakdown = metrics
     ? `Msgs ${num(metrics.messagesStarted)} · Forms ${num(metrics.leadForms)} · Site ${num(metrics.siteLeads)}`
     : 'Msgs 0 · Forms 0 · Site 0';
+  const nativeResultsBreakdown = metrics
+    ? showLandingPageViewsAsNativeResult
+      ? `LPV ${num(metrics.landingPageViews)} · ${resultsBreakdown}`
+      : resultsBreakdown
+    : resultsBreakdown;
   const igProfile = ig?.profile ?? bootstrap?.instagramProfile;
   const clientLabel = bootstrap?.clientName || bootstrap?.metaAdAccountName || 'Dashboard';
 
@@ -1074,7 +1082,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
               </div>
             </div>
 
-            {(metrics?.hasConversions || visibleProfileVisitsCurrent > 0 || (metrics?.followers ?? 0) > 0) ? (
+            {(metrics?.hasConversions || metrics?.hasLandingPageViews || visibleProfileVisitsCurrent > 0 || (metrics?.followers ?? 0) > 0) ? (
               <div>
                 <SectionLabel>Resultados por tipo</SectionLabel>
                 <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -1104,6 +1112,15 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                       sub={metrics?.messagesStarted ? `Custo/msg ${brl((metrics?.spend ?? 0) / metrics.messagesStarted)}` : undefined}
                     />
                   ) : null}
+                  {showLandingPageViewsAsNativeResult ? (
+                    <KpiCard
+                      label="Vis. PÃ¡g. Destino"
+                      value={num(metrics?.landingPageViews ?? 0)}
+                      delta={delta(metrics?.landingPageViews ?? 0, metrics?.prevLandingPageViews ?? 0)}
+                      accent="#10b981"
+                      sub={metrics?.landingPageViews ? `Custo/LPV ${brl((metrics?.spend ?? 0) / metrics.landingPageViews)}` : undefined}
+                    />
+                  ) : null}
                   {visibleProfileVisitsCurrent > 0 ? (
                     <KpiCard
                       label="Visitas ao Perfil"
@@ -1118,7 +1135,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                   ) : null}
                 </div>
                 <div className="mt-3 rounded-xl border border-white/[0.07] bg-white/[0.02] px-4 py-3 text-xs leading-5 text-white/55">
-                  <strong className="font-semibold text-white/75">Resultados</strong> considera somente <span className="text-white/80">Mensagens iniciadas + Lead Forms + Leads no site</span>. Visitas ao perfil e seguidores aparecem separados e nao entram nesse total.
+                  <strong className="font-semibold text-white/75">Resultados</strong> considera somente <span className="text-white/80">Mensagens iniciadas + Lead Forms + Leads no site</span>. Quando essas metricas nao existem, <span className="text-white/80">Vis. Pag. Destino</span> entra como fallback nativo. Visitas ao perfil e seguidores aparecem separados e nao entram nesse total.
                 </div>
               </div>
             ) : null}
@@ -1143,7 +1160,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                   label="Resultados"
                   value={num(metrics?.results ?? 0)}
                   accent="#38bdf8"
-                  sub={resultsBreakdown}
+                  sub={nativeResultsBreakdown}
                   hint="Nao inclui visitas ao perfil"
                 />
               </div>
@@ -1197,7 +1214,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                   label="Resultados"
                   value={num(metrics?.results ?? 0)}
                   accent="#06b6d4"
-                  sub={resultsBreakdown}
+                  sub={nativeResultsBreakdown}
                   hint="Nao inclui visitas ao perfil"
                 />
               </div>

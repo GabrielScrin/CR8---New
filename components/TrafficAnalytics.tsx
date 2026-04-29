@@ -740,7 +740,10 @@ const resolvePrimaryResult = (row: any, computed: {
   const pick = (value: number | undefined, label: string) => ({ value: typeof value === 'number' ? value : undefined, label });
 
   if (nativeType !== 'unknown') {
-    return pick(valueForNativeType(nativeType, computed), labelForNativeType(nativeType, (computed.thruplays ?? 0) > 0));
+    const nativeValue = valueForNativeType(nativeType, computed);
+    if ((nativeValue ?? 0) > 0) {
+      return pick(nativeValue, labelForNativeType(nativeType, (computed.thruplays ?? 0) > 0));
+    }
   }
 
 
@@ -3908,5 +3911,4 @@ export const TrafficAnalytics: React.FC<TrafficAnalyticsProps> = ({ companyId })
     </div>
   );
 };
-
 
