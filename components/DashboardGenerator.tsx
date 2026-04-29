@@ -15,6 +15,10 @@ type PortalLink = {
   public_token: string;
   name: string;
   client_name: string | null;
+  company?: {
+    name?: string | null;
+    brand_name?: string | null;
+  } | null;
   project_context_text?: string | null;
   meta_ad_account_id: string;
   meta_ad_account_name: string | null;
@@ -99,12 +103,18 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
   const [projectContextText, setProjectContextText] = useState('');
   const [contextFiles, setContextFiles] = useState<File[]>([]);
 
+  const getLinkDisplayName = (link: PortalLink) =>
+    link.client_name?.trim() ||
+    link.company?.brand_name?.trim() ||
+    link.company?.name?.trim() ||
+    link.name;
+
   const loadLinks = useCallback(async () => {
     if (!companyId) { setLoading(false); return; }
     setLoading(true);
     const { data, error: err } = await supabase
       .from('portal_links')
-      .select('*')
+      .select('*, company:companies(name,brand_name)')
       .eq('company_id', companyId)
       .order('created_at', { ascending: false });
     if (!err) setLinks((data ?? []) as PortalLink[]);
@@ -512,7 +522,7 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-[hsl(var(--foreground))] truncate">
-                      {link.client_name || link.name}
+                      {getLinkDisplayName(link)}
                     </span>
                     {link.status === 'active' && (
                       <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
@@ -521,6 +531,9 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
                     )}
                   </div>
                   <div className="mt-1 flex flex-wrap gap-3 text-xs text-[hsl(var(--muted-foreground))]">
+                    {link.company?.brand_name || link.company?.name ? (
+                      <span>Cliente: {link.company?.brand_name || link.company?.name}</span>
+                    ) : null}
                     <span>Conta: {link.meta_ad_account_name || link.meta_ad_account_id}</span>
                     {link.instagram_username && (
                       <span className="flex items-center gap-1">
@@ -576,7 +589,7 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
               <div>
                 <h2 className="text-base font-bold text-[hsl(var(--foreground))]">Contexto do projeto para a IA</h2>
                 <p className="text-xs text-[hsl(var(--muted-foreground))] mt-0.5">
-                  {editingContextLink?.client_name || editingContextLink?.name || 'Link do cliente'}
+                  {editingContextLink ? getLinkDisplayName(editingContextLink) : 'Link do cliente'}
                 </p>
               </div>
               <button
