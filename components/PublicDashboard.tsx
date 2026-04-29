@@ -386,8 +386,8 @@ const CampaignPerformanceFunnel: React.FC<{
   const landingToSiteLeadRate = metrics.landingPageViews > 0 ? (metrics.siteLeads / metrics.landingPageViews) * 100 : 0;
 
   const stages: Array<{ key: string; label: string; value: number; prev: number; widthClass: string; accent: string }> = [
-    { key: 'reach', label: 'Alcance', value: metrics.reach ?? 0, prev: metrics.prevReach ?? 0, widthClass: 'w-full max-w-[760px]', accent: '#8b5cf6' },
-    { key: 'impressions', label: 'Impressões', value: metrics.impressions ?? 0, prev: metrics.prevImpressions ?? 0, widthClass: 'w-[88%] max-w-[660px]', accent: '#6366f1' },
+    { key: 'impressions', label: 'Impressões', value: metrics.impressions ?? 0, prev: metrics.prevImpressions ?? 0, widthClass: 'w-full max-w-[760px]', accent: '#6366f1' },
+    { key: 'reach', label: 'Alcance', value: metrics.reach ?? 0, prev: metrics.prevReach ?? 0, widthClass: 'w-[88%] max-w-[660px]', accent: '#8b5cf6' },
     { key: 'clicks', label: 'Cliques no Link', value: metrics.linkClicks ?? 0, prev: metrics.prevLinkClicks ?? 0, widthClass: 'w-[74%] max-w-[560px]', accent: '#3b82f6' },
   ];
 
@@ -469,7 +469,7 @@ const CampaignPerformanceFunnel: React.FC<{
     goal === 'siteLeads' && siteGoalUsesLandingPageViews
       ? [
           { label: 'Connect Rate', value: pct(metrics.connectRate ?? 0), delta: null, invertDelta: false },
-          { label: 'Imp. > Clique', value: pct(impressionToClickRate), delta: null, invertDelta: false },
+          { label: 'Clique > LPV', value: pct(clickToResultRate), delta: null, invertDelta: false },
         ]
       : rightStats;
 
