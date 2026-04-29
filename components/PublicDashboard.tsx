@@ -1102,15 +1102,18 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
   const CampanhasTab = () => {
     const isPerf = viewMode === 'performance';
     const chartSecondarySeries = isPerf
-      ? [
-          { key: 'leads', label: 'Leads', color: '#10b981', gradient: 'url(#gLeads)' },
-          { key: 'messages', label: 'Mensagens', color: '#38bdf8', gradient: 'url(#gMsgs)' },
-        ]
+      ? ([
+          { key: 'leads', label: 'Leads', color: '#10b981', gradient: 'url(#gLeads)', total: metrics?.totalLeads ?? 0 },
+          { key: 'messages', label: 'Mensagens', color: '#38bdf8', gradient: 'url(#gMsgs)', total: metrics?.messagesStarted ?? 0 },
+          { key: 'landingPageViews', label: 'Vis. Pagina Destino', color: '#14b8a6', gradient: 'url(#gThruplays)', total: metrics?.landingPageViews ?? 0 },
+        ].filter((item) => item.total > 0).slice(0, 2))
       : [
           { key: 'thruplays', label: 'ThruPlays', color: '#14b8a6', gradient: 'url(#gThruplays)' },
           { key: 'profileVisits', label: 'Visitas ao Perfil', color: '#f59e0b', gradient: 'url(#gProfileVisits)' },
         ];
-    const chartTitle = isPerf ? 'Investimento, Leads & Mensagens' : 'Investimento, ThruPlays & Visitas ao Perfil';
+    const chartTitle = isPerf
+      ? `Investimento${chartSecondarySeries.length ? ` e ${chartSecondarySeries.map((item) => item.label).join(' + ')}` : ''}`
+      : 'Investimento, ThruPlays & Visitas ao Perfil';
 
     return (
       <div className="space-y-6">

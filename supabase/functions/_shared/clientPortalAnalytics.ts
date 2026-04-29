@@ -146,6 +146,7 @@ type DailyPoint = {
   results: number;
   leads: number;
   messages: number;
+  landingPageViews: number;
   profileVisits: number;
   thruplays: number;
 };
@@ -1118,11 +1119,12 @@ const aggregateMetaOverview = async (
       }
 
       if (date) {
-        const previousPoint = dailyMap.get(date) ?? { date, spend: 0, results: 0, leads: 0, messages: 0, profileVisits: 0, thruplays: 0 };
+        const previousPoint = dailyMap.get(date) ?? { date, spend: 0, results: 0, leads: 0, messages: 0, landingPageViews: 0, profileVisits: 0, thruplays: 0 };
         previousPoint.spend += spend;
         previousPoint.results += results;
         previousPoint.leads += leadForms + siteLeads;
         previousPoint.messages += messagesStarted;
+        previousPoint.landingPageViews += landingPageViews;
         previousPoint.profileVisits += profileVisits;
         previousPoint.thruplays += thruplays;
         dailyMap.set(date, previousPoint);
@@ -1179,7 +1181,7 @@ const aggregateMetaOverview = async (
     summary.hookRate = summary.impressions > 0 ? summary.videoViews / summary.impressions : 0;
     summary.holdRate = summary.videoViews > 0 ? summary.thruplays / summary.videoViews : 0;
 
-    const timeseries = daySeries(dateFrom, dateTo).map((date) => dailyMap.get(date) ?? { date, spend: 0, results: 0, leads: 0, messages: 0, profileVisits: 0, thruplays: 0 });
+    const timeseries = daySeries(dateFrom, dateTo).map((date) => dailyMap.get(date) ?? { date, spend: 0, results: 0, leads: 0, messages: 0, landingPageViews: 0, profileVisits: 0, thruplays: 0 });
 
     return {
       available: true,

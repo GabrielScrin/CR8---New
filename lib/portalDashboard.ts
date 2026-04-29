@@ -46,6 +46,7 @@ export type DailyPoint = {
   results: number;
   leads: number;
   messages: number;
+  landingPageViews: number;
   profileVisits: number;
   thruplays: number;
 };
