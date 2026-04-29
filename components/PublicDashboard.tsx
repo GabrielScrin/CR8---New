@@ -314,6 +314,27 @@ const fmtYAxis = (value: number) => {
 
 const pctShare = (part: number, total: number) => (total > 0 ? ((part / total) * 100).toFixed(1) : '0.0');
 
+const resolveNativeResultDisplay = (input?: {
+  results?: number;
+  messagesStarted?: number;
+  leadForms?: number;
+  siteLeads?: number;
+  landingPageViews?: number;
+  profileVisits?: number;
+  followers?: number;
+  thruplays?: number;
+  videoViews?: number;
+}) => {
+  const primaryResults = (input?.messagesStarted ?? 0) + (input?.leadForms ?? 0) + (input?.siteLeads ?? 0);
+  if (primaryResults > 0) return { label: 'Resultados', value: (input?.results ?? 0) > 0 ? (input?.results ?? 0) : primaryResults };
+  if ((input?.landingPageViews ?? 0) > 0) return { label: 'Vis. Pagina Destino', value: input?.landingPageViews ?? 0 };
+  if ((input?.profileVisits ?? 0) > 0) return { label: 'Visitas ao Perfil', value: input?.profileVisits ?? 0 };
+  if ((input?.followers ?? 0) > 0) return { label: 'Seguidores', value: input?.followers ?? 0 };
+  if ((input?.thruplays ?? 0) > 0) return { label: 'ThruPlays', value: input?.thruplays ?? 0 };
+  if ((input?.videoViews ?? 0) > 0) return { label: 'Views 3s', value: input?.videoViews ?? 0 };
+  return { label: 'Resultados', value: input?.results ?? 0 };
+};
+
 const CampaignPerformanceFunnel: React.FC<{
   metrics: ReturnType<typeof useCampaignMetrics>;
   goal: FunnelGoal;
@@ -326,8 +347,8 @@ const CampaignPerformanceFunnel: React.FC<{
   const siteGoalUsesLandingPageViews = (metrics.siteLeads ?? 0) <= 0 && (metrics.landingPageViews ?? 0) > 0;
   const goalOptions: Array<{ id: FunnelGoal; label: string; available: boolean }> = [
     { id: 'messagesStarted', label: 'Mensagens', available: (metrics.messagesStarted ?? 0) > 0 },
-    { id: 'leadForms', label: 'Leads / Formulários', available: (metrics.leadForms ?? 0) > 0 },
-    { id: 'siteLeads', label: siteGoalUsesLandingPageViews ? 'Vis. PÃ¡gina Destino' : 'Leads no Site', available: (metrics.siteLeads ?? 0) > 0 || (metrics.landingPageViews ?? 0) > 0 },
+    { id: 'leadForms', label: 'Leads / Formularios', available: (metrics.leadForms ?? 0) > 0 },
+    { id: 'siteLeads', label: siteGoalUsesLandingPageViews ? 'Vis. Pagina Destino' : 'Leads no Site', available: (metrics.siteLeads ?? 0) > 0 || (metrics.landingPageViews ?? 0) > 0 },
     { id: 'profileVisits', label: 'Visitas ao Perfil', available: visibleProfileVisitsCurrent > 0 },
   ];
 
@@ -365,10 +386,10 @@ const CampaignPerformanceFunnel: React.FC<{
     { key: 'clicks', label: 'Cliques no Link', value: metrics.linkClicks ?? 0, prev: metrics.prevLinkClicks ?? 0, widthClass: 'w-[74%] max-w-[560px]', accent: '#3b82f6' },
   ];
 
-  if (goal === 'siteLeads') {
+  if (goal === 'siteLeads' && !siteGoalUsesLandingPageViews) {
     stages.push({
       key: 'landingPageViews',
-      label: 'Vis. Página Destino',
+      label: 'Vis. Pagina Destino',
       value: metrics.landingPageViews ?? 0,
       prev: metrics.prevLandingPageViews ?? 0,
       widthClass: 'w-[60%] max-w-[460px]',
@@ -389,20 +410,20 @@ const CampaignPerformanceFunnel: React.FC<{
     goal === 'messagesStarted'
       ? [
           { label: 'CPM', value: brl(metrics.cpm ?? 0), delta: delta(metrics.cpm ?? 0, metrics.prevCpm ?? 0), invertDelta: true },
-          { label: 'Custo/Msg', value: finalValue > 0 ? brl(costPerResult) : 'â€”', delta: null, invertDelta: true },
+          { label: 'Custo/Msg', value: finalValue > 0 ? brl(costPerResult) : '-', delta: null, invertDelta: true },
         ]
       : goal === 'leadForms'
         ? [
-            { label: 'CPL Form', value: finalValue > 0 ? brl(costPerResult) : 'â€”', delta: null, invertDelta: true },
+            { label: 'CPL Form', value: finalValue > 0 ? brl(costPerResult) : '-', delta: null, invertDelta: true },
             { label: 'CPM', value: brl(metrics.cpm ?? 0), delta: delta(metrics.cpm ?? 0, metrics.prevCpm ?? 0), invertDelta: true },
           ]
         : goal === 'siteLeads'
           ? [
-              { label: 'CPL Site', value: finalValue > 0 ? brl(costPerResult) : 'â€”', delta: null, invertDelta: true },
+              { label: 'CPL Site', value: finalValue > 0 ? brl(costPerResult) : '-', delta: null, invertDelta: true },
               { label: 'LPV > Lead', value: pct(landingToSiteLeadRate), delta: null, invertDelta: false },
             ]
           : [
-              { label: 'CPV Perfil', value: finalValue > 0 ? brl(costPerResult) : 'â€”', delta: null, invertDelta: true },
+              { label: 'CPV Perfil', value: finalValue > 0 ? brl(costPerResult) : '-', delta: null, invertDelta: true },
               { label: 'Freq.', value: (metrics.frequency ?? 0).toFixed(2), delta: null, invertDelta: false },
             ];
 
@@ -426,6 +447,26 @@ const CampaignPerformanceFunnel: React.FC<{
               { label: 'CTR', value: pct(metrics.ctr ?? 0), delta: delta(metrics.ctr ?? 0, metrics.prevCtr ?? 0), invertDelta: false },
               { label: 'Clique > Perfil', value: pct(clickToResultRate), delta: null, invertDelta: false },
             ];
+
+  const effectiveStages = stages.map((stage) =>
+    stage.key === 'landingPageViews' || (stage.key === 'siteLeads' && siteGoalUsesLandingPageViews)
+      ? { ...stage, label: 'Vis. Pagina Destino' }
+      : stage,
+  );
+  const effectiveLeftStats =
+    goal === 'siteLeads' && siteGoalUsesLandingPageViews
+      ? [
+          { label: 'Custo/LPV', value: finalValue > 0 ? brl(costPerResult) : '-', delta: null, invertDelta: true },
+          { label: 'CPM', value: brl(metrics.cpm ?? 0), delta: delta(metrics.cpm ?? 0, metrics.prevCpm ?? 0), invertDelta: true },
+        ]
+      : leftStats;
+  const effectiveRightStats =
+    goal === 'siteLeads' && siteGoalUsesLandingPageViews
+      ? [
+          { label: 'Connect Rate', value: pct(metrics.connectRate ?? 0), delta: null, invertDelta: false },
+          { label: 'Imp. > Clique', value: pct(impressionToClickRate), delta: null, invertDelta: false },
+        ]
+      : rightStats;
 
   return (
     <div className="overflow-hidden rounded-[32px] border border-white/[0.08] bg-[radial-gradient(circle_at_top,rgba(99,102,241,0.12),transparent_32%),linear-gradient(180deg,rgba(255,255,255,0.03),rgba(255,255,255,0.02))] px-4 py-5 shadow-[0_24px_80px_rgba(0,0,0,0.32)] sm:px-6">
@@ -452,7 +493,7 @@ const CampaignPerformanceFunnel: React.FC<{
 
       <div className="grid gap-4 lg:grid-cols-[170px_minmax(0,1fr)_170px] lg:items-center">
         <div className="grid gap-3">
-          {leftStats.map((item) => (
+          {effectiveLeftStats.map((item) => (
             <MiniMetricPill key={item.label} label={item.label} value={item.value} delta={item.delta} invertDelta={item.invertDelta} />
           ))}
         </div>
@@ -460,7 +501,7 @@ const CampaignPerformanceFunnel: React.FC<{
         <div className="relative py-2">
           <div className="pointer-events-none absolute left-1/2 top-3 bottom-3 w-px -translate-x-1/2 bg-gradient-to-b from-white/0 via-white/12 to-white/0" />
           <div className="space-y-3">
-            {stages.map((stage, index) => (
+            {effectiveStages.map((stage, index) => (
               <React.Fragment key={stage.key}>
                 <FunnelStageCard
                   label={stage.label}
@@ -469,14 +510,14 @@ const CampaignPerformanceFunnel: React.FC<{
                   widthClass={stage.widthClass}
                   accent={stage.accent}
                 />
-                {index < stages.length - 1 ? <div className="mx-auto h-3 w-px bg-white/15" /> : null}
+                {index < effectiveStages.length - 1 ? <div className="mx-auto h-3 w-px bg-white/15" /> : null}
               </React.Fragment>
             ))}
           </div>
         </div>
 
         <div className="grid gap-3">
-          {rightStats.map((item) => (
+          {effectiveRightStats.map((item) => (
             <MiniMetricPill key={item.label} label={item.label} value={item.value} delta={item.delta} invertDelta={item.invertDelta} />
           ))}
           <MiniMetricPill label="Imp. > Clique" value={pct(impressionToClickRate)} delta={null} />
@@ -878,6 +919,8 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
       ? `LPV ${num(metrics.landingPageViews)} · ${resultsBreakdown}`
       : resultsBreakdown
     : resultsBreakdown;
+  const primaryResultDisplay = resolveNativeResultDisplay(metrics ?? undefined);
+  const weeklyResultDisplay = resolveNativeResultDisplay(weekly?.meta ?? undefined);
   const igProfile = ig?.profile ?? bootstrap?.instagramProfile;
   const clientLabel = bootstrap?.clientName || bootstrap?.metaAdAccountName || 'Dashboard';
 
@@ -1114,7 +1157,7 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                   ) : null}
                   {showLandingPageViewsAsNativeResult ? (
                     <KpiCard
-                      label="Vis. PÃ¡g. Destino"
+                      label="Vis. Pagina Destino"
                       value={num(metrics?.landingPageViews ?? 0)}
                       delta={delta(metrics?.landingPageViews ?? 0, metrics?.prevLandingPageViews ?? 0)}
                       accent="#10b981"
@@ -1157,8 +1200,8 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                   sub={profileVisitsHint}
                 />
                 <KpiCard
-                  label="Resultados"
-                  value={num(metrics?.results ?? 0)}
+                  label={primaryResultDisplay.label}
+                  value={num(primaryResultDisplay.value)}
                   accent="#38bdf8"
                   sub={nativeResultsBreakdown}
                   hint="Nao inclui visitas ao perfil"
@@ -1211,8 +1254,8 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                 <KpiCard label="CPC Médio" value={brl(metrics?.cpc ?? 0)} accent="#f43f5e" invertDelta />
                 <KpiCard label="Connect Rate" value={pct(metrics?.connectRate ?? 0)} accent="#10b981" />
                 <KpiCard
-                  label="Resultados"
-                  value={num(metrics?.results ?? 0)}
+                  label={primaryResultDisplay.label}
+                  value={num(primaryResultDisplay.value)}
                   accent="#06b6d4"
                   sub={nativeResultsBreakdown}
                   hint="Nao inclui visitas ao perfil"
@@ -1916,14 +1959,14 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
           ) : (
             <>
               <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-5">
-                <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Período analisado</div>
-                <div className="text-xl font-black text-white">{weekly.periodStart} → {weekly.periodEnd}</div>
+                <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Periodo analisado</div>
+                <div className="text-xl font-black text-white">{weekly.periodStart} {'->'} {weekly.periodEnd}</div>
                 <p className="mt-3 text-sm leading-relaxed text-white/60">{weekly.summary}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                <KpiCard label="Investimento" value={brl(weekly.meta.spend)} accent="#6366f1" hint="últimos 7 dias" />
-                <KpiCard label="Resultados" value={num(weekly.meta.results)} accent="#10b981" />
+                <KpiCard label="Investimento" value={brl(weekly.meta.spend)} accent="#6366f1" hint="ultimos 7 dias" />
+                <KpiCard label={weeklyResultDisplay.label} value={num(weeklyResultDisplay.value)} accent="#10b981" />
                 <KpiCard label="Alcance" value={num(weekly.meta.reach)} accent="#f59e0b" />
                 <KpiCard label="Alcance IG" value={num(weekly.instagram.totalReach)} accent="#f43f5e" />
               </div>

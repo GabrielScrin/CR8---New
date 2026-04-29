@@ -3107,6 +3107,7 @@ const PERFORMANCE_TIMELINE_PRIORITY: Array<{
   { key: 'messagesStarted', label: 'Mensagens iniciadas', pickValue: (row) => row.messagesStarted },
   { key: 'leadForms', label: 'Lead Forms', pickValue: (row) => row.leadForms },
   { key: 'siteLeads', label: 'Leads no site', pickValue: (row) => row.siteLeads },
+  { key: 'landingPageViews', label: 'Vis. pagina destino', pickValue: (row) => row.landingPageViews },
   { key: 'profileVisits', label: 'Visitas ao perfil', pickValue: (row) => row.profileVisits },
   { key: 'thruplays', label: 'ThruPlays', pickValue: (row) => row.thruplays },
 ];
@@ -3869,6 +3870,10 @@ export const loadDashboardWeekly = async (
       impressions: meta.summary.impressions,
       reach: meta.summary.reach,
       results: meta.summary.results,
+      messagesStarted: meta.summary.messagesStarted,
+      leadForms: meta.summary.leadForms,
+      siteLeads: meta.summary.siteLeads,
+      landingPageViews: meta.summary.landingPageViews,
       ctr: meta.summary.ctr,
       cpc: meta.summary.cpc,
       campaigns: meta.campaigns.length,
