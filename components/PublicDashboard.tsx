@@ -335,6 +335,11 @@ const resolveNativeResultDisplay = (input?: {
   return { label: 'Resultados', value: input?.results ?? 0 };
 };
 
+const resolveCostPerNativeResult = (spend: number, input?: Parameters<typeof resolveNativeResultDisplay>[0]) => {
+  const result = resolveNativeResultDisplay(input);
+  return result.value > 0 ? spend / result.value : 0;
+};
+
 const CampaignPerformanceFunnel: React.FC<{
   metrics: ReturnType<typeof useCampaignMetrics>;
   goal: FunnelGoal;
@@ -621,15 +626,15 @@ const PerformanceTimelineTable: React.FC<{
                 <div className="text-sm font-black text-white">{brl(bucket.spend)}</div>
                 <div>
                   <div className="text-sm font-black text-emerald-300">{num(bucket.results)}</div>
-                  <div className="mt-0.5 text-[10px] text-white/35">Consolidadas</div>
+                  <div className="mt-0.5 text-[10px] text-white/35">{bucket.resultLabel}</div>
                 </div>
                 <TimelineMetricCell metric={bucket.metrics[0]} accent="#6366f1" />
                 <TimelineMetricCell metric={bucket.metrics[1]} accent="#10b981" />
                 <TimelineMetricCell metric={bucket.metrics[2]} accent="#f59e0b" />
-                <div className="text-sm font-bold text-white">{bucket.cpl !== null ? brl(bucket.cpl) : '—'}</div>
+                <div className="text-sm font-bold text-white">{bucket.cpl !== null ? brl(bucket.cpl) : '-'}</div>
                 <div className="text-sm font-bold text-white">{pct(bucket.ctr)}</div>
                 <div className="text-sm font-bold text-white">{brl(bucket.cpm)}</div>
-                <div className="text-sm font-bold text-white">{bucket.roas !== null ? `${bucket.roas.toFixed(2)}x` : '—'}</div>
+                <div className="text-sm font-bold text-white">{bucket.roas !== null ? `${bucket.roas.toFixed(2)}x` : '-'}</div>
               </div>
             ))}
           </div>
@@ -760,12 +765,17 @@ const useCampaignMetrics = (summary: MetaSummary | undefined, prevSummary: MetaS
     const primaryResults = s.messagesStarted + s.leadForms + s.siteLeads;
     const prevPrimaryResults = (p?.messagesStarted ?? 0) + (p?.leadForms ?? 0) + (p?.siteLeads ?? 0);
 
+    const primaryNativeResult = resolveNativeResultDisplay(s);
+    const prevPrimaryNativeResult = resolveNativeResultDisplay(p);
+
     return {
       ...s,
       totalLeads,
       cpl: totalLeads > 0 ? s.spend / totalLeads : 0,
       primaryResults,
-      primaryCostPerResult: primaryResults > 0 ? s.spend / primaryResults : 0,
+      primaryResultLabel: primaryNativeResult.label,
+      primaryResultValue: primaryNativeResult.value,
+      primaryCostPerResult: primaryNativeResult.value > 0 ? s.spend / primaryNativeResult.value : 0,
       connectRate: s.linkClicks > 0 ? (s.landingPageViews / s.linkClicks) * 100 : 0,
       hasLeads: totalLeads > 0,
       hasMsgs: s.messagesStarted > 0,
@@ -777,7 +787,8 @@ const useCampaignMetrics = (summary: MetaSummary | undefined, prevSummary: MetaS
       prevReach: p?.reach ?? 0,
       prevImpressions: p?.impressions ?? 0,
       prevPrimaryResults,
-      prevPrimaryCostPerResult: prevPrimaryResults > 0 ? (p?.spend ?? 0) / prevPrimaryResults : 0,
+      prevPrimaryResultValue: prevPrimaryNativeResult.value,
+      prevPrimaryCostPerResult: prevPrimaryNativeResult.value > 0 ? (p?.spend ?? 0) / prevPrimaryNativeResult.value : 0,
       prevLeadForms: p?.leadForms ?? 0,
       prevMsgs: p?.messagesStarted ?? 0,
       prevLinkClicks: p?.linkClicks ?? 0,
@@ -1525,6 +1536,8 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
                   const cpl = campaignLeads > 0 ? campaign.spend / campaignLeads : 0;
                   const costPerMessage = campaign.messagesStarted > 0 ? campaign.spend / campaign.messagesStarted : 0;
                   const connectRate = campaign.linkClicks > 0 ? (campaign.landingPageViews / campaign.linkClicks) * 100 : 0;
+                  const campaignResultDisplay = resolveNativeResultDisplay(campaign);
+                  const campaignCostPerResult = resolveCostPerNativeResult(campaign.spend, campaign);
 
                   return (
                     <div key={campaign.id} className="px-5 py-4 transition-colors hover:bg-white/[0.02]">
@@ -1552,6 +1565,14 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
 
                           {isPerf ? (
                             <>
+                              <div className="text-right">
+                                <div className="text-[10px] uppercase tracking-wider text-white/30">{campaignResultDisplay.label}</div>
+                                <div className="font-bold text-emerald-400">{num(campaignResultDisplay.value)}</div>
+                              </div>
+                              <div className="text-right">
+                                <div className="text-[10px] uppercase tracking-wider text-white/30">Custo/Res</div>
+                                <div className="font-bold text-white/80">{campaignResultDisplay.value > 0 ? brl(campaignCostPerResult) : '-'}</div>
+                              </div>
                               {campaignLeads > 0 ? (
                                 <div className="text-right">
                                   <div className="text-[10px] uppercase tracking-wider text-white/30">Leads</div>

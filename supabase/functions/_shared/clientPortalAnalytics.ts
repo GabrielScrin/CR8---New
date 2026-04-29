@@ -165,6 +165,7 @@ type PerformanceTimelineBucket = {
   end: string;
   spend: number;
   results: number;
+  resultLabel: string;
   cpl: number | null;
   ctr: number;
   cpm: number;
@@ -3127,9 +3128,6 @@ const buildPerformanceTimelineBucket = (
   let spend = 0;
   let impressions = 0;
   let clicks = 0;
-  let primaryResults = 0;
-  let fallbackResults = 0;
-
   for (const row of rows) {
     spend += row.spend;
     impressions += row.impressions;
@@ -3150,14 +3148,13 @@ const buildPerformanceTimelineBucket = (
       previous.value += metricValue;
       previous.spend += row.spend;
       metricMap.set(metric.key, previous);
-
-      if (index <= 2) primaryResults += metricValue;
-      if (index >= 3) fallbackResults += metricValue;
     }
   }
 
   const revenue = sumRevenueInRange(revenueByDay, input.start, input.end);
-  const results = primaryResults > 0 ? primaryResults : fallbackResults;
+  const sortedMetrics = Array.from(metricMap.values()).sort((a, b) => a.priority - b.priority || b.value - a.value || b.spend - a.spend);
+  const primaryMetric = sortedMetrics.find((item) => item.value > 0) ?? null;
+  const results = primaryMetric?.value ?? 0;
   return {
     key: input.key,
     label: input.label,
@@ -3166,12 +3163,12 @@ const buildPerformanceTimelineBucket = (
     end: input.end,
     spend,
     results,
+    resultLabel: primaryMetric?.label ?? 'Resultados',
     cpl: results > 0 ? spend / results : null,
     ctr: impressions > 0 ? (clicks / impressions) * 100 : 0,
     cpm: impressions > 0 ? (spend / impressions) * 1000 : 0,
     roas: revenue > 0 && spend > 0 ? revenue / spend : null,
-    metrics: Array.from(metricMap.values())
-      .sort((a, b) => a.priority - b.priority || b.value - a.value || b.spend - a.spend)
+    metrics: sortedMetrics
       .slice(0, 3)
       .map((item) => ({
         key: item.key,
