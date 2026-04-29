@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Check, ChevronDown, Copy, ExternalLink, FileText, Instagram, Loader2,
-  MonitorSmartphone, Plus, Search, Trash2, X,
+  MonitorSmartphone, Pencil, Plus, Search, Trash2, X,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { resolveMetaToken } from '../lib/metaToken';
@@ -102,12 +102,48 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
   const [metaToken, setMetaToken] = useState('');
   const [projectContextText, setProjectContextText] = useState('');
   const [contextFiles, setContextFiles] = useState<File[]>([]);
+  const [editingNameId, setEditingNameId] = useState<string | null>(null);
+  const [editingNameValue, setEditingNameValue] = useState('');
+  const [savingNameId, setSavingNameId] = useState<string | null>(null);
 
   const getLinkDisplayName = (link: PortalLink) =>
     link.client_name?.trim() ||
     link.company?.brand_name?.trim() ||
     link.company?.name?.trim() ||
     link.name;
+
+  const startEditingName = (link: PortalLink) => {
+    setEditingNameId(link.id);
+    setEditingNameValue(getLinkDisplayName(link));
+    setError(null);
+  };
+
+  const cancelEditingName = () => {
+    setEditingNameId(null);
+    setEditingNameValue('');
+    setSavingNameId(null);
+  };
+
+  const saveLinkName = async (link: PortalLink) => {
+    const nextName = editingNameValue.trim();
+    setSavingNameId(link.id);
+    setError(null);
+    try {
+      const { error: updateError } = await supabase
+        .from('portal_links')
+        .update({ client_name: nextName || null })
+        .eq('id', link.id);
+      if (updateError) throw updateError;
+
+      setLinks((current) => current.map((item) => (
+        item.id === link.id ? { ...item, client_name: nextName || null } : item
+      )));
+      cancelEditingName();
+    } catch (err: any) {
+      setSavingNameId(null);
+      setError(err?.message ?? 'Erro ao atualizar nome do cliente.');
+    }
+  };
 
   const loadLinks = useCallback(async () => {
     if (!companyId) { setLoading(false); return; }
@@ -521,9 +557,56 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
               >
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-[hsl(var(--foreground))] truncate">
-                      {getLinkDisplayName(link)}
-                    </span>
+                    {editingNameId === link.id ? (
+                      <div className="flex min-w-0 items-center gap-2">
+                        <input
+                          value={editingNameValue}
+                          onChange={(event) => setEditingNameValue(event.target.value)}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Enter') {
+                              event.preventDefault();
+                              void saveLinkName(link);
+                            }
+                            if (event.key === 'Escape') {
+                              event.preventDefault();
+                              cancelEditingName();
+                            }
+                          }}
+                          className="h-8 w-64 max-w-full rounded-lg border border-[hsl(var(--border))] bg-[hsl(var(--background))] px-3 text-sm font-semibold text-[hsl(var(--foreground))] outline-none focus:border-indigo-500"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void saveLinkName(link)}
+                          disabled={savingNameId === link.id}
+                          className="inline-flex items-center rounded-lg border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1.5 text-xs font-semibold text-emerald-300 transition-all hover:bg-emerald-500/15 disabled:opacity-60"
+                        >
+                          {savingNameId === link.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Salvar'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={cancelEditingName}
+                          disabled={savingNameId === link.id}
+                          className="inline-flex items-center rounded-lg border border-[hsl(var(--border))] px-2.5 py-1.5 text-xs font-semibold text-[hsl(var(--muted-foreground))] transition-all hover:bg-[hsl(var(--secondary))] disabled:opacity-60"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <span className="text-sm font-semibold text-[hsl(var(--foreground))] truncate">
+                          {getLinkDisplayName(link)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => startEditingName(link)}
+                          className="inline-flex h-6 w-6 items-center justify-center rounded-md text-[hsl(var(--muted-foreground))] transition-all hover:bg-[hsl(var(--secondary))] hover:text-[hsl(var(--foreground))]"
+                          title="Editar nome"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </button>
+                      </>
+                    )}
                     {link.status === 'active' && (
                       <span className="shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                         Ativo
