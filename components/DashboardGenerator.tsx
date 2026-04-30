@@ -40,6 +40,7 @@ type PortalContextFileRow = {
 
 type AdAccount = { id: string; name: string };
 type IgAccount = { id: string; username: string; name: string; profile_picture_url?: string; page_id: string; page_name: string };
+type GoogleAdsAccount = { id: string; name: string };
 
 const GRAPH = 'https://graph.facebook.com/v19.0';
 const CONTEXT_BUCKET = 'portal-link-context';
@@ -96,6 +97,10 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
   const [selectedIg, setSelectedIg] = useState<IgAccount | null>(null);
   const [igSearch, setIgSearch] = useState('');
   const [igDropOpen, setIgDropOpen] = useState(false);
+  const [googleAccounts, setGoogleAccounts] = useState<GoogleAdsAccount[]>([]);
+  const [selectedGoogle, setSelectedGoogle] = useState<GoogleAdsAccount | null>(null);
+  const [googleSearch, setGoogleSearch] = useState('');
+  const [googleDropOpen, setGoogleDropOpen] = useState(false);
   const [loadingAccounts, setLoadingAccounts] = useState(false);
   const [saving, setSaving] = useState(false);
   const [generatedLink, setGeneratedLink] = useState('');
@@ -167,10 +172,12 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
     setFormClientName('');
     setSelectedAdAccount(null);
     setSelectedIg(null);
+    setSelectedGoogle(null);
     setProjectContextText('');
     setContextFiles([]);
     setAdAccounts([]);
     setIgAccounts([]);
+    setGoogleAccounts([]);
     setGeneratedLink('');
     setError(null);
     setLoadingAccounts(true);
@@ -209,6 +216,18 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
         }
       }
       setIgAccounts(igList);
+
+      // Carregar contas Google Ads via Edge Function
+      try {
+        const { data: gData, error: gError } = await supabase.functions.invoke('google-ads-customers', {
+          body: { company_id: companyId },
+        });
+        if (!gError && Array.isArray(gData?.customers)) {
+          setGoogleAccounts(gData.customers as GoogleAdsAccount[]);
+        }
+      } catch {
+        // Google Ads não configurado — seletor fica vazio mas não bloqueia
+      }
     } catch (err: any) {
       setError(err?.message ?? 'Erro ao carregar contas.');
     } finally {
@@ -297,6 +316,8 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
           meta_ad_account_name: selectedAdAccount.name,
           instagram_business_account_id: selectedIg?.id ?? null,
           instagram_username: selectedIg?.username ?? null,
+          google_ads_customer_id: selectedGoogle?.id ?? null,
+          google_ads_customer_name: selectedGoogle?.name ?? null,
           status: 'active',
         })
         .select('id,public_token')
@@ -395,6 +416,11 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
       return Array.from(map.values());
     });
   };
+
+  const filteredGoogleAccounts = googleAccounts.filter((a) => {
+    const q = googleSearch.toLowerCase();
+    return a.name.toLowerCase().includes(q) || a.id.includes(q);
+  });
 
   const filteredAdAccounts = adAccounts.filter((a) => {
     const q = adAccountSearch.toLowerCase();
@@ -1006,6 +1032,69 @@ export const DashboardGenerator: React.FC<DashboardGeneratorProps> = ({ companyI
                                 type="button"
                                 onClick={() => { setSelectedAdAccount(a); setAdDropOpen(false); }}
                                 className={`w-full text-left px-4 py-2.5 text-sm hover:bg-[hsl(var(--secondary))] transition-colors ${selectedAdAccount?.id === a.id ? 'text-indigo-400 font-semibold' : 'text-[hsl(var(--foreground))]'}`}
+                              >
+                                <div>{a.name}</div>
+                                <div className="text-xs text-[hsl(var(--muted-foreground))]">{a.id}</div>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Google Ads selector */}
+                <div>
+                  <label className="block text-xs font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wider mb-1.5">
+                    Google Ads <span className="text-[hsl(var(--muted-foreground))]/60 font-normal normal-case">(opcional)</span>
+                  </label>
+                  {loadingAccounts ? (
+                    <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl border border-[hsl(var(--border))] text-sm text-[hsl(var(--muted-foreground))]">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" /> Carregando...
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => { setGoogleDropOpen((o) => !o); setGoogleSearch(''); }}
+                        className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-[hsl(var(--card))] border border-[hsl(var(--border))] text-sm text-left hover:border-indigo-500/50 transition-all"
+                      >
+                        <span className={selectedGoogle ? 'text-[hsl(var(--foreground))]' : 'text-[hsl(var(--muted-foreground))]/60'}>
+                          {selectedGoogle ? `${selectedGoogle.name} (${selectedGoogle.id})` : googleAccounts.length === 0 ? 'Google Ads não conectado' : 'Selecione a conta Google Ads (opcional)'}
+                        </span>
+                        <ChevronDown className={`h-4 w-4 text-[hsl(var(--muted-foreground))] shrink-0 transition-transform ${googleDropOpen ? 'rotate-180' : ''}`} />
+                      </button>
+                      {googleDropOpen && googleAccounts.length > 0 && (
+                        <div className="absolute top-[calc(100%+4px)] left-0 right-0 z-20 rounded-2xl border border-[hsl(var(--border))] bg-[hsl(var(--card))] shadow-2xl py-2">
+                          <div className="px-3 pb-2">
+                            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-[hsl(var(--background))] border border-[hsl(var(--border))]">
+                              <Search className="h-3.5 w-3.5 text-[hsl(var(--muted-foreground))]" />
+                              <input
+                                autoFocus
+                                value={googleSearch}
+                                onChange={(e) => setGoogleSearch(e.target.value)}
+                                placeholder="Buscar conta Google Ads..."
+                                className="flex-1 bg-transparent text-sm outline-none text-[hsl(var(--foreground))] placeholder:text-[hsl(var(--muted-foreground))]/60"
+                              />
+                            </div>
+                          </div>
+                          <div className="max-h-52 overflow-y-auto">
+                            <button
+                              type="button"
+                              onClick={() => { setSelectedGoogle(null); setGoogleDropOpen(false); }}
+                              className="w-full text-left px-4 py-2.5 text-sm text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--secondary))] transition-colors"
+                            >
+                              Sem Google Ads
+                            </button>
+                            {filteredGoogleAccounts.length === 0 ? (
+                              <div className="px-4 py-3 text-sm text-[hsl(var(--muted-foreground))]">Nenhum resultado.</div>
+                            ) : filteredGoogleAccounts.map((a) => (
+                              <button
+                                key={a.id}
+                                type="button"
+                                onClick={() => { setSelectedGoogle(a); setGoogleDropOpen(false); }}
+                                className={`w-full text-left px-4 py-2.5 text-sm hover:bg-[hsl(var(--secondary))] transition-colors ${selectedGoogle?.id === a.id ? 'text-indigo-400 font-semibold' : 'text-[hsl(var(--foreground))]'}`}
                               >
                                 <div>{a.name}</div>
                                 <div className="text-xs text-[hsl(var(--muted-foreground))]">{a.id}</div>

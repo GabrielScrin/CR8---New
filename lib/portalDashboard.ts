@@ -129,6 +129,33 @@ export type InstagramAudienceCity = { city: string; count: number };
 export type InstagramAudienceAge = { range: string; male: number; female: number; total: number };
 export type InstagramAudienceGender = { male: number; female: number; unknown: number; total: number } | null;
 
+export type GoogleAdsSummary = {
+  spend: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  conversionValue: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+};
+
+export type GoogleAdsDailyPoint = { date: string; spend: number; results: number };
+
+export type GoogleAdsCampaign = {
+  id: string;
+  name: string;
+  status: string;
+  spend: number;
+  impressions: number;
+  clicks: number;
+  conversions: number;
+  conversionValue: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+};
+
 export type DashboardData = {
   dateFrom: string; dateTo: string;
   prevDateFrom: string; prevDateTo: string;
@@ -140,6 +167,16 @@ export type DashboardData = {
     performanceTimeline: MetaPerformanceTimeline;
   };
   prevMeta: { available: boolean; summary: MetaSummary };
+  googleAds: {
+    available: boolean;
+    reason?: string;
+    customerId?: string | null;
+    currencyCode?: string | null;
+    summary: GoogleAdsSummary;
+    timeseries: GoogleAdsDailyPoint[];
+    campaigns: GoogleAdsCampaign[];
+  };
+  prevGoogleAds: { available: boolean; summary: GoogleAdsSummary };
   instagram: {
     available: boolean; reason?: string;
     profile: DashboardBootstrap['instagramProfile'];

@@ -913,6 +913,8 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
 
   const meta = data?.meta;
   const prevMeta = data?.prevMeta;
+  const googleAds = data?.googleAds;
+  const prevGoogleAds = data?.prevGoogleAds;
   const ig = data?.instagram;
   const prevIg = data?.prevInstagram;
   const metrics = useCampaignMetrics(meta?.summary, prevMeta?.summary);
@@ -1098,6 +1100,164 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
       </div>
     );
   }
+
+  const GoogleAdsSection: React.FC<{
+    googleAds: NonNullable<DashboardData['googleAds']>;
+    prevGoogleAds: DashboardData['prevGoogleAds'] | undefined;
+  }> = ({ googleAds, prevGoogleAds }) => {
+    const s = googleAds.summary;
+    const p = prevGoogleAds?.summary;
+    const [sortKey, setSortKey] = useState<'spend' | 'impressions' | 'clicks' | 'conversions' | 'ctr' | 'cpc'>('spend');
+
+    const gDelta = (curr: number, prev?: number) => {
+      if (!prev || prev === 0) return null;
+      return ((curr - prev) / prev) * 100;
+    };
+
+    const sortedCampaigns = [...(googleAds.campaigns ?? [])].sort((a, b) => {
+      if (sortKey === 'ctr') return b.ctr - a.ctr;
+      if (sortKey === 'cpc') return a.cpc - b.cpc;
+      return (b[sortKey] as number) - (a[sortKey] as number);
+    });
+
+    const statusBadge = (status: string) => {
+      if (status === 'ENABLED') return <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-400">Ativa</span>;
+      if (status === 'PAUSED') return <span className="rounded-full bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold text-yellow-400">Pausada</span>;
+      return <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] font-semibold text-white/40">{status}</span>;
+    };
+
+    const chartData = (googleAds.timeseries ?? []).map((row) => ({
+      date: row.date,
+      spend: row.spend,
+      conversions: row.results,
+    }));
+
+    return (
+      <div className="space-y-6">
+        {/* KPI cards */}
+        <div>
+          <SectionLabel>Investimento &amp; Alcance</SectionLabel>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-4">
+            <KpiCard label="Valor Investido" value={brl(s.spend)} delta={gDelta(s.spend, p?.spend)} accent="#6366f1" hint="vs período anterior" />
+            <KpiCard label="Impressões" value={num(s.impressions)} delta={gDelta(s.impressions, p?.impressions)} accent="#a855f7" />
+            <KpiCard label="Cliques" value={num(s.clicks)} delta={gDelta(s.clicks, p?.clicks)} accent="#38bdf8" />
+            <KpiCard label="CTR" value={`${(s.ctr * 100).toFixed(2)}%`} delta={gDelta(s.ctr, p?.ctr)} accent="#8b5cf6" />
+          </div>
+        </div>
+        <div>
+          <SectionLabel>Resultados</SectionLabel>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+            <KpiCard
+              label="Conversões"
+              value={num(s.conversions)}
+              delta={gDelta(s.conversions, p?.conversions)}
+              accent="#10b981"
+              sub={s.conversions ? `CPA ${brl(s.spend / s.conversions)}` : undefined}
+            />
+            <KpiCard label="CPC" value={brl(s.cpc)} delta={gDelta(s.cpc, p?.cpc)} accent="#64748b" invertDelta />
+            <KpiCard label="CPM" value={brl(s.cpm)} delta={gDelta(s.cpm, p?.cpm)} accent="#475569" invertDelta />
+          </div>
+        </div>
+
+        {/* Gráfico de evolução diária */}
+        {chartData.length > 0 && (
+          <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-5">
+            <div className="mb-4 flex items-center justify-between">
+              <div className="text-sm font-semibold text-white/85">Evolução diária — Investimento &amp; Conversões</div>
+              <div className="flex gap-4 text-[10px] font-semibold uppercase tracking-wider">
+                <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#6366f1]" />Investimento</span>
+                <span className="inline-flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-[#10b981]" />Conversões</span>
+              </div>
+            </div>
+            <ResponsiveContainer width="100%" height={180}>
+              <AreaChart data={chartData} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="gGSpend" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="gGConv" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
+                <XAxis dataKey="date" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }} tickLine={false} axisLine={false} />
+                <YAxis yAxisId="left" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }} tickLine={false} axisLine={false} width={42} tickFormatter={(v) => `R$${v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v}`} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fill: 'rgba(255,255,255,0.3)', fontSize: 10 }} tickLine={false} axisLine={false} width={32} />
+                <Tooltip
+                  contentStyle={{ background: 'rgba(15,15,25,0.95)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, fontSize: 12 }}
+                  formatter={(value: number, name: string) => [name === 'spend' ? brl(value) : num(value), name === 'spend' ? 'Investimento' : 'Conversões']}
+                />
+                <Area yAxisId="left" type="monotone" dataKey="spend" stroke="#6366f1" strokeWidth={2} fill="url(#gGSpend)" dot={false} />
+                <Area yAxisId="right" type="monotone" dataKey="conversions" stroke="#10b981" strokeWidth={2} fill="url(#gGConv)" dot={false} />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+
+        {/* Tabela de campanhas */}
+        {sortedCampaigns.length > 0 && (
+          <div className="overflow-hidden rounded-2xl border border-white/[0.07] bg-white/[0.02]">
+            <div className="flex flex-col gap-4 border-b border-white/[0.06] px-5 py-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/30">Google Ads</div>
+                <div className="text-base font-black text-white">Campanhas do período</div>
+              </div>
+              <div className="flex flex-wrap items-center gap-3 text-[10px]">
+                <span className="hidden uppercase tracking-wider text-white/30 sm:block">Ordenar</span>
+                {([
+                  { id: 'spend', label: 'Invest.' },
+                  { id: 'impressions', label: 'Impres.' },
+                  { id: 'clicks', label: 'Cliques' },
+                  { id: 'conversions', label: 'Conv.' },
+                  { id: 'ctr', label: 'CTR' },
+                  { id: 'cpc', label: 'CPC' },
+                ] as const).map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    onClick={() => setSortKey(item.id)}
+                    className={`font-bold uppercase tracking-[0.15em] transition-colors ${sortKey === item.id ? 'text-indigo-400' : 'text-white/30 hover:text-white/60'}`}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="divide-y divide-white/[0.04]">
+              {sortedCampaigns.map((campaign) => (
+                <div key={campaign.id} className="px-5 py-4">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-semibold text-white truncate">{campaign.name}</span>
+                        {statusBadge(campaign.status)}
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-4 text-xs text-white/50">
+                        <span><span className="text-white/70 font-semibold">{brl(campaign.spend)}</span> invest.</span>
+                        <span><span className="text-white/70 font-semibold">{num(campaign.impressions)}</span> impres.</span>
+                        <span><span className="text-white/70 font-semibold">{num(campaign.clicks)}</span> cliques</span>
+                        <span><span className="text-white/70 font-semibold">{(campaign.ctr * 100).toFixed(2)}%</span> CTR</span>
+                        <span><span className="text-white/70 font-semibold">{brl(campaign.cpc)}</span> CPC</span>
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <div className="text-xl font-black text-white">{num(campaign.conversions)}</div>
+                      <div className="text-[10px] uppercase tracking-wider text-white/30">conversões</div>
+                      {campaign.conversions > 0 && (
+                        <div className="mt-0.5 text-xs text-white/40">{brl(campaign.spend / campaign.conversions)} / conv.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const CampanhasTab = () => {
     const isPerf = viewMode === 'performance';
@@ -1670,12 +1830,14 @@ export const PublicDashboard: React.FC<{ token: string }> = ({ token }) => {
               </span>
             </div>
           </div>
+        ) : googleAds?.available ? (
+          <GoogleAdsSection googleAds={googleAds} prevGoogleAds={prevGoogleAds} />
         ) : (
           <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] px-6 py-10 text-center">
             <div className="mx-auto max-w-md rounded-2xl border border-dashed border-white/[0.08] bg-white/[0.02] px-6 py-8">
-              <div className="text-sm font-semibold text-white/85">Google Ads</div>
+              <div className="text-sm font-semibold text-white/85">Google Ads não configurado</div>
               <div className="mt-2 text-sm leading-6 text-white/45">
-                Esta aba fica reservada para a implementacao do painel Google com campanhas e anuncios.
+                {googleAds?.reason ?? 'Nenhuma conta Google Ads vinculada a este dashboard.'}
               </div>
             </div>
           </div>

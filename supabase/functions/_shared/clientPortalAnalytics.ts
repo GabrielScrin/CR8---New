@@ -2223,6 +2223,8 @@ type PortalLinkRow = {
   meta_ad_account_name: string | null;
   instagram_business_account_id: string | null;
   instagram_username: string | null;
+  google_ads_customer_id: string | null;
+  google_ads_customer_name: string | null;
   status: string;
 };
 
@@ -2232,7 +2234,7 @@ const getPortalLinkRow = async (supabaseAdmin: SupabaseClient, token: string): P
 
   const { data, error } = await supabaseAdmin
     .from('portal_links')
-    .select('id,company_id,public_token,name,client_name,project_context_text,meta_ad_account_id,meta_ad_account_name,instagram_business_account_id,instagram_username,status')
+    .select('id,company_id,public_token,name,client_name,project_context_text,meta_ad_account_id,meta_ad_account_name,instagram_business_account_id,instagram_username,google_ads_customer_id,google_ads_customer_name,status')
     .eq('public_token', clean)
     .maybeSingle();
 
@@ -2410,10 +2412,10 @@ export const loadDashboardData = async (
 ) => {
   const link = await getPortalLinkRow(supabaseAdmin, token);
   const window = buildDateWindow(dateFromRaw, dateToRaw);
-  const { metaCampaignIds } = splitCampaignIds(campaignIds ?? []);
+  const { metaCampaignIds, googleCampaignIds } = splitCampaignIds(campaignIds ?? []);
   const { data: companyTokens, error: companyTokensError } = await supabaseAdmin
     .from('companies')
-    .select('meta_access_token,meta_token_expires_at,instagram_access_token,instagram_token_expires_at')
+    .select('meta_access_token,meta_token_expires_at,instagram_access_token,instagram_token_expires_at,google_ads_login_customer_id,google_ads_currency_code')
     .eq('id', link.company_id)
     .maybeSingle();
 
@@ -2423,15 +2425,23 @@ export const loadDashboardData = async (
   const igResolved = resolveInstagramApiToken(companyTokens);
   const igToken = igResolved?.token ?? null;
 
+  const googleAdsCustomerId = asString(link.google_ads_customer_id).replace(/\D/g, '');
+  const googleAdsLoginCustomerId =
+    asString((companyTokens as any)?.google_ads_login_customer_id).replace(/\D/g, '') || GOOGLE_ADS_LOGIN_CUSTOMER_ID || null;
+  const googleAdsCurrencyCode = asString((companyTokens as any)?.google_ads_currency_code) || null;
+
   // Renova o token em background se estiver próximo do vencimento
   if (igResolved) {
     refreshInstagramTokenIfNeeded(supabaseAdmin, link.company_id, igResolved.token, igResolved.expiresAtMs).catch(() => {});
   }
 
-  const [meta, instagram, performanceTimeline] = await Promise.all([
+  const [meta, googleAds, instagram, performanceTimeline] = await Promise.all([
     metaToken
       ? aggregateMetaOverview(metaToken, link.meta_ad_account_id, window.dateFrom, window.dateTo, metaCampaignIds)
       : Promise.resolve(buildEmptyMetaOverview('Meta Ads nao configurado para esta empresa.')),
+    googleAdsCustomerId
+      ? aggregateGoogleOverview(googleAdsCustomerId, googleAdsLoginCustomerId, googleAdsCurrencyCode, window.dateFrom, window.dateTo, googleCampaignIds)
+      : Promise.resolve(buildEmptyGoogleOverview('Google Ads nao configurado para este link.')),
     link.instagram_business_account_id && igToken
       ? buildInstagramOverview(igToken, link.instagram_business_account_id, window.dateFrom, window.dateTo)
       : Promise.resolve(buildEmptyInstagramOverview('Instagram não configurado para este portal')),
@@ -2459,10 +2469,13 @@ export const loadDashboardData = async (
   const prevDateFrom = prevStart.toISOString().slice(0, 10);
   const prevDateTo = prevEnd.toISOString().slice(0, 10);
 
-  const [prevMeta, prevInstagram] = await Promise.all([
+  const [prevMeta, prevGoogleAds, prevInstagram] = await Promise.all([
     metaToken
       ? aggregateMetaOverview(metaToken, link.meta_ad_account_id, prevDateFrom, prevDateTo, metaCampaignIds)
       : Promise.resolve(buildEmptyMetaOverview('Meta Ads nao configurado para esta empresa.')),
+    googleAdsCustomerId
+      ? aggregateGoogleOverview(googleAdsCustomerId, googleAdsLoginCustomerId, googleAdsCurrencyCode, prevDateFrom, prevDateTo, googleCampaignIds)
+      : Promise.resolve(buildEmptyGoogleOverview('')),
     link.instagram_business_account_id && igToken
       ? buildInstagramOverview(igToken, link.instagram_business_account_id, prevDateFrom, prevDateTo)
       : Promise.resolve(buildEmptyInstagramOverview('')),
@@ -2475,6 +2488,8 @@ export const loadDashboardData = async (
     prevDateTo,
     meta,
     prevMeta,
+    googleAds,
+    prevGoogleAds,
     instagram,
     prevInstagram,
   };
